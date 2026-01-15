@@ -49,8 +49,9 @@ func Run(config Config) error {
 	// Resolver Registry
 	argRegistry := resolver.NewRegistry(
 		&resolver.ContextResolver{},
-		&resolver.PrimitiveResolver{},
+		&resolver.QueryDTOResolver{},
 		&resolver.DTOResolver{},
+		&resolver.PrimitiveResolver{},
 	)
 
 	returnRegistry := handler.NewReturnHandlerRegistry(

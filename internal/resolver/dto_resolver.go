@@ -11,10 +11,22 @@ type DTOResolver struct{}
 
 func (r *DTOResolver) Supports(paramType reflect.Type) bool {
 	// Context 제외
-	if paramType == reflect.TypeOf((*core.Context)(nil)).Elem() {
+	if paramType == reflect.TypeFor[core.Context]() {
 		return false
 	}
-	return paramType.Kind() == reflect.Struct
+
+	if paramType.Kind() != reflect.Struct {
+		return false
+	}
+
+	// query 태그가 하나라도 있으면 QueryDTO가 담당
+	for i := 0; i < paramType.NumField(); i++ {
+		if paramType.Field(i).Tag.Get("query") != "" {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (r *DTOResolver) Resolve(ctx core.Context, paramType reflect.Type) (any, error) {

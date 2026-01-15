@@ -1,6 +1,8 @@
 package echo
 
 import (
+	"fmt"
+
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/labstack/echo/v4"
@@ -26,7 +28,11 @@ func (a *Adapter) Mount(e *echo.Echo) {
 
 		e.Add(route.Method, route.Path, func(c echo.Context) error {
 			ctx := NewContext(c)
-			return a.pipeline.Execute(ctx, meta)
+			if err := a.pipeline.Execute(ctx, meta); err != nil {
+				fmt.Println("PIPELINE ERROR: ", err)
+				return err
+			}
+			return nil
 		})
 	}
 }

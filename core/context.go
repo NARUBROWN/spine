@@ -14,4 +14,10 @@ type Context interface {
 	Set(key string, value any)
 	// 요청 범위 데이터 조회
 	Get(key string) (any, bool)
+
+	Params() map[string]string
+	Queries() map[string][]string
+
+	JSON(status int, value any) error
+	String(status int, value string) error
 }

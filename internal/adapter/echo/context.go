@@ -41,3 +41,30 @@ func (e *echoContext) Query(name string) string {
 func (e *echoContext) Set(key string, value any) {
 	e.store[key] = value
 }
+
+func (e *echoContext) JSON(code int, value any) error {
+	return e.echo.JSON(code, value)
+}
+
+func (e *echoContext) String(code int, value string) error {
+	return e.echo.String(code, value)
+}
+
+func (e *echoContext) Params() map[string]string {
+	names := e.echo.ParamNames()
+	values := e.echo.ParamValues()
+
+	params := make(map[string]string, len(names))
+
+	for i, name := range names {
+		if i < len(values) {
+			params[name] = values[i]
+		}
+	}
+
+	return params
+}
+
+func (e *echoContext) Queries() map[string][]string {
+	return e.echo.QueryParams()
+}

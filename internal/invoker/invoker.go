@@ -48,14 +48,18 @@ func (i *Invoker) Invoke(controllerType reflect.Type, methodName string, ctx cor
 	}
 
 	methodType := method.Type()
+
 	// 파라미터 해석
 	args := make([]reflect.Value, methodType.NumIn())
 
 	for index := 0; index < methodType.NumIn(); index++ {
 		paramType := methodType.In(index)
 
+		fmt.Println("PARAM TYPE:", paramType.String())
+
 		arg, err := i.argRegistry.Resolve(paramType, ctx)
 		if err != nil {
+			fmt.Println("ARG RESOLVE ERROR:", paramType, err)
 			return err
 		}
 

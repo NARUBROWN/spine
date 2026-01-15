@@ -18,7 +18,5 @@ func (h *JSONReturnHandler) Supports(returnType reflect.Type) bool {
 }
 
 func (h *JSONReturnHandler) Handle(value any, ctx core.Context) error {
-	return ctx.(interface {
-		JSON(int, any) error
-	}).JSON(200, value)
+	return ctx.JSON(200, value)
 }
