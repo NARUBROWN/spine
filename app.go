@@ -1,15 +1,11 @@
 package spine
 
 import (
-	"reflect"
-
 	"github.com/NARUBROWN/spine/internal/bootstrap"
 	"github.com/NARUBROWN/spine/internal/router"
 )
 
 type App interface {
-	// 컴포넌트 타입 선언
-	Register(components ...Component)
 	// 생성자 선언
 	Constructor(constructors ...any)
 	// 라우트 선언
@@ -19,19 +15,12 @@ type App interface {
 }
 
 type app struct {
-	componentTypes []reflect.Type
-	constructors   []any
-	routes         []router.RouteSpec
+	constructors []any
+	routes       []router.RouteSpec
 }
 
 func New() App {
 	return &app{}
-}
-
-func (a *app) Register(components ...Component) {
-	for _, component := range components {
-		a.componentTypes = append(a.componentTypes, component.Type)
-	}
 }
 
 func (a *app) Constructor(constructors ...any) {
@@ -48,9 +37,8 @@ func (a *app) Route(method string, path string, handler any) {
 
 func (a *app) Run(address string) error {
 	return bootstrap.Run(bootstrap.Config{
-		Address:        address,
-		ComponentTypes: a.componentTypes,
-		Constructors:   a.constructors,
-		Routes:         a.routes,
+		Address:      address,
+		Constructors: a.constructors,
+		Routes:       a.routes,
 	})
 }

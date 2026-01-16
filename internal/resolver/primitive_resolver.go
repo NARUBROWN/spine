@@ -10,11 +10,11 @@ import (
 
 type PrimitiveResolver struct{}
 
-func (r *PrimitiveResolver) Supports(paramType reflect.Type) bool {
-	return paramType.Kind() == reflect.String || paramType.Kind() == reflect.Int
+func (r *PrimitiveResolver) Supports(parameterMeta ParameterMeta) bool {
+	return parameterMeta.Type.Kind() == reflect.String || parameterMeta.Type.Kind() == reflect.Int
 }
 
-func (r *PrimitiveResolver) Resolve(ctx core.Context, paramType reflect.Type) (any, error) {
+func (r *PrimitiveResolver) Resolve(ctx core.Context, parameterMeta ParameterMeta) (any, error) {
 
 	var raw string
 
@@ -46,7 +46,7 @@ func (r *PrimitiveResolver) Resolve(ctx core.Context, paramType reflect.Type) (a
 	}
 
 	// 타입 변환
-	switch paramType.Kind() {
+	switch parameterMeta.Type.Kind() {
 	case reflect.String:
 		return raw, nil
 	case reflect.Int:

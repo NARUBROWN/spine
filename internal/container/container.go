@@ -7,7 +7,6 @@ import (
 )
 
 type Container struct {
-	components   map[reflect.Type]struct{}
 	constructors map[reflect.Type]reflect.Value
 	instances    map[reflect.Type]any
 	creating     map[reflect.Type]bool
@@ -15,15 +14,10 @@ type Container struct {
 
 func New() *Container {
 	return &Container{
-		components:   make(map[reflect.Type]struct{}),
 		constructors: make(map[reflect.Type]reflect.Value),
 		instances:    make(map[reflect.Type]any),
 		creating:     make(map[reflect.Type]bool),
 	}
-}
-
-func (c *Container) RegisterComponent(componentType reflect.Type) {
-	c.components[componentType] = struct{}{}
 }
 
 func (c *Container) RegisterConstructor(function any) error {
@@ -40,7 +34,6 @@ func (c *Container) RegisterConstructor(function any) error {
 
 	outType := typ.Out(0)
 	c.constructors[outType] = val
-	c.components[outType] = struct{}{}
 
 	return nil
 }
@@ -52,10 +45,6 @@ func (c *Container) Resolve(componentType reflect.Type) (any, error) {
 
 	if c.creating[componentType] {
 		return nil, fmt.Errorf("순환 의존성 감지: %v", componentType)
-	}
-
-	if _, registered := c.components[componentType]; !registered {
-		return nil, fmt.Errorf("등록되지 않은 컴포넌트 타입입니다: %v", componentType)
 	}
 
 	constructor, hasConstructor := c.constructors[componentType]

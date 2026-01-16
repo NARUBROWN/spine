@@ -1,8 +1,6 @@
 package bootstrap
 
 import (
-	"reflect"
-
 	httpEngine "github.com/NARUBROWN/spine/internal/adapter/echo"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/handler"
@@ -14,20 +12,14 @@ import (
 )
 
 type Config struct {
-	Address        string
-	ComponentTypes []reflect.Type
-	Constructors   []any
-	Routes         []spineRouter.RouteSpec
+	Address      string
+	Constructors []any
+	Routes       []spineRouter.RouteSpec
 }
 
 func Run(config Config) error {
 	// 컨테이너 생성
 	container := container.New()
-
-	// 컴포넌트 타입 등록
-	for _, componentType := range config.ComponentTypes {
-		container.RegisterComponent(componentType)
-	}
 
 	// 생성자 등록
 	for _, constructor := range config.Constructors {
@@ -46,26 +38,25 @@ func Run(config Config) error {
 		router.Register(route.Method, route.Path, meta)
 	}
 
-	// Resolver Registry
-	argRegistry := resolver.NewRegistry(
+	invoker := invoker.NewInvoker(container)
+	pipeline := pipeline.NewPipeline(router, invoker)
+
+	pipeline.AddArgumentResolver(
 		&resolver.ContextResolver{},
 		&resolver.QueryDTOResolver{},
 		&resolver.DTOResolver{},
 		&resolver.PrimitiveResolver{},
 	)
 
-	returnRegistry := handler.NewReturnHandlerRegistry(
+	pipeline.AddReturnValueHandler(
 		&handler.StringReturnHandler{},
 		&handler.JSONReturnHandler{},
 		&handler.ErrorReturnHandler{},
 	)
 
-	invoke := invoker.NewInvoker(container, argRegistry, returnRegistry)
-	pipe := pipeline.NewPipeline(invoke)
-
 	// Echo Adapter
 	echo := echo.New()
-	adapter := httpEngine.NewAdapter(router, pipe)
+	adapter := httpEngine.NewAdapter(pipeline)
 	adapter.Mount(echo)
 
 	// Listen

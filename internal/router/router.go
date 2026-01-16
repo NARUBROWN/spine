@@ -1,5 +1,12 @@
 package router
 
+import (
+	"fmt"
+	"strings"
+
+	"github.com/NARUBROWN/spine/core"
+)
+
 /*
 RouteSpec은 외부 프로토콜과 내부 핸들러 메서드를 명시적으로 연결하는 선언 정보
 
@@ -21,15 +28,19 @@ type Route struct {
 	Meta   HandlerMeta
 }
 
-type Router struct {
+type Router interface {
+	Route(ctx core.Context) (HandlerMeta, error)
+}
+
+type DefaultRouter struct {
 	routes []Route
 }
 
-func NewRouter() *Router {
-	return &Router{}
+func NewRouter() *DefaultRouter {
+	return &DefaultRouter{}
 }
 
-func (r *Router) Register(method string, path string, meta HandlerMeta) {
+func (r *DefaultRouter) Register(method string, path string, meta HandlerMeta) {
 	r.routes = append(r.routes, Route{
 		Method: method,
 		Path:   path,
@@ -37,6 +48,71 @@ func (r *Router) Register(method string, path string, meta HandlerMeta) {
 	})
 }
 
-func (r *Router) Routes() []Route {
-	return r.routes
+func (r *DefaultRouter) Route(ctx core.Context) (HandlerMeta, error) {
+	for _, route := range r.routes {
+		if route.Method != ctx.Method() {
+			continue
+		}
+
+		ok, params := matchPath(route.Path, ctx.Path())
+		if !ok {
+			continue
+		}
+
+		// path param 주입
+		ctx.Set("spine.params", params)
+
+		return route.Meta, nil
+	}
+	return HandlerMeta{}, fmt.Errorf("핸들러가 없습니다.")
+}
+
+func matchPath(pattern string, path string) (bool, map[string]string) {
+	patternSegs := splitPath(pattern)
+	pathSegs := splitPath(path)
+
+	if len(patternSegs) != len(pathSegs) {
+		return false, nil
+	}
+
+	params := make(map[string]string)
+
+	for i := 0; i < len(patternSegs); i++ {
+		p := patternSegs[i]
+		v := pathSegs[i]
+
+		if len(p) > 0 && p[0] == ':' {
+			// :id 형태
+			key := p[1:]
+			params[key] = v
+			continue
+		}
+
+		if p != v {
+			return false, nil
+		}
+	}
+
+	return true, params
+}
+
+func splitPath(path string) []string {
+	if path == "" || path == "/" {
+		return []string{}
+	}
+
+	// 앞뒤 슬래시 제거
+	if path[0] == '/' {
+		path = path[1:]
+	}
+
+	if len(path) > 0 && path[len(path)-1] == '/' {
+		path = path[:len(path)-1]
+	}
+
+	if path == "" {
+		return []string{}
+	}
+
+	return strings.Split(path, "/")
 }

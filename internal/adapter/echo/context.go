@@ -31,6 +31,13 @@ func (e *echoContext) Header(name string) string {
 }
 
 func (e *echoContext) Param(name string) string {
+	if raw, ok := e.store["spine.params"]; ok {
+		if m, ok := raw.(map[string]string); ok {
+			if v, ok := m[name]; ok {
+				return v
+			}
+		}
+	}
 	return e.echo.Param(name)
 }
 
@@ -51,6 +58,17 @@ func (e *echoContext) String(code int, value string) error {
 }
 
 func (e *echoContext) Params() map[string]string {
+	if raw, ok := e.store["spine.params"]; ok {
+		if m, ok := raw.(map[string]string); ok {
+			// return a shallow copy to avoid mutation
+			copyMap := make(map[string]string, len(m))
+			for k, v := range m {
+				copyMap[k] = v
+			}
+			return copyMap
+		}
+	}
+
 	names := e.echo.ParamNames()
 	values := e.echo.ParamValues()
 
@@ -67,4 +85,12 @@ func (e *echoContext) Params() map[string]string {
 
 func (e *echoContext) Queries() map[string][]string {
 	return e.echo.QueryParams()
+}
+
+func (e *echoContext) Method() string {
+	return e.echo.Request().Method
+}
+
+func (e *echoContext) Path() string {
+	return e.echo.Request().URL.Path
 }

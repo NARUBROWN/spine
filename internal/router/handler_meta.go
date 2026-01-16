@@ -12,7 +12,7 @@ type HandlerMeta struct {
 	// 컨트롤러 타입 (Container Resolve 대상)
 	ControllerType reflect.Type
 	// 호출할 메서드 이름
-	MethodName string
+	Method reflect.Method
 }
 
 // NewHandlerMeta는 메서드 표현식 (*Controller).Method 를
@@ -52,8 +52,13 @@ func NewHandlerMeta(handler any) (HandlerMeta, error) {
 
 	methodName := fullName[lastDot+1:]
 
+	method, ok := receiverType.MethodByName(methodName)
+	if !ok {
+		return HandlerMeta{}, fmt.Errorf("메서드를 찾을 수 없습니다: %s", methodName)
+	}
+
 	return HandlerMeta{
 		ControllerType: receiverType,
-		MethodName:     methodName,
+		Method:         method,
 	}, nil
 }

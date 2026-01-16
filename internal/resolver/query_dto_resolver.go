@@ -10,13 +10,13 @@ import (
 
 type QueryDTOResolver struct{}
 
-func (r *QueryDTOResolver) Supports(paramType reflect.Type) bool {
-	if paramType.Kind() != reflect.Struct {
+func (r *QueryDTOResolver) Supports(parameterMeta ParameterMeta) bool {
+	if parameterMeta.Type.Kind() != reflect.Struct {
 		return false
 	}
 
-	for i := 0; i < paramType.NumField(); i++ {
-		if tag := paramType.Field(i).Tag.Get("query"); tag != "" {
+	for i := 0; i < parameterMeta.Type.NumField(); i++ {
+		if tag := parameterMeta.Type.Field(i).Tag.Get("query"); tag != "" {
 			return true
 		}
 	}
@@ -24,11 +24,11 @@ func (r *QueryDTOResolver) Supports(paramType reflect.Type) bool {
 	return false
 }
 
-func (r *QueryDTOResolver) Resolve(ctx core.Context, paramType reflect.Type) (any, error) {
-	dto := reflect.New(paramType).Elem()
+func (r *QueryDTOResolver) Resolve(ctx core.Context, parameterMeta ParameterMeta) (any, error) {
+	dto := reflect.New(parameterMeta.Type).Elem()
 
-	for i := 0; i < paramType.NumField(); i++ {
-		field := paramType.Field(i)
+	for i := 0; i < parameterMeta.Type.NumField(); i++ {
+		field := parameterMeta.Type.Field(i)
 		tag := field.Tag.Get("query")
 
 		if tag == "" {
@@ -44,7 +44,7 @@ func (r *QueryDTOResolver) Resolve(ctx core.Context, paramType reflect.Type) (an
 		if err != nil {
 			return nil, fmt.Errorf(
 				"QueryDTO 바인딩 실패 (%s.%s): %w",
-				paramType.Name(),
+				parameterMeta.Type.Name(),
 				field.Name,
 				err,
 			)

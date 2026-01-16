@@ -2,6 +2,9 @@ package core
 
 // Context는 하나의 요청 실행 단위를 표현하는 공통 컨텍스트
 type Context interface {
+	Method() string
+	Path() string
+
 	// 경로 변수 값을 반환
 	Param(name string) string
 	// 쿼리 파라미터 값을 반환
