@@ -42,9 +42,16 @@ func Run(config Config) error {
 	pipeline := pipeline.NewPipeline(router, invoker)
 
 	pipeline.AddArgumentResolver(
+		// Context 리졸버
 		&resolver.ContextResolver{},
-		&resolver.QueryDTOResolver{},
+
+		// Query 의미 타입 리졸버들
+		&resolver.PaginationResolver{},
+
+		// Body 리졸버
 		&resolver.DTOResolver{},
+
+		// 원시 값 리졸버
 		&resolver.PrimitiveResolver{},
 	)
 
