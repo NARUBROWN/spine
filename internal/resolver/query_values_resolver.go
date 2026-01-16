@@ -13,6 +13,6 @@ func (r *QueryValuesResolver) Supports(pm ParameterMeta) bool {
 	return pm.Type == reflect.TypeFor[query.Values]()
 }
 
-func (r *QueryValuesResolver) Resolve(ctx core.Context, parameterMeta ParameterMeta) (any, error) {
+func (r *QueryValuesResolver) Resolve(ctx core.RequestContext, parameterMeta ParameterMeta) (any, error) {
 	return query.NewValues(ctx.Queries()), nil
 }

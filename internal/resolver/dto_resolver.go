@@ -11,7 +11,7 @@ type DTOResolver struct{}
 
 func (r *DTOResolver) Supports(parameterMeta ParameterMeta) bool {
 	// Context 제외
-	if parameterMeta.Type == reflect.TypeFor[core.Context]() {
+	if parameterMeta.Type == reflect.TypeFor[core.ExecutionContext]() {
 		return false
 	}
 
@@ -29,7 +29,7 @@ func (r *DTOResolver) Supports(parameterMeta ParameterMeta) bool {
 	return true
 }
 
-func (r *DTOResolver) Resolve(ctx core.Context, parameterMeta ParameterMeta) (any, error) {
+func (r *DTOResolver) Resolve(ctx core.RequestContext, parameterMeta ParameterMeta) (any, error) {
 	// 빈 DTO 생성
 	valuePtr := reflect.New(parameterMeta.Type)
 

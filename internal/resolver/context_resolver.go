@@ -11,9 +11,9 @@ type ContextResolver struct{}
 
 func (r *ContextResolver) Supports(parameterMeta ParameterMeta) bool {
 	// 정확히 spine.Context 타입만 처리
-	return parameterMeta.Type == reflect.TypeFor[core.Context]()
+	return parameterMeta.Type == reflect.TypeFor[core.ExecutionContext]()
 }
 
-func (r *ContextResolver) Resolve(ctx core.Context, parameterMeta ParameterMeta) (any, error) {
+func (r *ContextResolver) Resolve(ctx core.RequestContext, parameterMeta ParameterMeta) (any, error) {
 	return ctx, nil
 }

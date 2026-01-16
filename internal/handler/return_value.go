@@ -15,5 +15,5 @@ type ReturnValueHandler interface {
 	Supports(returnType reflect.Type) bool
 
 	// Handle은 Handler의 반환값을 실제 응답으로 처리합니다.
-	Handle(value any, ctx core.Context) error
+	Handle(value any, ctx core.ExecutionContext) error
 }

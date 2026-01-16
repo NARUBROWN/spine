@@ -14,7 +14,7 @@ func (r *PaginationResolver) Supports(parameterMeta ParameterMeta) bool {
 	return parameterMeta.Type == reflect.TypeFor[query.Pagination]()
 }
 
-func (r *PaginationResolver) Resolve(ctx core.Context, parameterMeta ParameterMeta) (any, error) {
+func (r *PaginationResolver) Resolve(ctx core.RequestContext, parameterMeta ParameterMeta) (any, error) {
 	page := parseInt(ctx.Query("page"), 1)
 	size := parseInt(ctx.Query("size"), 20)
 

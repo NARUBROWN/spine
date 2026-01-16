@@ -10,7 +10,7 @@ type echoContext struct {
 	store map[string]any
 }
 
-func NewContext(c echo.Context) core.Context {
+func NewContext(c echo.Context) core.ExecutionContext {
 	return &echoContext{
 		echo:  c,
 		store: make(map[string]any),

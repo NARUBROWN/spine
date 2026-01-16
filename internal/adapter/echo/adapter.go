@@ -22,6 +22,13 @@ func NewAdapter(pipeline *pipeline.Pipeline) *Adapter {
 func (a *Adapter) Mount(e *echo.Echo) {
 	e.Any("/*", func(c echo.Context) error {
 		ctx := NewContext(c)
+
+		// echo 직렬화 구현체 주입
+		ctx.Set(
+			"spine.response_writer",
+			NewEchoResponseWriter(c),
+		)
+
 		if err := a.pipeline.Execute(ctx); err != nil {
 			fmt.Println("PIPELINE ERROR:", err)
 			return err

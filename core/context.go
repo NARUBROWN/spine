@@ -1,28 +1,27 @@
 package core
 
-// Context는 하나의 요청 실행 단위를 표현하는 공통 컨텍스트
-type Context interface {
+type ExecutionContext interface {
+	// Pipeline / Router 관련 메서드
 	Method() string
 	Path() string
-
-	// 경로 변수 값을 반환
-	Param(name string) string
-	// 쿼리 파라미터 값을 반환
-	Query(name string) string
-	// 요청 헤더 값을 반환
-	Header(name string) string
-	// 요청 본문을 주어진 구조체로 바인딩
-	Bind(out any) error
-	// 요청 범위 데이터 저장
-	Set(key string, value any)
-	// 요청 범위 데이터 조회
-	Get(key string) (any, bool)
-
+	Params() map[string]string
 	PathKeys() []string
+	Queries() map[string][]string
+	Set(key string, value any)
+	Get(key string) (any, bool)
+}
 
+type RequestContext interface {
+	// Resolver 관련 메섣
+
+	// 개별 접근
+	Param(name string) string
+	Query(name string) string
+
+	// 전체 뷰 접근
 	Params() map[string]string
 	Queries() map[string][]string
 
-	JSON(status int, value any) error
-	String(status int, value string) error
+	// body
+	Bind(out any) error
 }

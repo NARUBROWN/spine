@@ -29,7 +29,7 @@ type Route struct {
 }
 
 type Router interface {
-	Route(ctx core.Context) (HandlerMeta, error)
+	Route(ctx core.ExecutionContext) (HandlerMeta, error)
 }
 
 type DefaultRouter struct {
@@ -48,7 +48,7 @@ func (r *DefaultRouter) Register(method string, path string, meta HandlerMeta) {
 	})
 }
 
-func (r *DefaultRouter) Route(ctx core.Context) (HandlerMeta, error) {
+func (r *DefaultRouter) Route(ctx core.ExecutionContext) (HandlerMeta, error) {
 	for _, route := range r.routes {
 		if route.Method != ctx.Method() {
 			continue

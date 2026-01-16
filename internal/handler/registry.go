@@ -16,7 +16,7 @@ func NewReturnHandlerRegistry(h ...ReturnValueHandler) *ReturnHandlerRegistry {
 	}
 }
 
-func (r *ReturnHandlerRegistry) Handle(values []any, ctx core.Context) error {
+func (r *ReturnHandlerRegistry) Handle(values []any, ctx core.ExecutionContext) error {
 	for _, value := range values {
 		if value == nil {
 			continue

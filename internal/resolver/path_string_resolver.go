@@ -14,7 +14,7 @@ func (r *PathStringResolver) Supports(parameterMeta ParameterMeta) bool {
 	return parameterMeta.Type == reflect.TypeFor[path.String]()
 }
 
-func (r *PathStringResolver) Resolve(ctx core.Context, parameterMeta ParameterMeta) (any, error) {
+func (r *PathStringResolver) Resolve(ctx core.RequestContext, parameterMeta ParameterMeta) (any, error) {
 	if parameterMeta.PathKey == "" {
 		return nil, fmt.Errorf(
 			"path key가 바인딩되지 않았습니다: %v",

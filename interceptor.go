@@ -18,7 +18,7 @@ type Interceptor interface {
 		next를 호출하면 다음 Interceptor 또는 최종 Handler 실행으로 제어가 전달된다.
 		next를 호출하지 않으면 실행은 중단된다.
 	*/
-	Around(ctx core.Context, next Next) error
+	Around(ctx core.ExecutionContext, next Next) error
 }
 
 // Next는 다음 실행 단계로 제어를 전달하는 함수입니다.

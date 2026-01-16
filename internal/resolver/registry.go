@@ -17,7 +17,7 @@ func NewRegistry(resolvers ...ArgumentResolver) *Registry {
 }
 
 // Resolve는 파라미터 타입에 맞는 Resolver를 찾아 값을 생성합니다.
-func (r *Registry) Resolve(parameterMeta ParameterMeta, ctx core.Context) (any, error) {
+func (r *Registry) Resolve(parameterMeta ParameterMeta, ctx core.RequestContext) (any, error) {
 	for _, resolver := range r.resolvers {
 		if resolver.Supports(parameterMeta) {
 			return resolver.Resolve(ctx, parameterMeta)

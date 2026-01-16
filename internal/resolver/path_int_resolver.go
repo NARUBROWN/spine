@@ -15,7 +15,7 @@ func (r *PathIntResolver) Supports(parameterMeta ParameterMeta) bool {
 	return parameterMeta.Type == reflect.TypeFor[path.Int]()
 }
 
-func (r *PathIntResolver) Resolve(ctx core.Context, parameterMeta ParameterMeta) (any, error) {
+func (r *PathIntResolver) Resolve(ctx core.RequestContext, parameterMeta ParameterMeta) (any, error) {
 
 	if parameterMeta.PathKey == "" {
 		return nil, fmt.Errorf("%v에 해당하는 path key가 매칭되지 않았습니다.", parameterMeta.Type)
