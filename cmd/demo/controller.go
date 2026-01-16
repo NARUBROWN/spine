@@ -1,6 +1,9 @@
 package main
 
-import "github.com/NARUBROWN/spine/core"
+import (
+	"github.com/NARUBROWN/spine/pkg/path"
+	"github.com/NARUBROWN/spine/pkg/query"
+)
 
 type UserController struct{}
 
@@ -9,13 +12,13 @@ func NewUserController() *UserController {
 }
 
 type User struct {
-	ID   int    `json:"id"`
+	ID   int64  `json:"id"`
 	Name string `json:"name"`
 }
 
-func (C *UserController) GetUser(ctx core.Context, id int) User {
+func (c *UserController) GetUser(userId path.Int) User {
 	return User{
-		ID:   id,
+		ID:   userId.Value,
 		Name: "spine-user",
 	}
 }
@@ -24,20 +27,15 @@ type CreateUserRequest struct {
 	Name string `json:"name"`
 }
 
-func (c *UserController) CreateUser(ctx core.Context, req CreateUserRequest) map[string]any {
+func (c *UserController) CreateUser(req CreateUserRequest) map[string]any {
 	return map[string]any{
 		"name": req.Name,
 	}
 }
 
-type UserQuery struct {
-	ID   int    `query:"id"`
-	Name string `query:"name"`
-}
-
-func (c *UserController) GetUserQuery(ctx core.Context, q UserQuery) User {
+func (c *UserController) GetUserQuery(q query.Values) User {
 	return User{
-		ID:   q.ID,
-		Name: q.Name,
+		ID:   q.Int("id", 0),
+		Name: q.String("name"),
 	}
 }

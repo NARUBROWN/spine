@@ -45,14 +45,17 @@ func Run(config Config) error {
 		// Context 리졸버
 		&resolver.ContextResolver{},
 
+		// Path 리졸버들
+		&resolver.PathIntResolver{},
+		&resolver.PathStringResolver{},
+		&resolver.PathBooleanResolver{},
+
 		// Query 의미 타입 리졸버들
 		&resolver.PaginationResolver{},
+		&resolver.QueryValuesResolver{},
 
 		// Body 리졸버
 		&resolver.DTOResolver{},
-
-		// 원시 값 리졸버
-		&resolver.PrimitiveResolver{},
 	)
 
 	pipeline.AddReturnValueHandler(
