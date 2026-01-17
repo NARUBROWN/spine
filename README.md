@@ -9,197 +9,247 @@ Spine defines **how a request is resolved, executed, and completed** — explici
 
 **Spine는 요청 실행(Runtime)을 1급 개념으로 다루는 백엔드 웹 프레임워크입니다.**
 
+---
 
+## Spine의 문제의식
 
-## Spine의 문제의식은 단순합니다
+대부분의 웹 프레임워크는 실행 흐름을 숨깁니다.
 
-대부분의 웹 프레임워크는 다음을 숨깁니다.
-요청이 어디서 시작되는지, 누가 인자를 만들고, 언제 비즈니스 코드가 실행되며, 결과가 어떻게 응답으로 변환되는지
-Spine은 이 흐름을 숨기지 의도적으로 숨기지 않습니다.
+- 요청이 어디서 시작되는지
+- 누가 인자를 생성하는지
+- 언제 비즈니스 코드가 실행되는지
+- 반환값이 어떻게 응답으로 변환되는지
 
+이 모든 과정은 프레임워크 내부 규칙과 관습, 암묵적 동작에 묻혀 있습니다.
+
+Spine는 이 흐름을 숨기지 않습니다.  
+**실행 순서와 책임을 코드 구조로 고정**합니다.
+
+---
 
 ## 한국과 Spine
 
-한국에는 자체 IoC + 실행 파이프라인 구조를 가진 백엔드 프레임워크가 거의 없습니다. 전자정부 프레임워크조차 Spring IoC 위의 조합물입니다. NestJS, Spring, FastAPI, Django는 모두 해외 설계 철학의 수입입니다.
+한국에는 자체 IoC + 실행 파이프라인 구조를 가진 백엔드 프레임워크가 거의 없습니다.  
+전자정부 프레임워크조차 Spring IoC 위의 조합물에 가깝습니다.
 
-Spine는 한국에서 거의 처음 시도되는, Execution Pipeline 중심의 현대적인 백엔드 웹 프레임워크입니다.
+NestJS, Spring, FastAPI, Django는 모두 해외 설계 철학의 수입입니다.
 
-## Spine으로 만든 예제 프로젝트 확인하기
-[User-Demo 프로젝트 확인하기](https://github.com/NARUBROWN/spine-user-demo)
+Spine는 한국에서 거의 처음 시도되는,  
+**Execution Pipeline 중심의 현대적인 백엔드 프레임워크**입니다.
+
+---
+
+## Spine으로 만든 예제 프로젝트
+
+👉 https://github.com/NARUBROWN/spine-user-demo
+
+---
 
 ## Spine은 무엇이 아닌가
 
-- ❌ HTTP Engine이 아닙니다.
-- ❌ Router 중심 프레임워크가 아닙니다.
-- ❌ Annotation 기반 자동 프레임워크가 아닙니다.
-- ❌ Controller에 책임을 몰아넣지 않습니다.
-- ❌ Convention over Configuration(관례 우선)을 채택하지 않습니다.
+- ❌ HTTP Engine이 아닙니다
+- ❌ Router 중심 프레임워크가 아닙니다
+- ❌ Annotation / Decorator 기반 프레임워크가 아닙니다
+- ❌ Convention over Configuration을 채택하지 않습니다
+- ❌ Controller에 실행 책임을 위임하지 않습니다
 
-Spine은 **Execution Pipeline**입니다.
+Spine는 **Execution Pipeline**입니다.
 
+---
 
 ## 전체 아키텍처 개요
 
 ```
-HTTP Engine (Echo)
+HTTP Transport (Echo)
         │
         ▼
-core.Context
+ExecutionContext
         │
         ▼
 Pipeline
   ├─ Router
-  ├─ ArgumentResolver 체인
-  ├─ Interceptor (preHandle) (구현 예정)
-  ├─ Invoker (Method Invocation)
+  ├─ ParameterMeta Builder
+  ├─ ArgumentResolver Chain
+  ├─ Interceptor (preHandle)
+  ├─ Invoker (Controller Method Call)
   ├─ ReturnValueHandler
-  └─ Interceptor (postHandle) (구현 예정)
+  └─ Interceptor (postHandle)
         │
         ▼
-Response
+ResponseWriter
 ```
-이 흐름은 문서가 아니라 코드로 고정되어 있습니다.
 
-## Execution Pipeline (핵심 모델)
+이 구조는 설정이 아니라 **실행 모델 그 자체**입니다.
 
-모든 요청은 아래의 실행 순서를 따릅니다.
+---
+
+## Execution Pipeline
+
+모든 요청은 다음 순서를 **반드시** 따릅니다.
 
 1. Pipeline 진입
-2. Router를 통해 HandlerMethod 선택
-3. ArgumentResolver 체인 실행
-4. Interceptor.preHandle
-5. Controller Method 호출 (Invoker)
-6. ReturnValueHandler 실행
-7. Interceptor.postHandle
-8. Response 생성
+2. Router를 통한 HandlerMeta 선택
+3. ParameterMeta 생성
+4. ArgumentResolver 체인 실행
+5. Interceptor.preHandle
+6. Controller Method 호출 (Invoker)
+7. ReturnValueHandler 실행
+8. Interceptor.postHandle
+9. ResponseWriter를 통한 응답 기록
 
-이 순서는 숨겨지지 않고, 암묵적으로 바뀌지 않으며, 변경 시 반드시 명시적으로 표현됩니다.
+이 순서는 숨겨지지 않으며, 암묵적으로 변경되지 않습니다.
 
-## Controller 철학 (Minimal Responsibility)
+---
 
-Controller는 다음 책임을 가지지 않도록 설계되었습니다.
+## Controller 설계 철학
 
-- HTTP Status 결정
-- Header 조작
-- Request Parsing
-- Argument 생성 규칙
-- Response 직렬화
+### Spine의 원칙
 
-Controller의 책임은 유즈케이스 표현 하나뿐입니다.
+> **Controller는 실행 모델을 모른다.  
+> 하지만 입력의 출처는 타입으로 명시한다.**
+
+Controller는 다음에 **의존할 수 있습니다**:
+
+- `path.*` : Path Parameter 의미 타입
+- `query.*` : Query Parameter 의미 타입
+- `httperr.*` : HTTP Error 의미 타입
+
+Controller는 다음에 **의존하지 않습니다**:
+
+- ExecutionContext
+- Pipeline
+- Router
+- Resolver
+- HTTP / Transport 타입
+
+---
+
+### Controller 예시
 
 ```go
-func (c *UserController) GetUser(id int) User
+func (c *UserController) GetUser(userId path.Int) (User, error) {
+    if userId.Value <= 0 {
+        return User{}, httperr.BadRequest("유효하지 않은 사용자 ID입니다")
+    }
+
+    user, err := c.repo.FindByID(userId.Value)
+    if err != nil {
+        return User{}, httperr.NotFound("사용자를 찾을 수 없습니다")
+    }
+
+    return user, nil
+}
 ```
 
-프레임워크를 모르도록 설계되었으며, 테스트 가능한 순수 구조입니다. 그리고 시그니처 자체가 API 계약입니다.
+Controller는:
+- HTTP를 모릅니다
+- 실행 순서를 모릅니다
+- 값의 출처만 명시합니다
+
+---
 
 ## Signature-as-Contract
 
-Spine에서 API는 Annotation이 아니라 시그니처입니다.
+Spine에서 **메서드 시그니처는 API 계약 그 자체**입니다.
 
 - 입력 생성 → `ArgumentResolver`
-- 출력 표현 → `ReturnValueHandler`
+- 출력 처리 → `ReturnValueHandler`
 
-시그니처 변경 = API 변경
+시그니처 변경은 곧 API 변경입니다.
 
-Spine는 다음을 의도적으로 금지하도록 설계되었습니다.
+Spine는 다음을 의도적으로 금지합니다:
 
 - ❌ Annotation 기반 매핑
-- ❌ Convention over Configuration (관례 우선)
-- ❌ 암묵적 파라미터 주입
+- ❌ Convention 기반 자동 추론
+- ❌ Primitive 타입의 암묵적 주입
 
-## Pipeline과 Invoker의 분리
+---
 
-### Pipeline
-- 요청 실행의 전체 흐름을 관리하는 유일한 오케스트레이터.
-- 실행 순서를 아는 유일한 컴포넌트입니다.
-- 비즈니스 로직을 절대 포함하지 않습니다.
+## Context 분리
 
-### Invoker
-- Controller 인스턴스 생성 (IoC)
-- Reflection기반 Method 호출
-- Argument / Return 처리의 경계
+Spine는 Context를 두 계층으로 분리합니다.
 
-실행 흐름 제어와 호출 책임을 분리합니다.
+### ExecutionContext
 
-## 확장 포인트 (Explicit Extension)
+- 실행 흐름 제어 전용
+- Router / Pipeline 내부에서만 사용
+- Controller 및 Resolver에 노출 ❌
 
-Spine의 모든 확장은 명시적 인터페이스로만 이루어집니다.
+### RequestContext
 
-### ArgumentResolver
-- 메서드 파라미터 하나를 책임집니다.
-- Path / Query / Body / DTO 해석 담당
-- 모호하면 실패하도록 설계되었습니다.
+- 입력 해석 전용 (Path / Query / Body)
+- ArgumentResolver에서만 사용
+- Controller에 노출 ❌
 
-### ReturnValueHandler
-- 반환값 → Response 변환
-- JSON / String / Error 등 명확한 책임으로 나눠져있습니다.
+---
 
-### Interceptor (개발 예정)
-- 인증, 로깅, 트랜잭션 같은 횡단 관심사 처리
-- 실행 흐름에만 관여
+## Path Parameter Binding Rule
 
-> 등록되지 않으면 실행되지 않습니다.
+Spine의 Path Parameter 바인딩은 **순서 기반(order-based)** 입니다.  
+이는 Go 언어 제약을 고려한 **의도적이고 명시적인 계약**입니다.
 
-### Container 책임
+### 규칙
 
-- Constructor 등록
-- Singleton 캐시
-- Lazy 생성
-- 순환 의존성 감지
-
-> DI는 문법이 아니라 생성 통제 + 그래프 해석입니다.
-
-## Echo와 Spine의 관계
-
-Spine에서 Echo는 HTTP Transport 구현체일 뿐입니다.
-Spine 내부 흐름은 다음과 같습니다.
 ```
-Echo → core.Context → Spine Runtime
+Route Path Key 선언 순서
+=
+Controller 시그니처의 path.* 파라미터 선언 순서
 ```
-Echo 타입은 Spine 내부에 노출되지 않습니다.
-또한, 교체 가능합니다.
+
+### 예시
+
+```go
+// Route
+/users/:userId/posts/:postId
+
+// Controller
+func GetPost(userId path.Int, postId path.Int)
+```
+
+### 정책
+
+- 이름 매칭 ❌
+- annotation ❌
+- primitive 타입 ❌
+- 순서 불일치 시 즉시 실패 (Fail Fast)
+
+---
+
+## Query 처리 원칙
+
+### 의미가 고정된 Query
+
+```go
+func ListUsers(p query.Pagination)
+```
+
+Spine가 제공하는 의미 타입을 사용합니다.
+
+### 가변 Query
+
+```go
+func SearchUsers(q query.Values)
+```
+
+- Raw Query View 제공
+- 사용자가 직접 해석
+- DTO 자동 매핑 ❌
+
+---
+
+## ReturnValueHandler & ResponseWriter
+
+Controller는 값을 반환합니다.
+
+```go
+return User{...}
+```
+
+응답 생성은 전부 `ReturnValueHandler`가 담당합니다.  
+Transport는 `ResponseWriter`만 구현합니다.
+
+---
 
 ## License
 
 MIT
-
-## Status
-
-✅ 이미 개발 완료
-- Execution Pipeline 구조 확정 
-- Router + HandlerMeta 구현
-- Invoker (Reflection 기반 메서드 실행)
-- ArgumentResolver 체계 구축
-- ContextResolver (core.Context 주입)
-- PrimitiveResolver (Path 1개 / Query 1개 자동 매핑)
-- QueryDTOResolver (query 태그 기반)
-- Body DTOResolver (JSON Body 바인딩)
-- Resolver Registry + 우선순위 체계
-- ReturnValueHandler (JSON / String / Error)
-- ReturnHandler Registry
-- IoC Container (Constructor 등록, Lazy 생성)
-- 순환 의존성 감지
-- Echo Adapter (단일 /* 엔트리 포인트)
-- core.Context 분리 및 Request/Response 계약
-- Controller / Service / Repository / Route 분리 예제 제작
-- Path + QueryDTO 혼합 사용 가능
-
-🟡 개발 중
-- PathDTOResolver 구현 (path:"id" 태그 기반)
-- Error 반환 → HTTP Status 매핑 규칙 정리
-- Interceptor 구현
-- Resolver / Handler 에러 메시지 통일
-
-🟠 개발 예정
-- Validation 태그 지원
-- Default 값 처리
-- Pagination QueryDTO 패턴
-- 테스트 유틸리티 제공 (Invoker / Resolver 단위 테스트)
-
-❌ 개발 예정 없음
-- Annotation / Decorator 기반 설계
-- Component Scan
-- Convention over Configuration
-- Controller Interface 강제
-- 암묵적 / 순서 기반 파라미터 매핑
