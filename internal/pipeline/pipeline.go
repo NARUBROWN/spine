@@ -47,7 +47,7 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) error {
 	paramMetas := buildParameterMeta(meta.Method, ctx)
 
 	// Argument Resolver 체인 실행
-	args, err := p.resolveArguments(ctx, meta, paramMetas)
+	args, err := p.resolveArguments(ctx, paramMetas)
 	if err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) error {
 	}
 
 	// ReturnValueHandler 처리
-	if err := p.handleReturn(ctx, meta, results); err != nil {
+	if err := p.handleReturn(ctx, results); err != nil {
 		return err
 	}
 
@@ -109,7 +109,23 @@ func isPathType(pt reflect.Type) bool {
 	return pt.PkgPath() == pathPkg
 }
 
-func (p *Pipeline) handleReturn(ctx core.ExecutionContext, meta router.HandlerMeta, results []any) error {
+func (p *Pipeline) handleReturn(ctx core.ExecutionContext, results []any) error {
+	// error가 있으면 error만 처리하고 종료
+	for _, result := range results {
+		if result == nil {
+			continue
+		}
+		if _, isErr := result.(error); isErr {
+			resultType := reflect.TypeOf(result)
+			for _, h := range p.returnHandlers {
+				if h.Supports(resultType) {
+					return h.Handle(result, ctx)
+				}
+			}
+		}
+	}
+
+	// error가 없으면 척번째 non-nil 값 처리
 	for _, result := range results {
 		if result == nil {
 			continue
@@ -141,7 +157,7 @@ func (p *Pipeline) handleReturn(ctx core.ExecutionContext, meta router.HandlerMe
 	return nil
 }
 
-func (p *Pipeline) resolveArguments(ctx core.ExecutionContext, meta router.HandlerMeta, paramMetas []resolver.ParameterMeta) ([]any, error) {
+func (p *Pipeline) resolveArguments(ctx core.ExecutionContext, paramMetas []resolver.ParameterMeta) ([]any, error) {
 	reqCtx, ok := ctx.(core.RequestContext)
 	if !ok {
 		return nil, fmt.Errorf("ExecutionContext이 RequestContext를 구현하고 있지 않습니다.")
