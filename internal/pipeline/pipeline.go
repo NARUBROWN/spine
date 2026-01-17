@@ -105,7 +105,7 @@ func buildParameterMeta(method reflect.Method, ctx core.ExecutionContext) []reso
 }
 
 func isPathType(pt reflect.Type) bool {
-	pathPkg := reflect.TypeOf(path.Int{}).PkgPath()
+	pathPkg := reflect.TypeFor[path.Int]().PkgPath()
 	return pt.PkgPath() == pathPkg
 }
 
