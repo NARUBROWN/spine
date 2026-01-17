@@ -2,6 +2,7 @@ package router
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/NARUBROWN/spine/core"
@@ -38,6 +39,22 @@ type DefaultRouter struct {
 
 func NewRouter() *DefaultRouter {
 	return &DefaultRouter{}
+}
+
+func (r *DefaultRouter) ControllerTypes() []reflect.Type {
+	seen := map[reflect.Type]struct{}{}
+	var result []reflect.Type
+
+	for _, route := range r.routes {
+		t := route.Meta.ControllerType
+		if _, ok := seen[t]; ok {
+			continue
+		}
+		seen[t] = struct{}{}
+		result = append(result, t)
+	}
+
+	return result
 }
 
 func (r *DefaultRouter) Register(method string, path string, meta HandlerMeta) {

@@ -1,38 +1,53 @@
 package echo
 
 import (
-	"fmt"
-
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/gommon/log"
 )
 
-// Adapter는 Echo 요청을 Spine 실행 모델로 연결합니다.
-type Adapter struct {
+type Server struct {
+	echo     *echo.Echo
 	pipeline *pipeline.Pipeline
+	address  string
 }
 
-func NewAdapter(pipeline *pipeline.Pipeline) *Adapter {
-	return &Adapter{
+func NewServer(pipeline *pipeline.Pipeline, address string) *Server {
+	e := newEcho()
+	return &Server{
+		echo:     e,
 		pipeline: pipeline,
+		address:  address,
 	}
 }
 
-// Mount는 Echo 인스턴스에 Spine 핸들러를 연결합니다.
-func (a *Adapter) Mount(e *echo.Echo) {
-	e.Any("/*", func(c echo.Context) error {
-		ctx := NewContext(c)
+func newEcho() *echo.Echo {
+	e := echo.New()
+	e.HideBanner = true
+	e.HidePort = true
+	e.Logger.SetLevel(log.ERROR)
+	return e
+}
 
-		// echo 직렬화 구현체 주입
-		ctx.Set(
-			"spine.response_writer",
-			NewEchoResponseWriter(c),
-		)
+func (s *Server) Mount() {
+	s.echo.Any("/*", s.handle)
+}
 
-		if err := a.pipeline.Execute(ctx); err != nil {
-			fmt.Println("PIPELINE ERROR:", err)
-			return err
-		}
-		return nil
-	})
+func (s *Server) Start() error {
+	return s.echo.Start(s.address)
+}
+
+func (s *Server) handle(c echo.Context) error {
+	ctx := NewContext(c)
+
+	ctx.Set(
+		"spine.response_writer",
+		NewEchoResponseWriter(c),
+	)
+
+	if err := s.pipeline.Execute(ctx); err != nil {
+		c.Logger().Errorf("pipeline error: %v", err)
+		return err
+	}
+	return nil
 }

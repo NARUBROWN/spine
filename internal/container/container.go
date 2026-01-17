@@ -3,6 +3,7 @@ package container
 import (
 	"errors"
 	"fmt"
+	"log"
 	"reflect"
 )
 
@@ -70,4 +71,22 @@ func (c *Container) Resolve(componentType reflect.Type) (any, error) {
 	c.instances[componentType] = result
 
 	return result, nil
+}
+
+func (c *Container) WarmUp(types []reflect.Type) error {
+	seen := make(map[reflect.Type]struct{})
+
+	for _, t := range types {
+		log.Printf("[Container] Instance에 의존성 후보 등록 : %s", t.Elem().Name())
+		if _, ok := seen[t]; ok {
+			continue
+		}
+		seen[t] = struct{}{}
+
+		// 차례대로 후보 컴포넌트의 Resolve 호출하여 instance화
+		if _, err := c.Resolve(t); err != nil {
+			return err
+		}
+	}
+	return nil
 }
