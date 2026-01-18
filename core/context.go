@@ -1,10 +1,14 @@
 package core
 
+import "context"
+
 type ExecutionContext interface {
 	// Pipeline / Router 관련 메서드
+	Context() context.Context
 	Method() string
 	Path() string
 	Params() map[string]string
+	Header(name string) string
 	PathKeys() []string
 	Queries() map[string][]string
 	Set(key string, value any)
@@ -12,7 +16,7 @@ type ExecutionContext interface {
 }
 
 type RequestContext interface {
-	// Resolver 관련 메섣
+	// Resolver 관련 메서드
 
 	// 개별 접근
 	Param(name string) string

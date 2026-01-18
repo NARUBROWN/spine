@@ -26,11 +26,11 @@ type RouteSpec struct {
 type Route struct {
 	Method string
 	Path   string
-	Meta   HandlerMeta
+	Meta   core.HandlerMeta
 }
 
 type Router interface {
-	Route(ctx core.ExecutionContext) (HandlerMeta, error)
+	Route(ctx core.ExecutionContext) (core.HandlerMeta, error)
 }
 
 type DefaultRouter struct {
@@ -57,7 +57,7 @@ func (r *DefaultRouter) ControllerTypes() []reflect.Type {
 	return result
 }
 
-func (r *DefaultRouter) Register(method string, path string, meta HandlerMeta) {
+func (r *DefaultRouter) Register(method string, path string, meta core.HandlerMeta) {
 	r.routes = append(r.routes, Route{
 		Method: method,
 		Path:   path,
@@ -65,7 +65,7 @@ func (r *DefaultRouter) Register(method string, path string, meta HandlerMeta) {
 	})
 }
 
-func (r *DefaultRouter) Route(ctx core.ExecutionContext) (HandlerMeta, error) {
+func (r *DefaultRouter) Route(ctx core.ExecutionContext) (core.HandlerMeta, error) {
 	for _, route := range r.routes {
 		if route.Method != ctx.Method() {
 			continue
@@ -82,7 +82,7 @@ func (r *DefaultRouter) Route(ctx core.ExecutionContext) (HandlerMeta, error) {
 
 		return route.Meta, nil
 	}
-	return HandlerMeta{}, fmt.Errorf("핸들러가 없습니다.")
+	return core.HandlerMeta{}, fmt.Errorf("핸들러가 없습니다.")
 }
 
 func matchPath(pattern string, path string) (bool, map[string]string, []string) {

@@ -1,20 +1,28 @@
 package echo
 
 import (
+	"context"
+
 	"github.com/NARUBROWN/spine/core"
 	"github.com/labstack/echo/v4"
 )
 
 type echoContext struct {
-	echo  echo.Context
-	store map[string]any
+	echo   echo.Context
+	reqCtx context.Context
+	store  map[string]any
 }
 
 func NewContext(c echo.Context) core.ExecutionContext {
 	return &echoContext{
-		echo:  c,
-		store: make(map[string]any),
+		echo:   c,
+		reqCtx: c.Request().Context(), // 요청시 생성되는 Context
+		store:  make(map[string]any),
 	}
+}
+
+func (e *echoContext) Context() context.Context {
+	return e.reqCtx
 }
 
 func (e *echoContext) Bind(out any) error {

@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -13,8 +14,8 @@ import (
 )
 
 type Pipeline struct {
-	router router.Router
-	// interceptors      []spine.Interceptor
+	router            router.Router
+	interceptors      []core.Interceptor
 	argumentResolvers []resolver.ArgumentResolver
 	returnHandlers    []handler.ReturnValueHandler
 	invoker           *invoker.Invoker
@@ -27,6 +28,10 @@ func NewPipeline(router router.Router, invoker *invoker.Invoker) *Pipeline {
 	}
 }
 
+func (p *Pipeline) AddInterceptor(its ...core.Interceptor) {
+	p.interceptors = append(p.interceptors, its...)
+}
+
 func (p *Pipeline) AddArgumentResolver(resolvers ...resolver.ArgumentResolver) {
 	p.argumentResolvers = append(p.argumentResolvers, resolvers...)
 }
@@ -36,7 +41,7 @@ func (p *Pipeline) AddReturnValueHandler(handlers ...handler.ReturnValueHandler)
 }
 
 // Execute는 하나의 요청 실행 전체를 소유합니다.
-func (p *Pipeline) Execute(ctx core.ExecutionContext) error {
+func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 	// Router가 실행 대상을 결정
 	meta, err := p.router.Route(ctx)
 
@@ -52,7 +57,16 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) error {
 		return err
 	}
 
-	// TODO: Interceptor preHandle
+	// Interceptor preHandle
+	for _, it := range p.interceptors {
+		if err := it.PreHandle(ctx, meta); err != nil {
+			if errors.Is(err, core.ErrAbortPipeline) {
+				// Interceptor가 의도적으로 요청을 종료함 (응답은 이미 작성됨)
+				return nil
+			}
+			return err
+		}
+	}
 
 	// Controller Method 호출
 	results, err := p.invoker.Invoke(
@@ -69,7 +83,17 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) error {
 		return err
 	}
 
-	// TODO: Interceptor postHandle (역순)
+	// Interceptor postHandle (역순)
+	for i := len(p.interceptors) - 1; i >= 0; i-- {
+		p.interceptors[i].PostHandle(ctx, meta)
+	}
+
+	// Interceptor AfterCompletion은 무조건 보장
+	defer func() {
+		for i := len(p.interceptors) - 1; i >= 0; i-- {
+			p.interceptors[i].AfterCompletion(ctx, meta, finalErr)
+		}
+	}()
 
 	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/NARUBROWN/spine"
+	"github.com/NARUBROWN/spine/interceptor/cors"
 )
 
 func main() {
@@ -31,6 +32,15 @@ func main() {
 		"GET",
 		"/users",
 		(*UserController).GetUserQuery,
+	)
+
+	app.Interceptor(
+		cors.New(cors.Config{
+			AllowOrigins: []string{"*"},
+			AllowMethods: []string{"GET", "POST", "OPTIONS"},
+			AllowHeaders: []string{"Content-Type"},
+		}),
+		&LoggingInterceptor{},
 	)
 
 	// EnableGracefulShutdown & ShutdownTimeout은 선택사항입니다.

@@ -9,17 +9,23 @@ import (
 )
 
 type Server struct {
-	echo     *echo.Echo
-	pipeline *pipeline.Pipeline
-	address  string
+	echo           *echo.Echo
+	pipeline       *pipeline.Pipeline
+	address        string
+	transportHooks []func(any)
 }
 
-func NewServer(pipeline *pipeline.Pipeline, address string) *Server {
+func NewServer(pipeline *pipeline.Pipeline, address string, transportHooks []func(any)) *Server {
 	e := newEcho()
+	for _, hook := range transportHooks {
+		hook(e)
+	}
+
 	return &Server{
-		echo:     e,
-		pipeline: pipeline,
-		address:  address,
+		echo:           e,
+		pipeline:       pipeline,
+		address:        address,
+		transportHooks: transportHooks,
 	}
 }
 

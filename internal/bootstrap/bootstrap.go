@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"reflect"
 	"syscall"
 	"time"
 
+	"github.com/NARUBROWN/spine/core"
 	httpEngine "github.com/NARUBROWN/spine/internal/adapter/echo"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/handler"
@@ -20,10 +22,11 @@ import (
 )
 
 type Config struct {
-	Address      string
-	Constructors []any
-	Routes       []spineRouter.RouteSpec
-
+	Address                string
+	Constructors           []any
+	Routes                 []spineRouter.RouteSpec
+	Interceptors           []core.Interceptor
+	TransportHooks         []func(any)
 	EnableGracefulShutdown bool
 	ShutdownTimeout        time.Duration
 }
@@ -67,9 +70,10 @@ func Run(config Config) error {
 	invoker := invoker.NewInvoker(container)
 	pipeline := pipeline.NewPipeline(router, invoker)
 
+	log.Println("[Bootstrap] ArgumentResolver 등록")
 	pipeline.AddArgumentResolver(
-		// Context 리졸버
-		&resolver.ContextResolver{},
+		// 표준 Context 리졸버
+		&resolver.StdContextResolver{},
 
 		// Path 리졸버들
 		&resolver.PathIntResolver{},
@@ -84,15 +88,39 @@ func Run(config Config) error {
 		&resolver.DTOResolver{},
 	)
 
+	log.Println("[Bootstrap] ReturnValueHandler 등록")
 	pipeline.AddReturnValueHandler(
 		&handler.StringReturnHandler{},
 		&handler.JSONReturnHandler{},
 		&handler.ErrorReturnHandler{},
 	)
 
+	log.Println("[Bootstrap] Interceptor 등록 시작")
+	for _, interceptor := range config.Interceptors {
+		v := reflect.ValueOf(interceptor)
+		t := reflect.TypeOf(interceptor)
+
+		// Case 1: nil pointer → resolve from container
+		if t.Kind() == reflect.Pointer && v.IsNil() {
+			log.Printf("[Bootstrap] Interceptor %s가 컨테이너에서 생성됐습니다.", t.Elem().Name())
+
+			inst, err := container.Resolve(t)
+			if err != nil {
+				panic(err)
+			}
+
+			pipeline.AddInterceptor(inst.(core.Interceptor))
+			continue
+		}
+
+		// Case 2: already-instantiated interceptor
+		log.Printf("[Bootstrap] Interceptor %T가 인스턴스에서 사용됩니다.", interceptor)
+		pipeline.AddInterceptor(interceptor)
+	}
+
 	log.Println("[Bootstrap] HTTP 어댑터 마운트")
 	// Echo Adapter
-	server := httpEngine.NewServer(pipeline, config.Address)
+	server := httpEngine.NewServer(pipeline, config.Address, config.TransportHooks)
 	server.Mount()
 
 	// EnableGracefulShutdown 기본값 : false : 즉시 종료 로직
@@ -143,5 +171,5 @@ ____/ /__  /_/ /  / _  / / /  __/
 
 func printBanner() {
 	fmt.Print(spineBanner)
-	log.Printf("[Bootstrap] Spine version: %s", "v0.1.4")
+	log.Printf("[Bootstrap] Spine version: %s", "v0.2.1")
 }

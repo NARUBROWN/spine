@@ -19,3 +19,12 @@ func (w *EchoResponseWriter) WriteJSON(status int, value any) error {
 func (w *EchoResponseWriter) WriteString(status int, value string) error {
 	return w.ctx.String(status, value)
 }
+
+func (w *EchoResponseWriter) SetHeader(key, value string) {
+	w.ctx.Response().Header().Set(key, value)
+}
+
+func (w *EchoResponseWriter) WriteStatus(status int) error {
+	w.ctx.Response().WriteHeader(status)
+	return nil
+}
