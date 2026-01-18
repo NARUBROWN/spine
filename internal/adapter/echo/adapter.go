@@ -1,6 +1,8 @@
 package echo
 
 import (
+	"context"
+
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
@@ -50,4 +52,8 @@ func (s *Server) handle(c echo.Context) error {
 		return err
 	}
 	return nil
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	return s.echo.Shutdown(ctx)
 }

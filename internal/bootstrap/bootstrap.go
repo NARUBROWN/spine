@@ -1,9 +1,8 @@
 package bootstrap
 
 import (
+	"context"
 	"fmt"
-	"log"
-
 	httpEngine "github.com/NARUBROWN/spine/internal/adapter/echo"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/handler"
@@ -11,6 +10,12 @@ import (
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/internal/resolver"
 	spineRouter "github.com/NARUBROWN/spine/internal/router"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 type Config struct {
@@ -86,9 +91,31 @@ func Run(config Config) error {
 	server := httpEngine.NewServer(pipeline, config.Address)
 	server.Mount()
 
-	log.Printf("[Bootstrap] 서버 리스닝 시작: %s", config.Address)
-	// Listen
-	return server.Start()
+	go func() {
+		// Listen
+		log.Printf("[Bootstrap] 서버 리스닝 시작: %s", config.Address)
+
+		if err := server.Start(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("[Bootstrap] 서버 시작 실패: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Println("[Bootstrap] 시스템 종료 감지. Graceful Shutdown 시작...")
+
+	// 컨텍스트 생성...10초까지 봐줄 것
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		return fmt.Errorf("[Bootstrap] 서버 강제 종료 발생: %v", err)
+	}
+
+	log.Println("[Bootstrap] 시스템이 안전하게 종료되었습니다.")
+	return nil
 }
 
 const spineBanner = `
