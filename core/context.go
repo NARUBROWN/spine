@@ -1,7 +1,10 @@
 package core
 
+import "context"
+
 type ExecutionContext interface {
 	// Pipeline / Router 관련 메서드
+	Context() context.Context
 	Method() string
 	Path() string
 	Params() map[string]string
