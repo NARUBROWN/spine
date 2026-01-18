@@ -1,9 +1,17 @@
 package spine
 
 import (
+	"time"
+
 	"github.com/NARUBROWN/spine/internal/bootstrap"
 	"github.com/NARUBROWN/spine/internal/router"
 )
+
+type BootOptions struct {
+	Address                string
+	EnableGracefulShutdown bool
+	ShutdownTimeout        time.Duration
+}
 
 type App interface {
 	// 생성자 선언
@@ -11,7 +19,7 @@ type App interface {
 	// 라우트 선언
 	Route(method string, path string, handler any)
 	// 실행
-	Run(address string) error
+	Run(opts BootOptions) error
 }
 
 type app struct {
@@ -35,10 +43,14 @@ func (a *app) Route(method string, path string, handler any) {
 	})
 }
 
-func (a *app) Run(address string) error {
-	return bootstrap.Run(bootstrap.Config{
-		Address:      address,
-		Constructors: a.constructors,
-		Routes:       a.routes,
-	})
+func (a *app) Run(opts BootOptions) error {
+	internalConfig := bootstrap.Config{
+		Address:                opts.Address,
+		Constructors:           a.constructors,
+		Routes:                 a.routes,
+		EnableGracefulShutdown: opts.EnableGracefulShutdown,
+		ShutdownTimeout:        opts.ShutdownTimeout,
+	}
+
+	return bootstrap.Run(internalConfig)
 }

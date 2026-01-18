@@ -1,6 +1,10 @@
 package main
 
-import "github.com/NARUBROWN/spine"
+import (
+	"time"
+
+	"github.com/NARUBROWN/spine"
+)
 
 func main() {
 	app := spine.New()
@@ -29,5 +33,10 @@ func main() {
 		(*UserController).GetUserQuery,
 	)
 
-	app.Run(":8080")
+	// EnableGracefulShutdown & ShutdownTimeout은 선택사항입니다.
+	app.Run(spine.BootOptions{
+		Address:                ":8080",
+		EnableGracefulShutdown: true,
+		ShutdownTimeout:        10 * time.Second,
+	})
 }
