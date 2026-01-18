@@ -95,7 +95,7 @@ func Run(config Config) error {
 		if t.Kind() == reflect.Pointer && v.IsNil() {
 			log.Printf("[Bootstrap] Interceptor %s가 컨테이너에서 생성됐습니다.", t.Elem().Name())
 
-			inst, err := container.Resolve(t.Elem())
+			inst, err := container.Resolve(t)
 			if err != nil {
 				panic(err)
 			}
