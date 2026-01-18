@@ -40,6 +40,7 @@ func (c *Container) RegisterConstructor(function any) error {
 }
 
 func (c *Container) Resolve(componentType reflect.Type) (any, error) {
+	log.Printf("[Container] Instance에 의존성 등록 : %s", componentType.Elem().Name())
 	if instance, ok := c.instances[componentType]; ok {
 		return instance, nil
 	}
@@ -77,7 +78,6 @@ func (c *Container) WarmUp(types []reflect.Type) error {
 	seen := make(map[reflect.Type]struct{})
 
 	for _, t := range types {
-		log.Printf("[Container] Instance에 의존성 후보 등록 : %s", t.Elem().Name())
 		if _, ok := seen[t]; ok {
 			continue
 		}
