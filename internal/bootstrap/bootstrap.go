@@ -88,9 +88,26 @@ func Run(config Config) error {
 
 	log.Println("[Bootstrap] Interceptor 등록 시작")
 	for _, interceptor := range config.Interceptors {
-		log.Printf("[Bootstrap] Interceptor %s 등록", reflect.TypeOf(interceptor).Elem().Name())
+		v := reflect.ValueOf(interceptor)
+		t := reflect.TypeOf(interceptor)
+
+		// Case 1: nil pointer → resolve from container
+		if t.Kind() == reflect.Pointer && v.IsNil() {
+			log.Printf("[Bootstrap] Interceptor %s가 컨테이너에서 생성됐습니다.", t.Elem().Name())
+
+			inst, err := container.Resolve(t.Elem())
+			if err != nil {
+				panic(err)
+			}
+
+			pipeline.AddInterceptor(inst.(core.Interceptor))
+			continue
+		}
+
+		// Case 2: already-instantiated interceptor
+		log.Printf("[Bootstrap] Interceptor %T가 인스턴스에서 사용됩니다.", interceptor)
+		pipeline.AddInterceptor(interceptor)
 	}
-	pipeline.AddInterceptor(config.Interceptors...)
 
 	log.Println("[Bootstrap] HTTP 어댑터 마운트")
 	// Echo Adapter
