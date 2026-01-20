@@ -16,7 +16,7 @@ Spine defines **how a request is resolved, executed, and completed** — explici
 ---
 
 # Learn Spine Easily
-The official site is now live, where you can quickly understand Spine’s execution model and how to use it.
+The official site is now live, where you can quickly understand Spine’s execution model and how to use it.<br>
 [Spine Official Site](https://spine.na2ru2.me/en/)
 
 ## Spine's Concern
