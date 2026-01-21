@@ -1,8 +1,11 @@
 package main
 
 import (
+	"time"
+
 	"github.com/NARUBROWN/spine"
 	"github.com/NARUBROWN/spine/interceptor/cors"
+	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/route"
 )
 
@@ -42,5 +45,10 @@ func main() {
 		}),
 	)
 
-	app.Run(":8080")
+	// EnableGracefulShutdown & ShutdownTimeout은 선택사항입니다.
+	app.Run(boot.Options{
+		Address:                ":8080",
+		EnableGracefulShutdown: true,
+		ShutdownTimeout:        10 * time.Second,
+	})
 }

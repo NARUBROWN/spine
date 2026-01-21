@@ -4,6 +4,7 @@ import (
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/bootstrap"
 	"github.com/NARUBROWN/spine/internal/router"
+	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 type App interface {
@@ -16,7 +17,7 @@ type App interface {
 	// HTTP Transport 확장 (Echo 등)
 	Transport(fn func(any))
 	// 실행
-	Run(address string) error
+	Run(opts boot.Options) error
 }
 
 type app struct {
@@ -52,16 +53,20 @@ func (a *app) Interceptor(interceptors ...core.Interceptor) {
 	a.interceptors = append(a.interceptors, interceptors...)
 }
 
-func (a *app) Run(address string) error {
-	return bootstrap.Run(bootstrap.Config{
-		Address:        address,
-		Constructors:   a.constructors,
-		Routes:         a.routes,
-		Interceptors:   a.interceptors,
-		TransportHooks: a.transportHooks,
-	})
-}
-
 func (a *app) Transport(fn func(any)) {
 	a.transportHooks = append(a.transportHooks, fn)
+}
+
+func (a *app) Run(opts boot.Options) error {
+	internalConfig := bootstrap.Config{
+		Address:                opts.Address,
+		Constructors:           a.constructors,
+		Routes:                 a.routes,
+		Interceptors:           a.interceptors,
+		TransportHooks:         a.transportHooks,
+		EnableGracefulShutdown: opts.EnableGracefulShutdown,
+		ShutdownTimeout:        opts.ShutdownTimeout,
+	}
+
+	return bootstrap.Run(internalConfig)
 }

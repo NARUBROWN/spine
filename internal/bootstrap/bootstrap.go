@@ -1,9 +1,15 @@
 package bootstrap
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
 	"reflect"
+	"syscall"
+	"time"
 
 	"github.com/NARUBROWN/spine/core"
 	httpEngine "github.com/NARUBROWN/spine/internal/adapter/echo"
@@ -16,11 +22,13 @@ import (
 )
 
 type Config struct {
-	Address        string
-	Constructors   []any
-	Routes         []spineRouter.RouteSpec
-	Interceptors   []core.Interceptor
-	TransportHooks []func(any)
+	Address                string
+	Constructors           []any
+	Routes                 []spineRouter.RouteSpec
+	Interceptors           []core.Interceptor
+	TransportHooks         []func(any)
+	EnableGracefulShutdown bool
+	ShutdownTimeout        time.Duration
 }
 
 func Run(config Config) error {
@@ -148,9 +156,41 @@ func Run(config Config) error {
 	server := httpEngine.NewServer(pipeline, config.Address, config.TransportHooks)
 	server.Mount()
 
-	log.Printf("[Bootstrap] 서버 리스닝 시작: %s", config.Address)
-	// Listen
-	return server.Start()
+	// EnableGracefulShutdown 기본값 : false : 즉시 종료 로직
+	if !config.EnableGracefulShutdown {
+		log.Printf("[Bootstrap] 서버 리스닝 시작: %s", config.Address)
+		return server.Start()
+	}
+
+	go func() {
+		log.Printf("[Bootstrap] 서버 리스닝 시작: %s", config.Address)
+
+		if err := server.Start(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("[Bootstrap] 서버 시작 실패: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Println("[Bootstrap] 시스템 종료 감지. Graceful Shutdown 시작...")
+
+	timeout := config.ShutdownTimeout
+	if timeout == 0 {
+		timeout = 10 * time.Second
+	}
+
+	// 컨텍스트 생성...10초까지 봐줄 것
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		return fmt.Errorf("[Bootstrap] 서버 강제 종료 발생: %v", err)
+	}
+
+	log.Println("[Bootstrap] 시스템이 안전하게 종료되었습니다.")
+	return nil
 }
 
 const spineBanner = `
