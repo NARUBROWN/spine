@@ -5,6 +5,7 @@ import (
 
 	"github.com/NARUBROWN/spine"
 	"github.com/NARUBROWN/spine/interceptor/cors"
+	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 func main() {
@@ -44,7 +45,7 @@ func main() {
 	)
 
 	// EnableGracefulShutdown & ShutdownTimeout은 선택사항입니다.
-	app.Run(spine.BootOptions{
+	app.Run(boot.Options{
 		Address:                ":8080",
 		EnableGracefulShutdown: true,
 		ShutdownTimeout:        10 * time.Second,

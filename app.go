@@ -1,18 +1,11 @@
 package spine
 
 import (
-	"time"
-
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/bootstrap"
 	"github.com/NARUBROWN/spine/internal/router"
+	"github.com/NARUBROWN/spine/pkg/boot"
 )
-
-type BootOptions struct {
-	Address                string
-	EnableGracefulShutdown bool
-	ShutdownTimeout        time.Duration
-}
 
 type App interface {
 	// 생성자 선언
@@ -24,7 +17,7 @@ type App interface {
 	// HTTP Transport 확장 (Echo 등)
 	Transport(fn func(any))
 	// 실행
-	Run(opts BootOptions) error
+	Run(opts boot.Options) error
 }
 
 type app struct {
@@ -58,7 +51,7 @@ func (a *app) Transport(fn func(any)) {
 	a.transportHooks = append(a.transportHooks, fn)
 }
 
-func (a *app) Run(opts BootOptions) error {
+func (a *app) Run(opts boot.Options) error {
 	internalConfig := bootstrap.Config{
 		Address:                opts.Address,
 		Constructors:           a.constructors,
