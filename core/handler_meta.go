@@ -10,4 +10,6 @@ type HandlerMeta struct {
 	ControllerType reflect.Type
 	// 호출할 메서드 이름
 	Method reflect.Method
+	// 핸들러에 적용된 인터셉터
+	Interceptors []Interceptor
 }

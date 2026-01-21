@@ -8,6 +8,8 @@ import (
 	"github.com/NARUBROWN/spine/core"
 )
 
+type RouteOption func(*RouteSpec)
+
 /*
 RouteSpec은 외부 프로토콜과 내부 핸들러 메서드를 명시적으로 연결하는 선언 정보
 
@@ -21,6 +23,8 @@ type RouteSpec struct {
 	Path string
 	// 컨트롤러 메서드에 대한 참조
 	Handler any
+	// 라우터 인터셉터들
+	Interceptors []core.Interceptor
 }
 
 type Route struct {

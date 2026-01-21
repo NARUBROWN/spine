@@ -49,6 +49,15 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 		return err
 	}
 
+	interceptors := p.composeInterceptors(meta)
+
+	// Interceptor AfterCompletion은 무조건 보장
+	defer func() {
+		for i := len(interceptors) - 1; i >= 0; i-- {
+			interceptors[i].AfterCompletion(ctx, meta, finalErr)
+		}
+	}()
+
 	paramMetas := buildParameterMeta(meta.Method, ctx)
 
 	// Argument Resolver 체인 실행
@@ -58,7 +67,7 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 	}
 
 	// Interceptor preHandle
-	for _, it := range p.interceptors {
+	for _, it := range interceptors {
 		if err := it.PreHandle(ctx, meta); err != nil {
 			if errors.Is(err, core.ErrAbortPipeline) {
 				// Interceptor가 의도적으로 요청을 종료함 (응답은 이미 작성됨)
@@ -84,18 +93,26 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 	}
 
 	// Interceptor postHandle (역순)
-	for i := len(p.interceptors) - 1; i >= 0; i-- {
-		p.interceptors[i].PostHandle(ctx, meta)
+	for i := len(interceptors) - 1; i >= 0; i-- {
+		interceptors[i].PostHandle(ctx, meta)
 	}
 
-	// Interceptor AfterCompletion은 무조건 보장
-	defer func() {
-		for i := len(p.interceptors) - 1; i >= 0; i-- {
-			p.interceptors[i].AfterCompletion(ctx, meta, finalErr)
-		}
-	}()
-
 	return nil
+}
+
+func (p *Pipeline) composeInterceptors(meta core.HandlerMeta) []core.Interceptor {
+	total := make([]core.Interceptor, 0, len(p.interceptors)+len(meta.Interceptors))
+
+	/*
+		실행 순서 정책
+		1. 전역 Interceptor를 먼저 실행
+		2. 이후 라우트(Handler)에 바인딩된 Interceptor를 실행
+		3. PostHandle / AfterCompletion은 이 순서의 역순으로 실행됨
+	*/
+	total = append(total, p.interceptors...)    // 전역 인터셉터
+	total = append(total, meta.Interceptors...) // 라우트 인터셉터
+
+	return total
 }
 
 func buildParameterMeta(method reflect.Method, ctx core.ExecutionContext) []resolver.ParameterMeta {

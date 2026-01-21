@@ -1,3 +1,7 @@
+<p align="center">
+  한국어 | <a href="README.en.md">English</a>
+</p>
+
 # 🦴 Spine
 <p align="center">
   <img src="assets/spine-logo.png" alt="Spine" width="420" />
@@ -7,9 +11,13 @@
 
 Spine defines **how a request is resolved, executed, and completed** — explicitly.
 
-**Spine는 요청 실행(Runtime)을 1급 개념으로 다루는 백엔드 웹 프레임워크입니다.**
+**Spine는 요청이 어떻게 실행되는지를 그대로 드러내는 백엔드 프레임워크입니다.**
 
 ---
+
+# Spine을 쉽게 배워보세요
+Spine의 실행 구조와 사용 방법을 한눈에 파악할 수 있는 공식 사이트가 열렸습니다.<br>
+[Spine 공식 사이트](https://spine.na2ru2.me/ko/)
 
 ## Spine의 문제의식
 

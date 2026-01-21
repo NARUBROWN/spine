@@ -11,7 +11,7 @@ type App interface {
 	// 생성자 선언
 	Constructor(constructors ...any)
 	// 라우트 선언
-	Route(method string, path string, handler any)
+	Route(method string, path string, handler any, opts ...router.RouteOption)
 	// 인터셉터 선언
 	Interceptor(interceptors ...core.Interceptor)
 	// HTTP Transport 확장 (Echo 등)
@@ -35,12 +35,18 @@ func (a *app) Constructor(constructors ...any) {
 	a.constructors = append(a.constructors, constructors...)
 }
 
-func (a *app) Route(method string, path string, handler any) {
-	a.routes = append(a.routes, router.RouteSpec{
+func (a *app) Route(method string, path string, handler any, opts ...router.RouteOption) {
+	spec := router.RouteSpec{
 		Method:  method,
 		Path:    path,
 		Handler: handler,
-	})
+	}
+
+	for _, opt := range opts {
+		opt(&spec)
+	}
+
+	a.routes = append(a.routes, spec)
 }
 
 func (a *app) Interceptor(interceptors ...core.Interceptor) {

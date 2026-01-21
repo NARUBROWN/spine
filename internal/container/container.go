@@ -3,7 +3,6 @@ package container
 import (
 	"errors"
 	"fmt"
-	"log"
 	"reflect"
 )
 
@@ -40,8 +39,6 @@ func (c *Container) RegisterConstructor(function any) error {
 }
 
 func (c *Container) Resolve(componentType reflect.Type) (any, error) {
-	log.Printf("[Container] Resolve 요청 : %v", componentType)
-
 	// 이미 생성된 인스턴스가 있으면 캐시에서 반환
 	if instance, ok := c.instances[componentType]; ok {
 		return instance, nil

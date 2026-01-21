@@ -56,6 +56,7 @@ func Run(config Config) error {
 		if err != nil {
 			return err
 		}
+		meta.Interceptors = route.Interceptors
 		router.Register(route.Method, route.Path, meta)
 	}
 
@@ -96,11 +97,43 @@ func Run(config Config) error {
 	)
 
 	log.Println("[Bootstrap] Interceptor 등록 시작")
+
+	// 라우트 레벨 인터셉터 (파이프라인에 등록하지 않음)
+	for i, route := range config.Routes {
+		resolved := make([]core.Interceptor, len(route.Interceptors))
+		for i, interceptor := range route.Interceptors {
+			interceptorType := reflect.TypeOf(interceptor)
+			value := reflect.ValueOf(interceptor)
+
+			if interceptorType.Kind() == reflect.Pointer && value.IsNil() {
+				log.Printf("[Bootstrap] Route Interceptor %s가 컨테이너에서 생성됐습니다.", interceptorType.Elem().Name())
+				inst, err := container.Resolve(interceptorType)
+				if err != nil {
+					panic(err)
+				}
+				resolved[i] = inst.(core.Interceptor)
+			} else {
+				log.Printf("[Bootstrap] Route Interceptor %T가 인스턴스에서 사용됩니다.", interceptor)
+				resolved[i] = interceptor
+			}
+		}
+		config.Routes[i].Interceptors = resolved
+	}
+
+	log.Println("[Bootstrap] 라우트 레벨 Interceptor resolve 완료")
+
+	uniqueInterceptors := make(map[reflect.Type]core.Interceptor)
+
+	// 전역 인터셉터 수집
 	for _, interceptor := range config.Interceptors {
+		t := reflect.TypeOf(interceptor)
+		uniqueInterceptors[t] = interceptor
+	}
+
+	for _, interceptor := range uniqueInterceptors {
 		v := reflect.ValueOf(interceptor)
 		t := reflect.TypeOf(interceptor)
 
-		// Case 1: nil pointer → resolve from container
 		if t.Kind() == reflect.Pointer && v.IsNil() {
 			log.Printf("[Bootstrap] Interceptor %s가 컨테이너에서 생성됐습니다.", t.Elem().Name())
 
@@ -171,5 +204,5 @@ ____/ /__  /_/ /  / _  / / /  __/
 
 func printBanner() {
 	fmt.Print(spineBanner)
-	log.Printf("[Bootstrap] Spine version: %s", "v0.2.1")
+	log.Printf("[Bootstrap] Spine version: %s", "v0.2.2")
 }
