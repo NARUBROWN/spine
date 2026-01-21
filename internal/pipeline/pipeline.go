@@ -51,6 +51,13 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 
 	interceptors := p.composeInterceptors(meta)
 
+	// Interceptor AfterCompletion은 무조건 보장
+	defer func() {
+		for i := len(interceptors) - 1; i >= 0; i-- {
+			interceptors[i].AfterCompletion(ctx, meta, finalErr)
+		}
+	}()
+
 	paramMetas := buildParameterMeta(meta.Method, ctx)
 
 	// Argument Resolver 체인 실행
@@ -89,13 +96,6 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 	for i := len(interceptors) - 1; i >= 0; i-- {
 		interceptors[i].PostHandle(ctx, meta)
 	}
-
-	// Interceptor AfterCompletion은 무조건 보장
-	defer func() {
-		for i := len(interceptors) - 1; i >= 0; i-- {
-			interceptors[i].AfterCompletion(ctx, meta, finalErr)
-		}
-	}()
 
 	return nil
 }
