@@ -28,7 +28,7 @@ type CreateUserRequest struct {
 	Name string `json:"name"`
 }
 
-func (c *UserController) CreateUser(req CreateUserRequest) map[string]any {
+func (c *UserController) CreateUser(req *CreateUserRequest) map[string]any {
 	return map[string]any{
 		"name": req.Name,
 	}
