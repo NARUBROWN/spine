@@ -5,9 +5,14 @@ import (
 	"mime/multipart"
 )
 
+type ContextCarrier interface {
+	Context() context.Context
+}
+
 type ExecutionContext interface {
 	// Pipeline / Router 관련 메서드
-	Context() context.Context
+	ContextCarrier
+
 	Method() string
 	Path() string
 	Params() map[string]string
@@ -20,6 +25,7 @@ type ExecutionContext interface {
 
 type RequestContext interface {
 	// Resolver 관련 메서드
+	ContextCarrier
 
 	// 개별 접근
 	Param(name string) string

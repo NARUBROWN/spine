@@ -14,9 +14,5 @@ func (r *StdContextResolver) Supports(parameterMeta ParameterMeta) bool {
 }
 
 func (r *StdContextResolver) Resolve(ctx core.RequestContext, parameterMeta ParameterMeta) (any, error) {
-
-	// 기본 요청 스코프 context
-	base := context.Background()
-
-	return base, nil
+	return ctx.Context(), nil
 }
