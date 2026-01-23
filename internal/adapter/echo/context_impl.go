@@ -2,6 +2,7 @@ package echo
 
 import (
 	"context"
+	"mime/multipart"
 
 	"github.com/NARUBROWN/spine/core"
 	"github.com/labstack/echo/v4"
@@ -110,4 +111,8 @@ func (c *echoContext) PathKeys() []string {
 		}
 	}
 	return nil
+}
+
+func (c *echoContext) MultipartForm() (*multipart.Form, error) {
+	return c.echo.MultipartForm()
 }

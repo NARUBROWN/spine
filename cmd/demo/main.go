@@ -37,6 +37,12 @@ func main() {
 		(*UserController).GetUserQuery,
 	)
 
+	app.Route(
+		"POST",
+		"/upload",
+		(*UserController).Upload,
+	)
+
 	app.Interceptor(
 		cors.New(cors.Config{
 			AllowOrigins: []string{"*"},

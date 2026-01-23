@@ -87,6 +87,12 @@ func Run(config Config) error {
 
 		// Body 리졸버
 		&resolver.DTOResolver{},
+
+		// Form DTO (multipart / form)
+		&resolver.FormDTOResolver{},
+
+		// Multipart files
+		&resolver.UploadedFilesResolver{},
 	)
 
 	log.Println("[Bootstrap] ReturnValueHandler 등록")

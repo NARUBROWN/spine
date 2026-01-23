@@ -1,6 +1,9 @@
 package core
 
-import "context"
+import (
+	"context"
+	"mime/multipart"
+)
 
 type ExecutionContext interface {
 	// Pipeline / Router 관련 메서드
@@ -28,4 +31,7 @@ type RequestContext interface {
 
 	// body
 	Bind(out any) error
+
+	// Multipart
+	MultipartForm() (*multipart.Form, error)
 }

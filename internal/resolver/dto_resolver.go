@@ -9,19 +9,32 @@ import (
 
 type DTOResolver struct{}
 
-func (r *DTOResolver) Supports(parameterMeta ParameterMeta) bool {
-	// Context 제외
-	if parameterMeta.Type == reflect.TypeFor[core.ExecutionContext]() {
+func (r *DTOResolver) Supports(pm ParameterMeta) bool {
+	// ExecutionContext 제외
+	if pm.Type == reflect.TypeFor[core.ExecutionContext]() {
 		return false
 	}
 
-	if parameterMeta.Type.Kind() != reflect.Struct {
+	// 반드시 포인터
+	if pm.Type.Kind() != reflect.Ptr {
 		return false
 	}
 
-	// query 태그가 하나라도 있으면 QueryDTO가 담당
-	for i := 0; i < parameterMeta.Type.NumField(); i++ {
-		if parameterMeta.Type.Field(i).Tag.Get("query") != "" {
+	elem := pm.Type.Elem()
+	if elem.Kind() != reflect.Struct {
+		return false
+	}
+
+	// form 태그가 하나라도 있으면 FormDTO로 넘긴다
+	for i := 0; i < elem.NumField(); i++ {
+		if elem.Field(i).Tag.Get("form") != "" {
+			return false
+		}
+	}
+
+	// query 태그가 있으면 QueryDTO
+	for i := 0; i < elem.NumField(); i++ {
+		if elem.Field(i).Tag.Get("query") != "" {
 			return false
 		}
 	}
