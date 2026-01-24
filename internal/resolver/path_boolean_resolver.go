@@ -16,6 +16,11 @@ func (r *PathBooleanResolver) Supports(parameterMeta ParameterMeta) bool {
 }
 
 func (r *PathBooleanResolver) Resolve(ctx core.RequestContext, parameterMeta ParameterMeta) (any, error) {
+	httpCtx, ok := ctx.(core.HttpRequestContext)
+	if !ok {
+		return nil, fmt.Errorf("HTTP 요청 컨텍스트가 아닙니다")
+	}
+
 	if parameterMeta.PathKey == "" {
 		return nil, fmt.Errorf(
 			"path key가 바인딩되지 않았습니다: %v",
@@ -23,7 +28,7 @@ func (r *PathBooleanResolver) Resolve(ctx core.RequestContext, parameterMeta Par
 		)
 	}
 
-	raw, ok := ctx.Params()[parameterMeta.PathKey]
+	raw, ok := httpCtx.Params()[parameterMeta.PathKey]
 	if !ok {
 		return nil, fmt.Errorf(
 			"path param을 찾을 수 없습니다: %s",

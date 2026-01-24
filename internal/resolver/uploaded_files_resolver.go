@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"fmt"
 	"io"
 	"reflect"
 
@@ -15,8 +16,12 @@ func (r *UploadedFilesResolver) Supports(parameterMeta ParameterMeta) bool {
 }
 
 func (r *UploadedFilesResolver) Resolve(ctx core.RequestContext, parameterMeta ParameterMeta) (any, error) {
+	httpCtx, ok := ctx.(core.HttpRequestContext)
+	if !ok {
+		return nil, fmt.Errorf("HTTP 요청 컨텍스트가 아닙니다")
+	}
 
-	form, err := ctx.MultipartForm()
+	form, err := httpCtx.MultipartForm()
 	if err != nil {
 		return nil, err
 	}

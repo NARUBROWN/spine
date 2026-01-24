@@ -14,11 +14,17 @@ import (
 	"github.com/NARUBROWN/spine/core"
 	httpEngine "github.com/NARUBROWN/spine/internal/adapter/echo"
 	"github.com/NARUBROWN/spine/internal/container"
+	"github.com/NARUBROWN/spine/internal/event/consumer"
+	"github.com/NARUBROWN/spine/internal/event/extract"
+	"github.com/NARUBROWN/spine/internal/event/hook"
+	"github.com/NARUBROWN/spine/internal/event/infra/kafka"
+	"github.com/NARUBROWN/spine/internal/event/publish"
 	"github.com/NARUBROWN/spine/internal/handler"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/internal/resolver"
 	spineRouter "github.com/NARUBROWN/spine/internal/router"
+	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 type Config struct {
@@ -29,6 +35,8 @@ type Config struct {
 	TransportHooks         []func(any)
 	EnableGracefulShutdown bool
 	ShutdownTimeout        time.Duration
+	Kafka                  *boot.KafkaOptions
+	ConsumerRegistry       *consumer.Registry
 }
 
 func Run(config Config) error {
@@ -131,6 +139,69 @@ func Run(config Config) error {
 
 	log.Println("[Bootstrap] 라우트 레벨 Interceptor resolve 완료")
 
+	// Kafka Write 옵션이 존재하면 Write를 Boot에 포함
+	if config.Kafka != nil && config.Kafka.Write != nil {
+		log.Println("[Bootstrap] Event Queue (Kafka) 구성")
+
+		kafkaPublisher := kafka.NewKafkaPublisher(&boot.KafkaOptions{
+			Brokers: config.Kafka.Brokers,
+			Write: &boot.KafkaWriteOptions{
+				TopicPrefix: config.Kafka.Write.TopicPrefix,
+			},
+		})
+
+		dispatcher := &publish.DefaultEventDispatcher{
+			Publishers: []publish.EventPublisher{
+				kafkaPublisher,
+			},
+		}
+
+		eventHook := &hook.EventDispatchHook{
+			Extractor:  extract.DefaultEventExtractor{},
+			Dispatcher: dispatcher,
+		}
+
+		pipeline.AddPostExecutionHook(eventHook)
+	}
+
+	// Kafka Read 옵션이 존재하면 Read를 Boot에 포함
+	if config.Kafka != nil && config.Kafka.Read != nil && config.ConsumerRegistry != nil && len(config.ConsumerRegistry.Registrations()) > 0 {
+		log.Println("[Bootstrap] 이벤트 컨슈머 런타임을 초기화합니다.")
+
+		factory := kafka.NewRunnerFactory(boot.KafkaOptions{
+			Brokers: config.Kafka.Brokers,
+			Read: &boot.KafkaReadOptions{
+				GroupID: config.Kafka.Read.GroupID,
+			},
+		})
+
+		eventBus := publish.NewEventBus()
+
+		consumerInvoker := consumer.NewInvoker(
+			container,
+			[]resolver.ArgumentResolver{
+				// 표준 context.Context
+				&resolver.StdContextResolver{},
+
+				// Consumer 전용 리졸버
+				&consumer.EventNameResolver{},
+				&consumer.EventBusResolver{},
+				&consumer.PayloadResolver{},
+				&consumer.DTOResolver{},
+			},
+		)
+
+		runtime := consumer.NewRuntime(
+			config.ConsumerRegistry,
+			factory,
+			consumerInvoker,
+			eventBus,
+		)
+
+		go runtime.Start(context.Background())
+		defer runtime.Stop()
+	}
+
 	uniqueInterceptors := make(map[reflect.Type]core.Interceptor)
 
 	// 전역 인터셉터 수집
@@ -155,7 +226,6 @@ func Run(config Config) error {
 			continue
 		}
 
-		// Case 2: already-instantiated interceptor
 		log.Printf("[Bootstrap] Interceptor %T가 인스턴스에서 사용됩니다.", interceptor)
 		pipeline.AddInterceptor(interceptor)
 	}

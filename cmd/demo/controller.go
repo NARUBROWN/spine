@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"time"
 
+	"github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/NARUBROWN/spine/pkg/header"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/multipart"
@@ -27,7 +30,7 @@ type User struct {
 	Name string `json:"name"`
 }
 
-func (c *UserController) GetUser(userId path.Int) (User, error) {
+func (c *UserController) GetUser(ctx context.Context, userId path.Int) (User, error) {
 	return User{}, httperr.NotFound("사용자를 찾을 수 없습니다.")
 }
 
@@ -35,13 +38,13 @@ type CreateUserRequest struct {
 	Name string `json:"name"`
 }
 
-func (c *UserController) CreateUser(req *CreateUserRequest) map[string]any {
+func (c *UserController) CreateUser(ctx context.Context, req *CreateUserRequest) map[string]any {
 	return map[string]any{
 		"name": req.Name,
 	}
 }
 
-func (c *UserController) GetUserQuery(q query.Values) User {
+func (c *UserController) GetUserQuery(ctx context.Context, q query.Values) User {
 	return User{
 		ID:   q.Int("id", 0),
 		Name: q.String("name"),
@@ -54,6 +57,7 @@ type CreatePostForm struct {
 }
 
 func (c *UserController) Upload(
+	ctx context.Context,
 	form *CreatePostForm,
 	files multipart.UploadedFiles,
 	page query.Pagination,
@@ -80,6 +84,15 @@ func (c *UserController) Upload(
 			f.ContentType,
 		)
 	}
+
+	return "OK"
+}
+
+func (c *UserController) CreateOrder(ctx context.Context, orderId path.Int) string {
+	publish.Event(ctx, OrderCreated{
+		OrderID: orderId.Value,
+		at:      time.Now(),
+	})
 
 	return "OK"
 }

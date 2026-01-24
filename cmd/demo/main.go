@@ -15,6 +15,7 @@ func main() {
 	// 생성자 등록
 	app.Constructor(
 		NewUserController,
+		NewOrderConsumer,
 		NewCommonController,
 	)
 
@@ -45,6 +46,12 @@ func main() {
 	)
 
 	app.Route(
+		"POST",
+		"/orders/:orderId",
+		(*UserController).CreateOrder,
+	)
+
+	app.Route(
 		"GET",
 		"/headers",
 		(*CommonController).CheckHeader,
@@ -58,10 +65,24 @@ func main() {
 		}),
 	)
 
+	app.Consumers().Register(
+		"order.created",
+		(*OrderConsumer).OnCreated,
+	)
+
 	// EnableGracefulShutdown & ShutdownTimeout은 선택사항입니다.
 	app.Run(boot.Options{
 		Address:                ":8080",
 		EnableGracefulShutdown: true,
 		ShutdownTimeout:        10 * time.Second,
+		Kafka: &boot.KafkaOptions{
+			Brokers: []string{"localhost:9092"},
+			Read: &boot.KafkaReadOptions{
+				GroupID: "spine-demo-consumer",
+			},
+			Write: &boot.KafkaWriteOptions{
+				TopicPrefix: "",
+			},
+		},
 	})
 }

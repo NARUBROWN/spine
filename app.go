@@ -3,6 +3,7 @@ package spine
 import (
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/bootstrap"
+	"github.com/NARUBROWN/spine/internal/event/consumer"
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/pkg/boot"
 )
@@ -18,13 +19,16 @@ type App interface {
 	Transport(fn func(any))
 	// 실행
 	Run(opts boot.Options) error
+	// 이벤트 소비자 레지스트리 반환
+	Consumers() *consumer.Registry
 }
 
 type app struct {
-	constructors   []any
-	routes         []router.RouteSpec
-	interceptors   []core.Interceptor
-	transportHooks []func(any)
+	constructors     []any
+	routes           []router.RouteSpec
+	interceptors     []core.Interceptor
+	transportHooks   []func(any)
+	consumerRegistry *consumer.Registry
 }
 
 func New() App {
@@ -66,7 +70,16 @@ func (a *app) Run(opts boot.Options) error {
 		TransportHooks:         a.transportHooks,
 		EnableGracefulShutdown: opts.EnableGracefulShutdown,
 		ShutdownTimeout:        opts.ShutdownTimeout,
+		Kafka:                  opts.Kafka,
+		ConsumerRegistry:       a.consumerRegistry,
 	}
 
 	return bootstrap.Run(internalConfig)
+}
+
+func (a *app) Consumers() *consumer.Registry {
+	if a.consumerRegistry == nil {
+		a.consumerRegistry = consumer.NewRegistry()
+	}
+	return a.consumerRegistry
 }

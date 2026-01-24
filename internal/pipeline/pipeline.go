@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/event/hook"
 	"github.com/NARUBROWN/spine/internal/handler"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/resolver"
@@ -19,6 +20,7 @@ type Pipeline struct {
 	argumentResolvers []resolver.ArgumentResolver
 	returnHandlers    []handler.ReturnValueHandler
 	invoker           *invoker.Invoker
+	postHooks         []hook.PostExecutionHook
 }
 
 func NewPipeline(router router.Router, invoker *invoker.Invoker) *Pipeline {
@@ -90,6 +92,11 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 	// ReturnValueHandler 처리
 	if err := p.handleReturn(ctx, results); err != nil {
 		return err
+	}
+
+	// PostHooks 추가
+	for _, hook := range p.postHooks {
+		hook.AfterExecution(ctx, results, err)
 	}
 
 	// Interceptor postHandle (역순)
@@ -199,7 +206,7 @@ func (p *Pipeline) handleReturn(ctx core.ExecutionContext, results []any) error 
 }
 
 func (p *Pipeline) resolveArguments(ctx core.ExecutionContext, paramMetas []resolver.ParameterMeta) ([]any, error) {
-	reqCtx, ok := ctx.(core.RequestContext)
+	reqCtx, ok := ctx.(core.HttpRequestContext)
 	if !ok {
 		return nil, fmt.Errorf("ExecutionContext이 RequestContext를 구현하고 있지 않습니다.")
 	}
@@ -233,4 +240,8 @@ func (p *Pipeline) resolveArguments(ctx core.ExecutionContext, paramMetas []reso
 		}
 	}
 	return args, nil
+}
+
+func (p *Pipeline) AddPostExecutionHook(hook hook.PostExecutionHook) {
+	p.postHooks = append(p.postHooks, hook)
 }

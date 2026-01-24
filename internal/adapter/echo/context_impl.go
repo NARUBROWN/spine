@@ -5,20 +5,23 @@ import (
 	"mime/multipart"
 
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/event/publish"
 	"github.com/labstack/echo/v4"
 )
 
 type echoContext struct {
-	echo   echo.Context
-	reqCtx context.Context
-	store  map[string]any
+	echo     echo.Context
+	reqCtx   context.Context
+	store    map[string]any
+	eventBus publish.EventBus
 }
 
 func NewContext(c echo.Context) core.ExecutionContext {
 	return &echoContext{
-		echo:   c,
-		reqCtx: c.Request().Context(), // 요청시 생성되는 Context
-		store:  make(map[string]any),
+		echo:     c,
+		reqCtx:   c.Request().Context(), // 요청시 생성되는 Context
+		store:    make(map[string]any),
+		eventBus: publish.NewEventBus(),
 	}
 }
 
@@ -120,4 +123,8 @@ func (e *echoContext) PathKeys() []string {
 
 func (e *echoContext) MultipartForm() (*multipart.Form, error) {
 	return e.echo.MultipartForm()
+}
+
+func (c *echoContext) EventBus() publish.EventBus {
+	return c.eventBus
 }

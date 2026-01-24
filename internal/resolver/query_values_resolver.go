@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/NARUBROWN/spine/core"
@@ -14,5 +15,9 @@ func (r *QueryValuesResolver) Supports(pm ParameterMeta) bool {
 }
 
 func (r *QueryValuesResolver) Resolve(ctx core.RequestContext, parameterMeta ParameterMeta) (any, error) {
-	return query.NewValues(ctx.Queries()), nil
+	httpCtx, ok := ctx.(core.HttpRequestContext)
+	if !ok {
+		return nil, fmt.Errorf("HTTP 요청 컨텍스트가 아닙니다")
+	}
+	return query.NewValues(httpCtx.Queries()), nil
 }

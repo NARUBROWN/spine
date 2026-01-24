@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/NARUBROWN/spine/core"
@@ -28,10 +29,15 @@ func (r *FormDTOResolver) Supports(pm ParameterMeta) bool {
 }
 
 func (r *FormDTOResolver) Resolve(ctx core.RequestContext, parameterMeta ParameterMeta) (any, error) {
+	httpCtx, ok := ctx.(core.HttpRequestContext)
+	if !ok {
+		return nil, fmt.Errorf("HTTP 요청 컨텍스트가 아닙니다")
+	}
+
 	dto := reflect.New(parameterMeta.Type.Elem()).Interface()
 
 	// Echo의 Form 바인딩 위임
-	if err := ctx.Bind(dto); err != nil {
+	if err := httpCtx.Bind(dto); err != nil {
 		return nil, err
 	}
 

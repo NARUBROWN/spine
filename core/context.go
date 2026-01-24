@@ -3,15 +3,36 @@ package core
 import (
 	"context"
 	"mime/multipart"
+
+	"github.com/NARUBROWN/spine/internal/event/publish"
 )
+
+/*
+RequestContext
+- Resolver 공통 최소 계약
+- HTTP / Consumer / gRPC 공통
+*/
+type RequestContext interface {
+	ContextCarrier
+	EventBusCarrier
+}
 
 type ContextCarrier interface {
 	Context() context.Context
 }
 
+type EventBusCarrier interface {
+	EventBus() publish.EventBus
+}
+
+/*
+ExecutionContext
+- Pipeline / Router 전용
+- HTTP Transport 실행 흐름에서만 사용
+*/
 type ExecutionContext interface {
-	// Pipeline / Router 관련 메서드
 	ContextCarrier
+	EventBusCarrier
 
 	Method() string
 	Path() string
@@ -23,9 +44,12 @@ type ExecutionContext interface {
 	Get(key string) (any, bool)
 }
 
-type RequestContext interface {
-	// Resolver 관련 메서드
-	ContextCarrier
+/*
+HttpRequestContext
+- HTTP 전용 RequestContext 확장
+*/
+type HttpRequestContext interface {
+	RequestContext
 
 	// 개별 접근
 	Param(name string) string
@@ -42,4 +66,15 @@ type RequestContext interface {
 
 	// Multipart
 	MultipartForm() (*multipart.Form, error)
+}
+
+/*
+ConsumerRequestContext
+- Event Consumer 전용 Context
+*/
+type ConsumerRequestContext interface {
+	RequestContext
+
+	EventName() string
+	Payload() []byte
 }

@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"fmt"
 	"reflect"
 	"strconv"
 
@@ -15,8 +16,13 @@ func (r *PaginationResolver) Supports(parameterMeta ParameterMeta) bool {
 }
 
 func (r *PaginationResolver) Resolve(ctx core.RequestContext, parameterMeta ParameterMeta) (any, error) {
-	page := parseInt(ctx.Query("page"), 1)
-	size := parseInt(ctx.Query("size"), 20)
+	httpCtx, ok := ctx.(core.HttpRequestContext)
+	if !ok {
+		return nil, fmt.Errorf("HTTP 요청 컨텍스트가 아닙니다")
+	}
+
+	page := parseInt(httpCtx.Query("page"), 1)
+	size := parseInt(httpCtx.Query("size"), 20)
 
 	return query.Pagination{
 		Page: page,
