@@ -16,7 +16,7 @@ func (r *EventBusResolver) Supports(parameterMeta resolver.ParameterMeta) bool {
 	return parameterMeta.Type == eventBusType
 }
 
-func (r *EventBusResolver) Resolve(ctx core.RequestContext, meta resolver.ParameterMeta) (any, error) {
+func (r *EventBusResolver) Resolve(ctx core.ExecutionContext, meta resolver.ParameterMeta) (any, error) {
 
 	bus := ctx.EventBus()
 	if bus == nil {

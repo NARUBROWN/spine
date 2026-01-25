@@ -79,11 +79,11 @@ func Run(config Config) error {
 	}
 
 	log.Println("[Bootstrap] 실행 파이프라인 구성")
-	invoker := invoker.NewInvoker(container)
-	pipeline := pipeline.NewPipeline(router, invoker)
+	httpInvoker := invoker.NewInvoker(container)
+	httpPipeline := pipeline.NewPipeline(router, httpInvoker)
 
 	log.Println("[Bootstrap] ArgumentResolver 등록")
-	pipeline.AddArgumentResolver(
+	httpPipeline.AddArgumentResolver(
 		// 표준 Context 리졸버
 		&resolver.StdContextResolver{},
 
@@ -107,7 +107,7 @@ func Run(config Config) error {
 	)
 
 	log.Println("[Bootstrap] ReturnValueHandler 등록")
-	pipeline.AddReturnValueHandler(
+	httpPipeline.AddReturnValueHandler(
 		&handler.StringReturnHandler{},
 		&handler.JSONReturnHandler{},
 		&handler.ErrorReturnHandler{},
@@ -161,7 +161,7 @@ func Run(config Config) error {
 			Dispatcher: dispatcher,
 		}
 
-		pipeline.AddPostExecutionHook(eventHook)
+		httpPipeline.AddPostExecutionHook(eventHook)
 	}
 
 	// Kafka Read 옵션이 존재하면 Read를 Boot에 포함
@@ -175,27 +175,36 @@ func Run(config Config) error {
 			},
 		})
 
-		eventBus := publish.NewEventBus()
+		consumerRouter := spineRouter.NewRouter()
+		for _, registration := range config.ConsumerRegistry.Registrations() {
+			log.Printf("[Bootstrap] 컨슈머 라우터 등록 : (EVENT) %s", registration.Topic)
+			consumerRouter.Register("EVENT", registration.Topic, registration.Meta)
+		}
 
-		consumerInvoker := consumer.NewInvoker(
-			container,
-			[]resolver.ArgumentResolver{
-				// 표준 context.Context
-				&resolver.StdContextResolver{},
+		consumerInvoker := invoker.NewInvoker(container)
+		consumerPipeline := pipeline.NewPipeline(consumerRouter, consumerInvoker)
 
-				// Consumer 전용 리졸버
-				&eventResolver.EventNameResolver{},
-				&eventResolver.EventBusResolver{},
-				&eventResolver.PayloadResolver{},
-				&eventResolver.DTOResolver{},
-			},
+		consumerPipeline.AddArgumentResolver(
+			// 표준 context.Context
+			&resolver.StdContextResolver{},
+
+			// Consumer 전용 리졸버
+			&eventResolver.EventNameResolver{},
+			&eventResolver.EventBusResolver{},
+			&eventResolver.PayloadResolver{},
+			&eventResolver.DTOResolver{},
+		)
+
+		consumerPipeline.AddReturnValueHandler(
+			&handler.ErrorReturnHandler{},
+			&handler.StringReturnHandler{},
+			&handler.JSONReturnHandler{},
 		)
 
 		runtime := consumer.NewRuntime(
 			config.ConsumerRegistry,
 			factory,
-			consumerInvoker,
-			eventBus,
+			consumerPipeline,
 		)
 
 		go runtime.Start(context.Background())
@@ -225,7 +234,7 @@ func Run(config Config) error {
 			Dispatcher: dispatcher,
 		}
 
-		pipeline.AddPostExecutionHook(eventHook)
+		httpPipeline.AddPostExecutionHook(eventHook)
 	}
 
 	// RabbitMQ 읽기 설정이 존재하면, 컨슈머 구성
@@ -241,27 +250,36 @@ func Run(config Config) error {
 			},
 		})
 
-		eventBus := publish.NewEventBus()
+		consumerRouter := spineRouter.NewRouter()
+		for _, registration := range config.ConsumerRegistry.Registrations() {
+			log.Printf("[Bootstrap] 컨슈머 라우터 등록 : (EVENT) %s", registration.Topic)
+			consumerRouter.Register("EVENT", registration.Topic, registration.Meta)
+		}
 
-		consumerInvoker := consumer.NewInvoker(
-			container,
-			[]resolver.ArgumentResolver{
-				// 표준 context.Context
-				&resolver.StdContextResolver{},
+		consumerInvoker := invoker.NewInvoker(container)
+		consumerPipeline := pipeline.NewPipeline(consumerRouter, consumerInvoker)
 
-				// Consumer 전용 리졸버
-				&eventResolver.EventNameResolver{},
-				&eventResolver.EventBusResolver{},
-				&eventResolver.PayloadResolver{},
-				&eventResolver.DTOResolver{},
-			},
+		consumerPipeline.AddArgumentResolver(
+			// 표준 context.Context
+			&resolver.StdContextResolver{},
+
+			// Consumer 전용 리졸버
+			&eventResolver.EventNameResolver{},
+			&eventResolver.EventBusResolver{},
+			&eventResolver.PayloadResolver{},
+			&eventResolver.DTOResolver{},
+		)
+
+		consumerPipeline.AddReturnValueHandler(
+			&handler.ErrorReturnHandler{},
+			&handler.StringReturnHandler{},
+			&handler.JSONReturnHandler{},
 		)
 
 		runtime := consumer.NewRuntime(
 			config.ConsumerRegistry,
 			factory,
-			consumerInvoker,
-			eventBus,
+			consumerPipeline,
 		)
 
 		go runtime.Start(context.Background())
@@ -288,17 +306,17 @@ func Run(config Config) error {
 				panic(err)
 			}
 
-			pipeline.AddInterceptor(inst.(core.Interceptor))
+			httpPipeline.AddInterceptor(inst.(core.Interceptor))
 			continue
 		}
 
 		log.Printf("[Bootstrap] Interceptor %T가 인스턴스에서 사용됩니다.", interceptor)
-		pipeline.AddInterceptor(interceptor)
+		httpPipeline.AddInterceptor(interceptor)
 	}
 
 	log.Println("[Bootstrap] HTTP 어댑터 마운트")
 	// Echo Adapter
-	server := httpEngine.NewServer(pipeline, config.Address, config.TransportHooks)
+	server := httpEngine.NewServer(httpPipeline, config.Address, config.TransportHooks)
 	server.Mount()
 
 	// EnableGracefulShutdown 기본값 : false : 즉시 종료 로직

@@ -15,7 +15,7 @@ func (r *PayloadResolver) Supports(meta resolver.ParameterMeta) bool {
 		meta.Type.Elem().Kind() == reflect.Uint8
 }
 
-func (r *PayloadResolver) Resolve(ctx core.RequestContext, meta resolver.ParameterMeta) (any, error) {
+func (r *PayloadResolver) Resolve(ctx core.ExecutionContext, meta resolver.ParameterMeta) (any, error) {
 	consumerCtx, ok := ctx.(core.ConsumerRequestContext)
 	if !ok {
 		return nil, fmt.Errorf("ConsumerRequestContext가 아닙니다")

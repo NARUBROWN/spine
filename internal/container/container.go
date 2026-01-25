@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 )
 
 type Container struct {
+	mu           sync.RWMutex
 	constructors map[reflect.Type]reflect.Value
 	instances    map[reflect.Type]any
 	creating     map[reflect.Type]bool
@@ -33,13 +35,26 @@ func (c *Container) RegisterConstructor(function any) error {
 	}
 
 	outType := typ.Out(0)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.constructors[outType] = val
 
 	return nil
 }
 
 func (c *Container) Resolve(componentType reflect.Type) (any, error) {
-	// 이미 생성된 인스턴스가 있으면 캐시에서 반환
+	c.mu.RLock()
+	// 이미 생성된 인스턴스는 락 없이 반환
+	instance, ok := c.instances[componentType]
+	c.mu.RUnlock()
+	if ok {
+		return instance, nil
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if instance, ok := c.instances[componentType]; ok {
 		return instance, nil
 	}
@@ -48,6 +63,9 @@ func (c *Container) Resolve(componentType reflect.Type) (any, error) {
 	if c.creating[componentType] {
 		return nil, fmt.Errorf("순환 의존성 감지: %v", componentType)
 	}
+
+	c.creating[componentType] = true
+	defer delete(c.creating, componentType)
 
 	var constructor reflect.Value
 	hasConstructor := false
@@ -72,10 +90,6 @@ func (c *Container) Resolve(componentType reflect.Type) (any, error) {
 	if !hasConstructor {
 		return nil, fmt.Errorf("등록된 생성자가 없습니다: %v", componentType)
 	}
-
-	// 생성 중임을 표시하여 순환 의존성 방지
-	c.creating[componentType] = true
-	defer delete(c.creating, componentType)
 
 	numIn := constructor.Type().NumIn()
 	args := make([]reflect.Value, numIn)
