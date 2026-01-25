@@ -11,14 +11,12 @@ type Container struct {
 	mu           sync.RWMutex
 	constructors map[reflect.Type]reflect.Value
 	instances    map[reflect.Type]any
-	creating     map[reflect.Type]bool
 }
 
 func New() *Container {
 	return &Container{
 		constructors: make(map[reflect.Type]reflect.Value),
 		instances:    make(map[reflect.Type]any),
-		creating:     make(map[reflect.Type]bool),
 	}
 }
 
@@ -55,17 +53,10 @@ func (c *Container) Resolve(componentType reflect.Type) (any, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Write lock 획득 후에도 이미 생성된 인스턴스가 있으면 그대로 반환
 	if instance, ok := c.instances[componentType]; ok {
 		return instance, nil
 	}
-
-	// 순환 의존성 감지: 현재 생성 중인 타입이면 에러 반환
-	if c.creating[componentType] {
-		return nil, fmt.Errorf("순환 의존성 감지: %v", componentType)
-	}
-
-	c.creating[componentType] = true
-	defer delete(c.creating, componentType)
 
 	var constructor reflect.Value
 	hasConstructor := false
