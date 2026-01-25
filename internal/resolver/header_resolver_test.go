@@ -9,14 +9,37 @@ import (
 	"github.com/NARUBROWN/spine/pkg/header"
 )
 
-// MockRequestContext is a mock of RequestContext for testing purpose
-type MockRequestContext struct {
-	core.RequestContext
+// MockHttpRequestContext is a mock of HttpRequestContext for testing purpose
+type MockHttpRequestContext struct {
+	core.HttpRequestContext
 	headers map[string][]string
 }
 
+func (m *MockHttpRequestContext) Method() string {
+	return "Mock"
+}
+
+func (m *MockHttpRequestContext) Path() string {
+	return "Mock"
+}
+
+func (m *MockHttpRequestContext) PathKeys() []string {
+	return []string{}
+}
+
+func (m *MockHttpRequestContext) Set(key string, value any) {
+	m.headers[key] = append(m.headers[key], value.(string))
+}
+
+func (m *MockHttpRequestContext) Get(key string) (any, bool) {
+	if value, ok := m.headers[key]; ok {
+		return value, true
+	}
+	return "", false
+}
+
 // Headers is an implementation of RequestContext interface that returns mock headers
-func (m *MockRequestContext) Headers() map[string][]string {
+func (m *MockHttpRequestContext) Headers() map[string][]string {
 	return m.headers
 }
 
@@ -74,7 +97,7 @@ func TestHeaderResolver_Resolve(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		resolver := HeaderResolver{}
-		ctx := &MockRequestContext{headers: testCase.expectedHeaders}
+		ctx := &MockHttpRequestContext{headers: testCase.expectedHeaders}
 		actualResult, err := resolver.Resolve(ctx, ParameterMeta{Type: reflect.TypeOf(header.Values{})})
 
 		if !errors.Is(err, testCase.expectedError) {

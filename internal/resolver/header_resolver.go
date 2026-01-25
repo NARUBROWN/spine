@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/NARUBROWN/spine/core"
@@ -13,6 +14,10 @@ func (hr *HeaderResolver) Supports(pm ParameterMeta) bool {
 	return pm.Type == reflect.TypeFor[header.Values]()
 }
 
-func (hr *HeaderResolver) Resolve(ctx core.RequestContext, parameterMeta ParameterMeta) (any, error) {
-	return header.NewValues(ctx.Headers()), nil
+func (hr *HeaderResolver) Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error) {
+	httpCtx, ok := ctx.(core.HttpRequestContext)
+	if !ok {
+		return nil, fmt.Errorf("HTTP 요청 컨텍스트가 아닙니다")
+	}
+	return header.NewValues(httpCtx.Headers()), nil
 }
