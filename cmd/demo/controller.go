@@ -84,7 +84,16 @@ func (c *UserController) Upload(
 func (c *UserController) CreateOrder(ctx context.Context, orderId path.Int) string {
 	publish.Event(ctx, OrderCreated{
 		OrderID: orderId.Value,
-		at:      time.Now(),
+		At:      time.Now(),
+	})
+
+	return "OK"
+}
+
+func (c *UserController) CreateStock(ctx context.Context, stockId path.Int) string {
+	publish.Event(ctx, StockCreated{
+		OrderID: stockId.Value,
+		At:      time.Now(),
 	})
 
 	return "OK"

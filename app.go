@@ -71,6 +71,7 @@ func (a *app) Run(opts boot.Options) error {
 		EnableGracefulShutdown: opts.EnableGracefulShutdown,
 		ShutdownTimeout:        opts.ShutdownTimeout,
 		Kafka:                  opts.Kafka,
+		RabbitMQ:               opts.RabbitMQ,
 		ConsumerRegistry:       a.consumerRegistry,
 	}
 

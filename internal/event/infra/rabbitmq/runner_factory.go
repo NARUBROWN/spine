@@ -1,4 +1,4 @@
-package kafka
+package rabbitmq
 
 import (
 	"github.com/NARUBROWN/spine/internal/event/consumer"
@@ -6,16 +6,13 @@ import (
 )
 
 type RunnerFactory struct {
-	opts boot.KafkaOptions
+	opts boot.RabbitMqOptions
 }
 
-func NewRunnerFactory(opts boot.KafkaOptions) *RunnerFactory {
+func NewRunnerFactory(opts boot.RabbitMqOptions) *RunnerFactory {
 	return &RunnerFactory{opts: opts}
 }
 
 func (f *RunnerFactory) Build(registration consumer.Registration) (consumer.Reader, error) {
-	return NewKafkaReader(
-		registration.Topic,
-		f.opts,
-	)
+	return NewRabbitMqReader(f.opts)
 }

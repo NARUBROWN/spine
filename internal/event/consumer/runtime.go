@@ -9,7 +9,7 @@ import (
 )
 
 type runnerFactory interface {
-	Build(reg Registration) Reader
+	Build(reg Registration) (Reader, error)
 }
 
 type Runtime struct {
@@ -46,7 +46,14 @@ func (r *Runtime) Start(ctx context.Context) {
 	for _, registration := range r.registry.Registrations() {
 		log.Printf("[Event Consumer] 토픽 '%s'에 대한 컨슈머를 시작합니다.", registration.Topic)
 		go func(reg Registration) {
-			reader := r.factory.Build(reg)
+			reader, err := r.factory.Build(reg)
+			if err != nil {
+				log.Panicf(
+					"[Event Consumer] 컨슈머 초기화 실패 (topic=%s): %v",
+					reg.Topic,
+					err,
+				)
+			}
 			defer reader.Close()
 
 			for {
