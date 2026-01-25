@@ -40,20 +40,28 @@ func NewKafkaReader(topic string, opts boot.KafkaOptions) (*Reader, error) {
 	}, nil
 }
 
-func (r *Reader) Read(ctx context.Context) (consumer.Message, error) {
+func (r *Reader) Read(ctx context.Context) (*consumer.Message, error) {
 	m, err := r.reader.FetchMessage(ctx)
 	if err != nil {
-		return consumer.Message{}, err
+		return nil, err
 	}
 
-	msg := consumer.Message{
+	msg := &consumer.Message{
 		EventName: m.Topic,
 		Payload:   m.Value,
 	}
 
-	if err := r.reader.CommitMessages(ctx, m); err != nil {
-		return consumer.Message{}, err
-	}
+	// ACK 콜백 설정: 핸들러 성공 시 커밋
+	msg.SetAckHandler(func() error {
+		return r.reader.CommitMessages(context.Background(), m)
+	})
+
+	// NACK 콜백 설정: Kafka는 명시적 NACK이 없으므로 커밋하지 않음
+	// (컨슈머 그룹 재시작 시 재처리됨)
+	msg.SetNackHandler(func() error {
+		// Kafka는 명시적 NACK 대신 커밋하지 않으면 됨
+		return nil
+	})
 
 	return msg, nil
 }

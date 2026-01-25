@@ -178,31 +178,7 @@ func Run(config Config) error {
 			},
 		})
 
-		consumerRouter := spineRouter.NewRouter()
-		for _, registration := range config.ConsumerRegistry.Registrations() {
-			log.Printf("[Bootstrap] 컨슈머 라우터 등록 : (EVENT) %s", registration.Topic)
-			consumerRouter.Register("EVENT", registration.Topic, registration.Meta)
-		}
-
-		consumerInvoker := invoker.NewInvoker(container)
-		consumerPipeline := pipeline.NewPipeline(consumerRouter, consumerInvoker)
-
-		consumerPipeline.AddArgumentResolver(
-			// 표준 context.Context
-			&resolver.StdContextResolver{},
-
-			// Consumer 전용 리졸버
-			&eventResolver.EventNameResolver{},
-			&eventResolver.EventBusResolver{},
-			&eventResolver.PayloadResolver{},
-			&eventResolver.DTOResolver{},
-		)
-
-		consumerPipeline.AddReturnValueHandler(
-			&handler.ErrorReturnHandler{},
-			&handler.StringReturnHandler{},
-			&handler.JSONReturnHandler{},
-		)
+		consumerPipeline := buildConsumerPipeline(container, config.ConsumerRegistry)
 
 		runtime := consumer.NewRuntime(
 			config.ConsumerRegistry,
@@ -253,31 +229,7 @@ func Run(config Config) error {
 			},
 		})
 
-		consumerRouter := spineRouter.NewRouter()
-		for _, registration := range config.ConsumerRegistry.Registrations() {
-			log.Printf("[Bootstrap] 컨슈머 라우터 등록 : (EVENT) %s", registration.Topic)
-			consumerRouter.Register("EVENT", registration.Topic, registration.Meta)
-		}
-
-		consumerInvoker := invoker.NewInvoker(container)
-		consumerPipeline := pipeline.NewPipeline(consumerRouter, consumerInvoker)
-
-		consumerPipeline.AddArgumentResolver(
-			// 표준 context.Context
-			&resolver.StdContextResolver{},
-
-			// Consumer 전용 리졸버
-			&eventResolver.EventNameResolver{},
-			&eventResolver.EventBusResolver{},
-			&eventResolver.PayloadResolver{},
-			&eventResolver.DTOResolver{},
-		)
-
-		consumerPipeline.AddReturnValueHandler(
-			&handler.ErrorReturnHandler{},
-			&handler.StringReturnHandler{},
-			&handler.JSONReturnHandler{},
-		)
+		consumerPipeline := buildConsumerPipeline(container, config.ConsumerRegistry)
 
 		runtime := consumer.NewRuntime(
 			config.ConsumerRegistry,
@@ -371,4 +323,30 @@ ____/ /__  /_/ /  / _  / / /  __/
 func printBanner() {
 	fmt.Print(spineBanner)
 	log.Printf("[Bootstrap] Spine version: %s", "v0.2.4")
+}
+
+func buildConsumerPipeline(container *container.Container, registry *consumer.Registry) *pipeline.Pipeline {
+	consumerRouter := spineRouter.NewRouter()
+	for _, registration := range registry.Registrations() {
+		consumerRouter.Register("EVENT", registration.Topic, registration.Meta)
+	}
+
+	consumerInvoker := invoker.NewInvoker(container)
+	consumerPipeline := pipeline.NewPipeline(consumerRouter, consumerInvoker)
+
+	consumerPipeline.AddArgumentResolver(
+		&resolver.StdContextResolver{},
+		&eventResolver.EventNameResolver{},
+		&eventResolver.EventBusResolver{},
+		&eventResolver.PayloadResolver{},
+		&eventResolver.DTOResolver{},
+	)
+
+	consumerPipeline.AddReturnValueHandler(
+		&handler.StringReturnHandler{},
+		&handler.JSONReturnHandler{},
+		&handler.ErrorReturnHandler{},
+	)
+
+	return consumerPipeline
 }

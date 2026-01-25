@@ -98,27 +98,37 @@ func NewRabbitMqReader(opts boot.RabbitMqOptions) (*Reader, error) {
 	}, nil
 }
 
-func (r *Reader) Read(ctx context.Context) (consumer.Message, error) {
+func (r *Reader) Read(ctx context.Context) (*consumer.Message, error) {
 	select {
 	case <-ctx.Done():
-		return consumer.Message{}, ctx.Err()
+		return nil, ctx.Err()
 
 	case msg, ok := <-r.msgs:
 		if !ok {
-			return consumer.Message{}, errors.New("RabbitMQ 채널이 닫혔습니다.")
+			return nil, errors.New("RabbitMQ 채널이 닫혔습니다.")
 		}
 
 		eventName := msg.Type
 
-		_ = msg.Ack(false)
-
-		return consumer.Message{
+		consumerMsg := &consumer.Message{
 			EventName: eventName,
 			Payload:   msg.Body,
 			Metadata: map[string]string{
 				"routing_key": msg.RoutingKey,
 			},
-		}, nil
+		}
+
+		// ACK 콜백 설정: 핸들러 성공 시 ACK
+		consumerMsg.SetAckHandler(func() error {
+			return msg.Ack(false)
+		})
+
+		// NACK 콜백 설정: 핸들러 실패 시 NACK (requeue=true)
+		consumerMsg.SetNackHandler(func() error {
+			return msg.Nack(false, true) // multiple=false, requeue=true
+		})
+
+		return consumerMsg, nil
 	}
 }
 

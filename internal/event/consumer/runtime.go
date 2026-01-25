@@ -5,7 +5,6 @@ import (
 	"log"
 	"sync"
 
-	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/event/publish"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 )
@@ -19,6 +18,7 @@ type Runtime struct {
 	factory  runnerFactory
 	pipeline *pipeline.Pipeline
 	stopOnce sync.Once
+	cancel   context.CancelFunc
 }
 
 func NewRuntime(registry *Registry, factory runnerFactory, pipeline *pipeline.Pipeline) *Runtime {
@@ -40,6 +40,7 @@ func NewRuntime(registry *Registry, factory runnerFactory, pipeline *pipeline.Pi
 }
 
 func (r *Runtime) Start(ctx context.Context) {
+	ctx, r.cancel = context.WithCancel(ctx)
 	for _, registration := range r.registry.Registrations() {
 		log.Printf("[Event Consumer] 토픽 '%s'에 대한 컨슈머를 시작합니다.", registration.Topic)
 		go func(reg Registration) {
@@ -72,13 +73,30 @@ func (r *Runtime) Start(ctx context.Context) {
 					// Consumer RequestContext 생성 (Execution Context)
 					reqCtx := NewRequestContext(ctx, msg, eventBus)
 
-					if err := r.pipeline.Execute(
-						reqCtx.(core.ExecutionContext),
-					); err != nil {
+					// 핸들러 실행
+					if err := r.pipeline.Execute(reqCtx); err != nil {
 						log.Printf(
 							"[Event Consumer] 핸들러 실행 실패 (%s): %v",
 							reg.Topic,
 							err,
+						)
+						// 핸들러 실패 시 NACK
+						if nackErr := msg.Nack(); nackErr != nil {
+							log.Printf(
+								"[Event Consumer] NACK 실패 (%s): %v",
+								reg.Topic,
+								nackErr,
+							)
+						}
+						continue
+					}
+
+					// 핸들러 성공 시 ACK
+					if ackErr := msg.Ack(); ackErr != nil {
+						log.Printf(
+							"[Event Consumer] ACK 실패 (%s): %v",
+							reg.Topic,
+							ackErr,
 						)
 					}
 				}
@@ -89,6 +107,9 @@ func (r *Runtime) Start(ctx context.Context) {
 
 func (r *Runtime) Stop() {
 	r.stopOnce.Do(func() {
+		if r.cancel != nil {
+			r.cancel() // 모든 goroutine 중지
+		}
 		log.Printf("[Event Consumer] 모든 컨슈머를 중지했습니다.")
 	})
 }

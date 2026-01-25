@@ -90,13 +90,15 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 	}
 
 	// ReturnValueHandler 처리
-	if err := p.handleReturn(ctx, results); err != nil {
-		return err
-	}
+	returnError := p.handleReturn(ctx, results)
 
 	// PostHooks 추가
 	for _, hook := range p.postHooks {
-		hook.AfterExecution(ctx, results, err)
+		hook.AfterExecution(ctx, results, returnError)
+	}
+
+	if returnError != nil {
+		return returnError
 	}
 
 	// Interceptor postHandle (역순)

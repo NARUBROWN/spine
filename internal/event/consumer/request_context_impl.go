@@ -11,14 +11,14 @@ import (
 
 type ConsumerRequestContextImpl struct {
 	ctx      context.Context
-	msg      Message
+	msg      *Message
 	eventBus publish.EventBus
 	store    map[string]any
 }
 
 func NewRequestContext(
 	ctx context.Context,
-	msg Message,
+	msg *Message,
 	eventBus publish.EventBus,
 ) core.ExecutionContext {
 	return &ConsumerRequestContextImpl{
