@@ -16,6 +16,7 @@ func main() {
 	app.Constructor(
 		NewUserController,
 		NewOrderConsumer,
+		NewCommonController,
 	)
 
 	// 라우트 등록, 라우터 단위 인터셉터
@@ -54,6 +55,12 @@ func main() {
 		"POST",
 		"/stocks/:stockId",
 		(*UserController).CreateStock,
+	)
+
+	app.Route(
+		"GET",
+		"/headers",
+		(*CommonController).CheckHeader,
 	)
 
 	app.Interceptor(

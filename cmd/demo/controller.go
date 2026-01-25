@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/NARUBROWN/spine/pkg/event/publish"
+	"github.com/NARUBROWN/spine/pkg/header"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/multipart"
 	"github.com/NARUBROWN/spine/pkg/path"
@@ -14,8 +15,14 @@ import (
 
 type UserController struct{}
 
+type CommonController struct{}
+
 func NewUserController() *UserController {
 	return &UserController{}
+}
+
+func NewCommonController() *CommonController {
+	return &CommonController{}
 }
 
 type User struct {
@@ -97,4 +104,18 @@ func (c *UserController) CreateStock(ctx context.Context, stockId path.Int) stri
 	})
 
 	return "OK"
+}
+
+// Headers represent the response DTO in CheckHeader.
+type Headers struct {
+	UserAgent   string `json:"user_agent,omitempty"`
+	ContentType string `json:"content_type,omitempty"`
+}
+
+// CheckHeader returns UserAgent and ContentType information from the HTTP request header
+func (c *CommonController) CheckHeader(headers header.Values) Headers {
+	return Headers{
+		UserAgent:   headers.Get("User-Agent"),
+		ContentType: headers.Get("Content-Type"),
+	}
 }

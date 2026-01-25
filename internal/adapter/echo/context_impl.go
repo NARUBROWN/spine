@@ -42,6 +42,11 @@ func (e *echoContext) Header(name string) string {
 	return e.echo.Request().Header.Get(name)
 }
 
+// Headers return a map of all headers in the request.
+func (e *echoContext) Headers() map[string][]string {
+	return e.echo.Request().Header
+}
+
 func (e *echoContext) Param(name string) string {
 	if raw, ok := e.store["spine.params"]; ok {
 		if m, ok := raw.(map[string]string); ok {
@@ -107,8 +112,8 @@ func (e *echoContext) Path() string {
 	return e.echo.Request().URL.Path
 }
 
-func (c *echoContext) PathKeys() []string {
-	if v, ok := c.store["spine.pathKeys"]; ok {
+func (e *echoContext) PathKeys() []string {
+	if v, ok := e.store["spine.pathKeys"]; ok {
 		if keys, ok := v.([]string); ok {
 			return keys
 		}
@@ -116,8 +121,8 @@ func (c *echoContext) PathKeys() []string {
 	return nil
 }
 
-func (c *echoContext) MultipartForm() (*multipart.Form, error) {
-	return c.echo.MultipartForm()
+func (e *echoContext) MultipartForm() (*multipart.Form, error) {
+	return e.echo.MultipartForm()
 }
 
 func (c *echoContext) EventBus() publish.EventBus {
