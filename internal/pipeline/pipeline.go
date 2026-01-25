@@ -206,11 +206,6 @@ func (p *Pipeline) handleReturn(ctx core.ExecutionContext, results []any) error 
 }
 
 func (p *Pipeline) resolveArguments(ctx core.ExecutionContext, paramMetas []resolver.ParameterMeta) ([]any, error) {
-	reqCtx, ok := ctx.(core.HttpRequestContext)
-	if !ok {
-		return nil, fmt.Errorf("ExecutionContext이 RequestContext를 구현하고 있지 않습니다.")
-	}
-
 	args := make([]any, 0, len(paramMetas))
 
 	for _, paramMeta := range paramMetas {
@@ -221,7 +216,7 @@ func (p *Pipeline) resolveArguments(ctx core.ExecutionContext, paramMetas []reso
 				continue
 			}
 
-			val, err := r.Resolve(reqCtx, paramMeta)
+			val, err := r.Resolve(ctx, paramMeta)
 			if err != nil {
 				return nil, err
 			}

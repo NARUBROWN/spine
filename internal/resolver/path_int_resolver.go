@@ -15,7 +15,7 @@ func (r *PathIntResolver) Supports(parameterMeta ParameterMeta) bool {
 	return parameterMeta.Type == reflect.TypeFor[path.Int]()
 }
 
-func (r *PathIntResolver) Resolve(ctx core.RequestContext, parameterMeta ParameterMeta) (any, error) {
+func (r *PathIntResolver) Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error) {
 	httpCtx, ok := ctx.(core.HttpRequestContext)
 	if !ok {
 		return nil, fmt.Errorf("HTTP 요청 컨텍스트가 아닙니다")

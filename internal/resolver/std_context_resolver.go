@@ -14,7 +14,7 @@ func (r *StdContextResolver) Supports(parameterMeta ParameterMeta) bool {
 	return parameterMeta.Type == reflect.TypeFor[context.Context]()
 }
 
-func (r *StdContextResolver) Resolve(ctx core.RequestContext, parameterMeta ParameterMeta) (any, error) {
+func (r *StdContextResolver) Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error) {
 	baseCtx := ctx.Context()
 	bus := ctx.EventBus()
 	if bus != nil {

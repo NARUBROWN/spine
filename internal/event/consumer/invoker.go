@@ -29,7 +29,7 @@ func NewInvoker(container *container.Container, resolvers []resolver.ArgumentRes
 	}
 }
 
-func (i *Invoker) ResolveArguments(reqCtx core.RequestContext, method reflect.Method) ([]any, error) {
+func (i *Invoker) ResolveArguments(reqCtx core.ExecutionContext, method reflect.Method) ([]any, error) {
 
 	paramCount := method.Type.NumIn()
 	args := make([]any, 0, paramCount-1)

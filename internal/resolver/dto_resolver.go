@@ -42,7 +42,7 @@ func (r *DTOResolver) Supports(pm ParameterMeta) bool {
 	return true
 }
 
-func (r *DTOResolver) Resolve(ctx core.RequestContext, parameterMeta ParameterMeta) (any, error) {
+func (r *DTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error) {
 	httpCtx, ok := ctx.(core.HttpRequestContext)
 	if !ok {
 		return nil, fmt.Errorf("HTTP 요청 컨텍스트가 아닙니다")

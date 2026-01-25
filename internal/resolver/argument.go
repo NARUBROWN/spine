@@ -24,5 +24,5 @@ type ArgumentResolver interface {
 	Supports(parameterMeta ParameterMeta) bool
 
 	// Resolve는 Context를 기반으로 파라미터에 전달될 값을 생성합니다.
-	Resolve(ctx core.RequestContext, parameterMeta ParameterMeta) (any, error)
+	Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error)
 }

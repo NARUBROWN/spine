@@ -5,7 +5,9 @@ import (
 	"log"
 	"sync"
 
+	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/event/publish"
+	"github.com/NARUBROWN/spine/internal/pipeline"
 )
 
 type runnerFactory interface {
@@ -15,30 +17,25 @@ type runnerFactory interface {
 type Runtime struct {
 	registry *Registry
 	factory  runnerFactory
-	invoker  *Invoker
-	eventBus publish.EventBus
+	pipeline *pipeline.Pipeline
 	stopOnce sync.Once
 }
 
-func NewRuntime(registry *Registry, factory runnerFactory, invoker *Invoker, eventBus publish.EventBus) *Runtime {
+func NewRuntime(registry *Registry, factory runnerFactory, pipeline *pipeline.Pipeline) *Runtime {
 	if registry == nil {
 		panic("consumer: 레지스트리는 nil일 수 없습니다")
 	}
 	if factory == nil {
 		panic("consumer: factory는 nil일 수 없습니다")
 	}
-	if invoker == nil {
-		panic("consumer: invoker는 nil일 수 없습니다")
-	}
-	if eventBus == nil {
-		panic("consumer: eventBus는 nil일 수 없습니다")
+	if pipeline == nil {
+		panic("consumer: pipeline은 nil일 수 없습니다")
 	}
 
 	return &Runtime{
 		registry: registry,
 		factory:  factory,
-		invoker:  invoker,
-		eventBus: eventBus,
+		pipeline: pipeline,
 	}
 }
 
@@ -70,32 +67,19 @@ func (r *Runtime) Start(ctx context.Context) {
 						continue
 					}
 
+					eventBus := publish.NewEventBus()
+
 					// Consumer RequestContext 생성 (Execution Context)
-					reqCtx := NewRequestContext(
-						ctx,
-						msg,
-						r.eventBus,
-					)
+					reqCtx := NewRequestContext(ctx, msg, eventBus)
 
-					meta := reg.Meta
-
-					// ArgumentResolver로 실행 인자 구성
-					args, err := r.invoker.ResolveArguments(
-						reqCtx,
-						meta.Method,
-					)
-					if err != nil {
-						log.Printf("[Event Consumer] 인자 해석 실패 (%s): %v", reg.Topic, err)
-						continue
-					}
-
-					// Invoker 실행
-					if _, err := r.invoker.Invoke(
-						meta.ControllerType,
-						meta.Method,
-						args,
+					if err := r.pipeline.Execute(
+						reqCtx.(core.ExecutionContext),
 					); err != nil {
-						log.Printf("[Event Consumer] 핸들러 실행 실패 (%s): %v", reg.Topic, err)
+						log.Printf(
+							"[Event Consumer] 핸들러 실행 실패 (%s): %v",
+							reg.Topic,
+							err,
+						)
 					}
 				}
 			}

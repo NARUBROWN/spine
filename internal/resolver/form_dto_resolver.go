@@ -28,7 +28,7 @@ func (r *FormDTOResolver) Supports(pm ParameterMeta) bool {
 	return false
 }
 
-func (r *FormDTOResolver) Resolve(ctx core.RequestContext, parameterMeta ParameterMeta) (any, error) {
+func (r *FormDTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error) {
 	httpCtx, ok := ctx.(core.HttpRequestContext)
 	if !ok {
 		return nil, fmt.Errorf("HTTP 요청 컨텍스트가 아닙니다")
