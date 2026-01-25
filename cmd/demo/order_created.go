@@ -4,7 +4,7 @@ import "time"
 
 type OrderCreated struct {
 	OrderID int64     `json:"order_id"`
-	at      time.Time `json"at"`
+	At      time.Time `json:"at"`
 }
 
 func (e OrderCreated) Name() string {
@@ -12,5 +12,5 @@ func (e OrderCreated) Name() string {
 }
 
 func (e OrderCreated) OccurredAt() time.Time {
-	return e.at
+	return e.At
 }

@@ -2,9 +2,29 @@ package boot
 
 import "time"
 
+/*
+애플리케이션 부트스트랩 전반을 제어하는 최상위 옵션입니다.
+서버 실행 방식과 외부 인프라(Kafka, RabbitMQ) 활성화를 결정합니다.
+*/
 type Options struct {
-	Address                string
+	// 서버가 바인딩될 주소 (예: ":8080")
+	Address string
+
+	// Graceful Shutdown 활성화 여부
 	EnableGracefulShutdown bool
-	ShutdownTimeout        time.Duration
-	Kafka                  *KafkaOptions // nil이면 미사용
+
+	// Graceful Shutdown 시 최대 대기 시간
+	ShutdownTimeout time.Duration
+
+	/*
+		Kafka 이벤트 인프라 설정입니다.
+		nil인 경우 Kafka Producer / Consumer는 구성되지 않습니다.
+	*/
+	Kafka *KafkaOptions
+
+	/*
+			RabbitMQ 이벤트 인프라 설정입니다.
+		   	nil인 경우 RabbitMQ 기반 이벤트 처리는 비활성화됩니다.
+	*/
+	RabbitMQ *RabbitMqOptions
 }

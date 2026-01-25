@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"context"
+	"errors"
 
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	"github.com/NARUBROWN/spine/pkg/boot"
@@ -13,9 +14,22 @@ type Reader struct {
 	opts   boot.KafkaOptions
 }
 
-func NewKafkaReader(topic string, opts boot.KafkaOptions) *Reader {
+func NewKafkaReader(topic string, opts boot.KafkaOptions) (*Reader, error) {
+	if len(opts.Brokers) == 0 {
+		return nil, errors.New("Kafka Brokers가 설정되지 않았습니다")
+	}
+	if opts.Read == nil {
+		return nil, errors.New("Kafka Read 옵션이 설정되지 않았습니다")
+	}
+	if opts.Read.GroupID == "" {
+		return nil, errors.New("Kafka Read GroupID가 비어 있습니다")
+	}
+	if topic == "" {
+		return nil, errors.New("Kafka topic이 비어 있습니다")
+	}
+
 	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers: opts.Brokers, // 나중에 옵션화
+		Brokers: opts.Brokers,
 		Topic:   topic,
 		GroupID: opts.Read.GroupID,
 	})
@@ -23,7 +37,7 @@ func NewKafkaReader(topic string, opts boot.KafkaOptions) *Reader {
 	return &Reader{
 		reader: reader,
 		opts:   opts,
-	}
+	}, nil
 }
 
 func (r *Reader) Read(ctx context.Context) (consumer.Message, error) {

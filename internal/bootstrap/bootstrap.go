@@ -15,9 +15,11 @@ import (
 	httpEngine "github.com/NARUBROWN/spine/internal/adapter/echo"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
+	eventResolver "github.com/NARUBROWN/spine/internal/event/consumer/resolver"
 	"github.com/NARUBROWN/spine/internal/event/extract"
 	"github.com/NARUBROWN/spine/internal/event/hook"
 	"github.com/NARUBROWN/spine/internal/event/infra/kafka"
+	"github.com/NARUBROWN/spine/internal/event/infra/rabbitmq"
 	"github.com/NARUBROWN/spine/internal/event/publish"
 	"github.com/NARUBROWN/spine/internal/handler"
 	"github.com/NARUBROWN/spine/internal/invoker"
@@ -36,6 +38,7 @@ type Config struct {
 	EnableGracefulShutdown bool
 	ShutdownTimeout        time.Duration
 	Kafka                  *boot.KafkaOptions
+	RabbitMQ               *boot.RabbitMqOptions
 	ConsumerRegistry       *consumer.Registry
 }
 
@@ -184,10 +187,76 @@ func Run(config Config) error {
 				&resolver.StdContextResolver{},
 
 				// Consumer 전용 리졸버
-				&consumer.EventNameResolver{},
-				&consumer.EventBusResolver{},
-				&consumer.PayloadResolver{},
-				&consumer.DTOResolver{},
+				&eventResolver.EventNameResolver{},
+				&eventResolver.EventBusResolver{},
+				&eventResolver.PayloadResolver{},
+				&eventResolver.DTOResolver{},
+			},
+		)
+
+		runtime := consumer.NewRuntime(
+			config.ConsumerRegistry,
+			factory,
+			consumerInvoker,
+			eventBus,
+		)
+
+		go runtime.Start(context.Background())
+		defer runtime.Stop()
+	}
+
+	// RabbitMQ 쓰기 설정이 존재하면, 발행 구성
+	if config.RabbitMQ != nil && config.RabbitMQ.Write != nil {
+		log.Println("[Bootstrap] RabbitMQ 이벤트 발행 구성")
+
+		rabbitmqWriter := rabbitmq.NewRabbitMqWriter(boot.RabbitMqOptions{
+			URL: config.RabbitMQ.URL,
+			Write: &boot.RabbitMqWriteOptions{
+				Exchange:   config.RabbitMQ.Write.Exchange,
+				RoutingKey: config.RabbitMQ.Write.RoutingKey,
+			},
+		})
+
+		dispatcher := &publish.DefaultEventDispatcher{
+			Publishers: []publish.EventPublisher{
+				rabbitmqWriter,
+			},
+		}
+
+		eventHook := &hook.EventDispatchHook{
+			Extractor:  extract.DefaultEventExtractor{},
+			Dispatcher: dispatcher,
+		}
+
+		pipeline.AddPostExecutionHook(eventHook)
+	}
+
+	// RabbitMQ 읽기 설정이 존재하면, 컨슈머 구성
+	if config.RabbitMQ != nil && config.RabbitMQ.Read != nil && config.ConsumerRegistry != nil && len(config.ConsumerRegistry.Registrations()) > 0 {
+		log.Println("[Bootstrap] RabbitMQ 이벤트 컨슈머 구성")
+
+		factory := rabbitmq.NewRunnerFactory(boot.RabbitMqOptions{
+			URL: config.RabbitMQ.URL,
+			Read: &boot.RabbitMqReadOptions{
+				Queue:      config.RabbitMQ.Read.Queue,
+				Exchange:   config.RabbitMQ.Read.Exchange,
+				RoutingKey: config.RabbitMQ.Read.RoutingKey,
+			},
+		})
+
+		eventBus := publish.NewEventBus()
+
+		consumerInvoker := consumer.NewInvoker(
+			container,
+			[]resolver.ArgumentResolver{
+				// 표준 context.Context
+				&resolver.StdContextResolver{},
+
+				// Consumer 전용 리졸버
+				&eventResolver.EventNameResolver{},
+				&eventResolver.EventBusResolver{},
+				&eventResolver.PayloadResolver{},
+				&eventResolver.DTOResolver{},
 			},
 		)
 

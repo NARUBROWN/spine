@@ -52,6 +52,12 @@ func main() {
 	)
 
 	app.Route(
+		"POST",
+		"/stocks/:stockId",
+		(*UserController).CreateStock,
+	)
+
+	app.Route(
 		"GET",
 		"/headers",
 		(*CommonController).CheckHeader,
@@ -67,7 +73,12 @@ func main() {
 
 	app.Consumers().Register(
 		"order.created",
-		(*OrderConsumer).OnCreated,
+		(*OrderConsumer).OnCreatedKafka,
+	)
+
+	app.Consumers().Register(
+		"stock.created",
+		(*OrderConsumer).OnCreatedRabbitMQ,
 	)
 
 	// EnableGracefulShutdown & ShutdownTimeout은 선택사항입니다.
@@ -82,6 +93,18 @@ func main() {
 			},
 			Write: &boot.KafkaWriteOptions{
 				TopicPrefix: "",
+			},
+		},
+		RabbitMQ: &boot.RabbitMqOptions{
+			URL: "amqp://guest:guest@localhost:5672/",
+			Read: &boot.RabbitMqReadOptions{
+				Queue:      "stock.created",
+				Exchange:   "stock-exchange",
+				RoutingKey: "stock.created",
+			},
+			Write: &boot.RabbitMqWriteOptions{
+				Exchange:   "stock-exchange",
+				RoutingKey: "stock.created",
 			},
 		},
 	})

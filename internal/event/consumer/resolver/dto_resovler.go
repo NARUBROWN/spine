@@ -1,4 +1,4 @@
-package consumer
+package resolver
 
 import (
 	"encoding/json"
