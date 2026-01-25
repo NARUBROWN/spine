@@ -19,7 +19,8 @@
 ## 링크
 
 - 공식 사이트: https://spine.na2ru2.me/ko/
-- 예제 프로젝트: https://github.com/NARUBROWN/spine-user-demo
+- Bun ORM + Swagger 통합 예제 프로젝트: https://github.com/NARUBROWN/spine-user-demo
+- Kafka MSA 예제 프로젝트: https://github.com/NARUBROWN/spine-simple-msa-demo
 
 ---
 

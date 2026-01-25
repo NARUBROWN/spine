@@ -19,7 +19,8 @@ It does not hide how a request is resolved and executed.
 ## Links
 
 - Official site: https://spine.na2ru2.me/en/
-- Example project: https://github.com/NARUBROWN/spine-user-demo
+- Bun ORM + Swagger integration example project: https://github.com/NARUBROWN/spine-user-demo
+- Kafka MSA example project: https://github.com/NARUBROWN/spine-simple-msa-demo
 
 ---
 
