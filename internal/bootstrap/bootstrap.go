@@ -76,6 +76,9 @@ func Run(config Config) error {
 		// 표준 Context 리졸버
 		&resolver.StdContextResolver{},
 
+		// Header Resolver
+		&resolver.HeaderResolver{},
+
 		// Path 리졸버들
 		&resolver.PathIntResolver{},
 		&resolver.PathStringResolver{},

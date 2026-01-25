@@ -15,6 +15,7 @@ func main() {
 	// 생성자 등록
 	app.Constructor(
 		NewUserController,
+		NewCommonController,
 	)
 
 	// 라우트 등록, 라우터 단위 인터셉터
@@ -41,6 +42,12 @@ func main() {
 		"POST",
 		"/upload",
 		(*UserController).Upload,
+	)
+
+	app.Route(
+		"GET",
+		"/headers",
+		(*CommonController).CheckHeader,
 	)
 
 	app.Interceptor(

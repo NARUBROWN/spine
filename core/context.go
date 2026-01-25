@@ -30,10 +30,12 @@ type RequestContext interface {
 	// 개별 접근
 	Param(name string) string
 	Query(name string) string
+	Header(name string) string
 
 	// 전체 뷰 접근
 	Params() map[string]string
 	Queries() map[string][]string
+	Headers() map[string][]string
 
 	// body
 	Bind(out any) error
