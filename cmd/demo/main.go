@@ -86,7 +86,7 @@ func main() {
 		Address:                ":8080",
 		EnableGracefulShutdown: true,
 		ShutdownTimeout:        10 * time.Second,
-		Kafka: &boot.KafkaOptions{
+		/*Kafka: &boot.KafkaOptions{
 			Brokers: []string{"localhost:9092"},
 			Read: &boot.KafkaReadOptions{
 				GroupID: "spine-demo-consumer",
@@ -106,6 +106,6 @@ func main() {
 				Exchange:   "stock-exchange",
 				RoutingKey: "stock.created",
 			},
-		},
+		},*/
 	})
 }

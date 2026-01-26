@@ -2,6 +2,7 @@ package echo
 
 import (
 	"context"
+	"maps"
 	"mime/multipart"
 
 	"github.com/NARUBROWN/spine/core"
@@ -79,9 +80,7 @@ func (e *echoContext) Params() map[string]string {
 		if m, ok := raw.(map[string]string); ok {
 			// return a shallow copy to avoid mutation
 			copyMap := make(map[string]string, len(m))
-			for k, v := range m {
-				copyMap[k] = v
-			}
+			maps.Copy(copyMap, m)
 			return copyMap
 		}
 	}
