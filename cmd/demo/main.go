@@ -16,6 +16,7 @@ func main() {
 	app.Constructor(
 		NewUserController,
 		NewOrderConsumer,
+		NewCommonController,
 	)
 
 	// 라우트 등록, 라우터 단위 인터셉터
@@ -56,6 +57,12 @@ func main() {
 		(*UserController).CreateStock,
 	)
 
+	app.Route(
+		"GET",
+		"/headers",
+		(*CommonController).CheckHeader,
+	)
+
 	app.Interceptor(
 		cors.New(cors.Config{
 			AllowOrigins: []string{"*"},
@@ -79,7 +86,7 @@ func main() {
 		Address:                ":8080",
 		EnableGracefulShutdown: true,
 		ShutdownTimeout:        10 * time.Second,
-		Kafka: &boot.KafkaOptions{
+		/*Kafka: &boot.KafkaOptions{
 			Brokers: []string{"localhost:9092"},
 			Read: &boot.KafkaReadOptions{
 				GroupID: "spine-demo-consumer",
@@ -99,6 +106,6 @@ func main() {
 				Exchange:   "stock-exchange",
 				RoutingKey: "stock.created",
 			},
-		},
+		},*/
 	})
 }
