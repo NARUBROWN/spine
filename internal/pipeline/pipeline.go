@@ -11,6 +11,7 @@ import (
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/resolver"
 	"github.com/NARUBROWN/spine/internal/router"
+	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/path"
 )
 
@@ -44,6 +45,12 @@ func (p *Pipeline) AddReturnValueHandler(handlers ...handler.ReturnValueHandler)
 
 // Execute는 하나의 요청 실행 전체를 소유합니다.
 func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
+	defer func() {
+		if finalErr != nil {
+			p.handleExecutionError(ctx, finalErr)
+		}
+	}()
+
 	// Router가 실행 대상을 결정
 	meta, err := p.router.Route(ctx)
 
@@ -241,4 +248,33 @@ func (p *Pipeline) resolveArguments(ctx core.ExecutionContext, paramMetas []reso
 
 func (p *Pipeline) AddPostExecutionHook(hook hook.PostExecutionHook) {
 	p.postHooks = append(p.postHooks, hook)
+}
+
+func (p *Pipeline) handleExecutionError(ctx core.ExecutionContext, err error) {
+	rwAny, ok := ctx.Get("spine.response_writer")
+	if !ok {
+		return
+	}
+
+	rw, ok := rwAny.(core.ResponseWriter)
+	if !ok {
+		return
+	}
+
+	if httpErr, ok := err.(*httperr.HTTPError); ok {
+		rw.WriteJSON(
+			httpErr.Status,
+			map[string]any{
+				"message": httpErr.Message,
+			},
+		)
+		return
+	}
+
+	rw.WriteJSON(
+		500,
+		map[string]any{
+			"message": "Internal server error",
+		},
+	)
 }

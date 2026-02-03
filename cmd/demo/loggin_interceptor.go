@@ -20,6 +20,7 @@ func (i *LoggingInterceptor) PreHandle(
 		meta.Method.Name,
 	)
 	ctx.Set("test", "test")
+
 	return nil
 }
 

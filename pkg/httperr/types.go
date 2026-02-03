@@ -22,3 +22,7 @@ func BadRequest(msg string) error {
 func Unauthorized(msg string) error {
 	return &HTTPError{Status: 401, Message: msg}
 }
+
+func InternalServerError(msg string) error {
+	return &HTTPError{Status: 500, Message: msg}
+}
