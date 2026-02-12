@@ -32,3 +32,7 @@ func (w *EchoResponseWriter) WriteStatus(status int) error {
 	w.ctx.Response().WriteHeader(status)
 	return nil
 }
+
+func (w *EchoResponseWriter) WriteBytes(status int, value []byte) error {
+	return w.ctx.Blob(status, w.ctx.Response().Header().Get("Content-Type"), value)
+}

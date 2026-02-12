@@ -57,6 +57,12 @@ func main() {
 		(*CommonController).CheckHeader,
 	)
 
+	app.Route(
+		"GET",
+		"/images/:id",
+		(*CommonController).GetAvatar,
+	)
+
 	app.Interceptor(
 		cors.New(cors.Config{
 			AllowOrigins: []string{"*"},

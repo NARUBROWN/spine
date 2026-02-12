@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/NARUBROWN/spine/pkg/event/publish"
@@ -128,5 +129,13 @@ func (c *CommonController) CheckHeader(headers header.Values) Headers {
 	return Headers{
 		UserAgent:   headers.Get("User-Agent"),
 		ContentType: headers.Get("Content-Type"),
+	}
+}
+
+func (c *CommonController) GetAvatar() httpx.Binary {
+	data, _ := os.ReadFile("assets/spine-logo.png")
+	return httpx.Binary{
+		ContentType: "image/png",
+		Data:        data,
 	}
 }

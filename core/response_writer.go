@@ -14,4 +14,5 @@ type ResponseWriter interface {
 	// body + status 기록
 	WriteJSON(status int, value any) error
 	WriteString(status int, value string) error
+	WriteBytes(status int, value []byte) error
 }
