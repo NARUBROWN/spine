@@ -1,11 +1,11 @@
 package router
 
 import (
-	"fmt"
 	"reflect"
 	"strings"
 
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/pkg/httperr"
 )
 
 type RouteOption func(*RouteSpec)
@@ -86,7 +86,7 @@ func (r *DefaultRouter) Route(ctx core.ExecutionContext) (core.HandlerMeta, erro
 
 		return route.Meta, nil
 	}
-	return core.HandlerMeta{}, fmt.Errorf("핸들러가 없습니다.")
+	return core.HandlerMeta{}, httperr.NotFound("핸들러가 없습니다.")
 }
 
 func matchPath(pattern string, path string) (bool, map[string]string, []string) {

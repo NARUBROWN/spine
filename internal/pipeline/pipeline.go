@@ -261,7 +261,8 @@ func (p *Pipeline) handleExecutionError(ctx core.ExecutionContext, err error) {
 		return
 	}
 
-	if httpErr, ok := err.(*httperr.HTTPError); ok {
+	var httpErr *httperr.HTTPError
+	if errors.As(err, &httpErr) {
 		rw.WriteJSON(
 			httpErr.Status,
 			map[string]any{
