@@ -20,6 +20,7 @@ type Runtime struct {
 	pipeline *pipeline.Pipeline
 	stopOnce sync.Once
 	cancel   context.CancelFunc
+	errChan  chan error
 }
 
 func NewRuntime(registry *Registry, factory runnerFactory, pipeline *pipeline.Pipeline) *Runtime {
@@ -37,7 +38,15 @@ func NewRuntime(registry *Registry, factory runnerFactory, pipeline *pipeline.Pi
 		registry: registry,
 		factory:  factory,
 		pipeline: pipeline,
+		errChan:  make(chan error, max(1, len(registry.Registrations()))),
 	}
+}
+
+// Errors는 런타임 내부에서 발생한 치명적 에러를 전달받기 위한 채널입니다.
+// 채널은 close되지 않으므로, 필요 시 선택적으로 1개 이벤트를 대기하거나
+// non-blocking 방식으로 조회하세요.
+func (r *Runtime) Errors() <-chan error {
+	return r.errChan
 }
 
 func (r *Runtime) Start(ctx context.Context) {
@@ -47,11 +56,19 @@ func (r *Runtime) Start(ctx context.Context) {
 		go func(reg Registration) {
 			reader, err := r.factory.Build(reg)
 			if err != nil {
-				log.Panicf(
-					"[Event Consumer] 컨슈머 초기화 실패 (topic=%s): %v",
+				startErr := fmt.Errorf(
+					"[Event Consumer] 컨슈머 초기화 실패 (topic=%s): %w",
 					reg.Topic,
 					err,
 				)
+				select {
+				case r.errChan <- startErr:
+				default:
+					log.Printf("%v (에러 채널이 가득 차 전파하지 못했습니다)", startErr)
+				}
+				// 초기화 실패는 치명적이므로 전체 런타임을 중단한다.
+				r.Stop()
+				return
 			}
 			defer reader.Close()
 
@@ -126,4 +143,11 @@ func (r *Runtime) Stop() {
 		}
 		log.Printf("[Event Consumer] 모든 컨슈머를 중지했습니다.")
 	})
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

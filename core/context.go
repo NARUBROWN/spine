@@ -3,8 +3,6 @@ package core
 import (
 	"context"
 	"mime/multipart"
-
-	"github.com/NARUBROWN/spine/internal/event/publish"
 )
 
 /*
@@ -22,7 +20,7 @@ type ContextCarrier interface {
 }
 
 type EventBusCarrier interface {
-	EventBus() publish.EventBus
+	EventBus() EventBus
 }
 
 /*

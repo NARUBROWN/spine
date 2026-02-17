@@ -114,6 +114,7 @@ func Run(config Config) error {
 
 	var server *httpEngine.Server
 	var httpErrCh chan error
+	var consumerErrCh chan error
 
 	if config.HTTP != nil {
 		prefix := config.HTTP.GlobalPrefix
@@ -309,6 +310,9 @@ func Run(config Config) error {
 
 	if config.Kafka != nil && config.Kafka.Read != nil && config.ConsumerRegistry != nil && len(config.ConsumerRegistry.Registrations()) > 0 {
 		log.Println("[Bootstrap] Kafka 이벤트 컨슈머 구성")
+		if consumerErrCh == nil {
+			consumerErrCh = make(chan error, 1)
+		}
 
 		factory := kafka.NewRunnerFactory(boot.KafkaOptions{
 			Brokers: config.Kafka.Brokers,
@@ -329,6 +333,7 @@ func Run(config Config) error {
 			panic(err)
 		}
 
+		forwardConsumerErrors("Kafka", runtime, consumerErrCh)
 		go runtime.Start(context.Background())
 		defer runtime.Stop()
 		consumerStarted = true
@@ -337,6 +342,9 @@ func Run(config Config) error {
 	// RabbitMQ 읽기 설정이 존재하면, 컨슈머 구성
 	if config.RabbitMQ != nil && config.RabbitMQ.Read != nil && config.ConsumerRegistry != nil && len(config.ConsumerRegistry.Registrations()) > 0 {
 		log.Println("[Bootstrap] RabbitMQ 이벤트 컨슈머 구성")
+		if consumerErrCh == nil {
+			consumerErrCh = make(chan error, 1)
+		}
 
 		factory := rabbitmq.NewRunnerFactory(boot.RabbitMqOptions{
 			URL: config.RabbitMQ.URL,
@@ -357,6 +365,7 @@ func Run(config Config) error {
 			panic(err)
 		}
 
+		forwardConsumerErrors("RabbitMQ", runtime, consumerErrCh)
 		go runtime.Start(context.Background())
 		defer runtime.Stop()
 		consumerStarted = true
@@ -365,10 +374,15 @@ func Run(config Config) error {
 	if config.HTTP != nil {
 		// Graceful 비활성화: 서버가 종료될 때까지 블록
 		if !config.EnableGracefulShutdown {
-			if err := <-httpErrCh; err != nil {
+			select {
+			case err := <-httpErrCh:
+				if err != nil {
+					return err
+				}
+				return nil
+			case err := <-consumerErrCh:
 				return err
 			}
-			return nil
 		}
 
 		quit := make(chan os.Signal, 1)
@@ -379,6 +393,8 @@ func Run(config Config) error {
 			if err != nil {
 				return err
 			}
+		case err := <-consumerErrCh:
+			return err
 		case <-quit:
 		}
 
@@ -403,8 +419,12 @@ func Run(config Config) error {
 	if config.HTTP == nil && consumerStarted {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-		<-quit
-		log.Println("[Bootstrap] 시스템 종료 감지. 이벤트 컨슈머 중지...")
+		select {
+		case <-quit:
+			log.Println("[Bootstrap] 시스템 종료 감지. 이벤트 컨슈머 중지...")
+		case err := <-consumerErrCh:
+			return err
+		}
 	}
 
 	return nil
@@ -479,6 +499,20 @@ func splitPathForValidation(path string) []string {
 
 func isPathParam(seg string) bool {
 	return strings.HasPrefix(seg, ":")
+}
+
+// forwardConsumerErrors는 특정 런타임의 치명적 에러를 공용 채널로 전달한다.
+func forwardConsumerErrors(name string, runtime *consumer.Runtime, out chan<- error) {
+	go func() {
+		if err := <-runtime.Errors(); err != nil {
+			wrapped := fmt.Errorf("[Bootstrap] %s consumer runtime error: %w", name, err)
+			select {
+			case out <- wrapped:
+			default:
+				log.Printf("%v (consumerErrCh가 가득 차 전파하지 못했습니다)", wrapped)
+			}
+		}
+	}()
 }
 
 const spineBanner = `

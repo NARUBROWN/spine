@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 
 	"github.com/NARUBROWN/spine/pkg/boot"
@@ -34,7 +35,10 @@ func NewKafkaPublisher(opts *boot.KafkaOptions) (*KafkaPublisher, error) {
 }
 
 func (p *KafkaPublisher) Publish(ctx context.Context, event publish.DomainEvent) error {
-	payload, _ := json.Marshal(event)
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("KafkaPublisher 직렬화 실패: %w", err)
+	}
 
 	return p.Writer.WriteMessages(ctx, kafka.Message{
 		Topic: event.Name(),
