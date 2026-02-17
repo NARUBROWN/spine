@@ -28,6 +28,10 @@ func (w *EchoResponseWriter) AddHeader(key, value string) {
 	w.ctx.Response().Header().Add(key, value)
 }
 
+func (w *EchoResponseWriter) IsCommitted() bool {
+	return w.ctx.Response().Committed
+}
+
 func (w *EchoResponseWriter) WriteStatus(status int) error {
 	w.ctx.Response().WriteHeader(status)
 	return nil

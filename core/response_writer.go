@@ -8,6 +8,9 @@ type ResponseWriter interface {
 	SetHeader(key, value string)
 	AddHeader(key, value string)
 
+	// 응답이 이미 커밋(헤더/바디 작성 시작)되었는지 여부
+	IsCommitted() bool
+
 	// 상태 코드만 기록 (body 없음)
 	WriteStatus(status int) error
 

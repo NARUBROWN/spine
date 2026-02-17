@@ -277,6 +277,11 @@ func (p *Pipeline) handleExecutionError(ctx core.ExecutionContext, err error) {
 		return
 	}
 
+	// ReturnValueHandler 등에서 이미 응답이 커밋된 경우 이중 응답을 방지한다.
+	if rw.IsCommitted() {
+		return
+	}
+
 	var httpErr *httperr.HTTPError
 	if errors.As(err, &httpErr) {
 		rw.WriteJSON(

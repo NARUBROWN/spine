@@ -30,6 +30,10 @@ func (e *echoContext) Context() context.Context {
 	return e.reqCtx
 }
 
+func (e *echoContext) Request() core.RequestContext {
+	return e
+}
+
 func (e *echoContext) Bind(out any) error {
 	return e.echo.Bind(out)
 }

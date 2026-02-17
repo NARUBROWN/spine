@@ -288,14 +288,9 @@ func Run(config Config) error {
 		}()
 	}
 
-	log.Println("[Bootstrap] 컨트롤러 의존성 Warm-up 시작")
-	// Warm-Up Component
-	if err := container.WarmUp(nil); err != nil {
-		// Warm-up 실패시 panic
-		panic(err)
-	}
 	// Consumer 컨트롤러 Warm-up
 	if config.ConsumerRegistry != nil {
+		log.Println("[Bootstrap] Consumer 컨트롤러 의존성 Warm-up 시작")
 		var consumerTypes []reflect.Type
 		for _, reg := range config.ConsumerRegistry.Registrations() {
 			consumerTypes = append(consumerTypes, reg.Meta.ControllerType)
