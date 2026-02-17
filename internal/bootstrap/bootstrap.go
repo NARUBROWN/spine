@@ -314,6 +314,8 @@ func Run(config Config) error {
 	}
 
 	// Kafka Read 옵션이 존재하면 Read를 Boot에 포함
+	consumerStarted := false
+
 	if config.Kafka != nil && config.Kafka.Read != nil && config.ConsumerRegistry != nil && len(config.ConsumerRegistry.Registrations()) > 0 {
 		log.Println("[Bootstrap] Kafka 이벤트 컨슈머 구성")
 
@@ -338,6 +340,7 @@ func Run(config Config) error {
 
 		go runtime.Start(context.Background())
 		defer runtime.Stop()
+		consumerStarted = true
 	}
 
 	// RabbitMQ 읽기 설정이 존재하면, 컨슈머 구성
@@ -365,6 +368,7 @@ func Run(config Config) error {
 
 		go runtime.Start(context.Background())
 		defer runtime.Stop()
+		consumerStarted = true
 	}
 
 	if config.HTTP != nil {
@@ -402,6 +406,14 @@ func Run(config Config) error {
 		}
 
 		log.Println("[Bootstrap] 시스템이 안전하게 종료되었습니다.")
+	}
+
+	// HTTP가 비활성화된 상태에서 이벤트 컨슈머만 실행 중이면 종료 신호를 기다린다.
+	if config.HTTP == nil && consumerStarted {
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+		<-quit
+		log.Println("[Bootstrap] 시스템 종료 감지. 이벤트 컨슈머 중지...")
 	}
 
 	return nil
