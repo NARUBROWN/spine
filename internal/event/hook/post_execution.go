@@ -2,7 +2,6 @@ package hook
 
 import (
 	"github.com/NARUBROWN/spine/core"
-	"github.com/NARUBROWN/spine/internal/event/extract"
 	"github.com/NARUBROWN/spine/internal/event/publish"
 )
 
@@ -11,7 +10,6 @@ type PostExecutionHook interface {
 }
 
 type EventDispatchHook struct {
-	Extractor  extract.EventExtractor
 	Dispatcher publish.EventDispatcher
 }
 

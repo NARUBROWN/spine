@@ -17,8 +17,10 @@ import (
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	eventResolver "github.com/NARUBROWN/spine/internal/event/consumer/resolver"
+	"github.com/NARUBROWN/spine/internal/event/hook"
 	"github.com/NARUBROWN/spine/internal/event/infra/kafka"
 	"github.com/NARUBROWN/spine/internal/event/infra/rabbitmq"
+	eventPublish "github.com/NARUBROWN/spine/internal/event/publish"
 	"github.com/NARUBROWN/spine/internal/handler"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
@@ -47,6 +49,62 @@ func Run(config Config) error {
 	log.Println("[Bootstrap] 컨테이너 초기화 시작")
 	// 컨테이너 생성
 	container := container.New()
+
+	// 이벤트 발행기 모음 (Kafka/RabbitMQ 등 옵션에 따라 채워짐)
+	var eventPublishers []eventPublish.EventPublisher
+
+	// Kafka Write 옵션이 존재하면 Publisher 구성
+	if config.Kafka != nil && config.Kafka.Write != nil {
+		log.Println("[Bootstrap] Kafka 이벤트 발행 구성")
+
+		kafkaPublisher, err := kafka.NewKafkaPublisher(&boot.KafkaOptions{
+			Brokers: config.Kafka.Brokers,
+			Write: &boot.KafkaWriteOptions{
+				TopicPrefix: config.Kafka.Write.TopicPrefix,
+			},
+		})
+		if err != nil {
+			panic(err)
+		}
+		eventPublishers = append(eventPublishers, kafkaPublisher)
+		defer func() {
+			if err := kafkaPublisher.Close(); err != nil {
+				log.Printf("[Bootstrap] Kafka publisher close 실패: %v", err)
+			}
+		}()
+	}
+
+	// RabbitMQ Write 옵션이 존재하면 Publisher 구성
+	if config.RabbitMQ != nil && config.RabbitMQ.Write != nil {
+		log.Println("[Bootstrap] RabbitMQ 이벤트 발행 구성")
+
+		rabbitmqWriter, err := rabbitmq.NewRabbitMqWriter(boot.RabbitMqOptions{
+			URL: config.RabbitMQ.URL,
+			Write: &boot.RabbitMqWriteOptions{
+				Exchange: config.RabbitMQ.Write.Exchange,
+			},
+		})
+		if err != nil {
+			panic(err)
+		}
+		eventPublishers = append(eventPublishers, rabbitmqWriter)
+		defer func() {
+			if err := rabbitmqWriter.Close(); err != nil {
+				log.Printf("[Bootstrap] RabbitMQ writer close 실패: %v", err)
+			}
+		}()
+	}
+
+	// PostExecutionHook에서 사용할 공통 Dispatcher (Publishers가 없으면 nil 유지)
+	var dispatchHook *hook.EventDispatchHook
+	if len(eventPublishers) > 0 {
+		dispatchHook = &hook.EventDispatchHook{
+			Dispatcher: &eventPublish.DefaultEventDispatcher{Publishers: eventPublishers},
+		}
+	}
+
+	var server *httpEngine.Server
+	var httpErrCh chan error
 
 	if config.HTTP != nil {
 		prefix := config.HTTP.GlobalPrefix
@@ -124,6 +182,11 @@ func Run(config Config) error {
 		httpInvoker := invoker.NewInvoker(container)
 		httpPipeline := pipeline.NewPipeline(router, httpInvoker)
 
+		// HTTP PostExecutionHook: 도메인 이벤트 발행 (퍼블리셔가 있는 경우에만)
+		if dispatchHook != nil {
+			httpPipeline.AddPostExecutionHook(dispatchHook)
+		}
+
 		log.Println("[Bootstrap] ArgumentResolver 등록")
 		httpPipeline.AddArgumentResolver(
 			// 표준 Context 리졸버
@@ -195,44 +258,16 @@ func Run(config Config) error {
 
 		log.Println("[Bootstrap] HTTP 어댑터 마운트")
 		// Echo Adapter
-		server := httpEngine.NewServer(httpPipeline, config.Address, config.TransportHooks)
+		server = httpEngine.NewServer(httpPipeline, config.Address, config.TransportHooks)
 		server.Mount()
 
-		// EnableGracefulShutdown 기본값 : false : 즉시 종료 로직
-		if !config.EnableGracefulShutdown {
-			log.Printf("[Bootstrap] 서버 리스닝 시작: %s", config.Address)
-			return server.Start()
-		}
-
+		log.Printf("[Bootstrap] 서버 리스닝 시작: %s", config.Address)
+		httpErrCh = make(chan error, 1)
 		go func() {
-			log.Printf("[Bootstrap] 서버 리스닝 시작: %s", config.Address)
-
 			if err := server.Start(); err != nil && err != http.ErrServerClosed {
-				log.Fatalf("[Bootstrap] 서버 시작 실패: %v", err)
+				httpErrCh <- err
 			}
 		}()
-
-		quit := make(chan os.Signal, 1)
-		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-		<-quit
-
-		log.Println("[Bootstrap] 시스템 종료 감지. Graceful Shutdown 시작...")
-
-		timeout := config.ShutdownTimeout
-		if timeout == 0 {
-			timeout = 10 * time.Second
-		}
-
-		// 컨텍스트 생성...10초까지 봐줄 것
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
-
-		if err := server.Shutdown(ctx); err != nil {
-			return fmt.Errorf("[Bootstrap] 서버 강제 종료 발생: %v", err)
-		}
-
-		log.Println("[Bootstrap] 시스템이 안전하게 종료되었습니다.")
-		return nil
 	}
 
 	log.Printf("[Bootstrap] 생성자 등록 시작 (%d개)", len(config.Constructors))
@@ -261,46 +296,6 @@ func Run(config Config) error {
 		}
 	}
 
-	// Kafka Write 옵션이 존재하면 Write를 Boot에 포함
-	if config.Kafka != nil && config.Kafka.Write != nil {
-		log.Println("[Bootstrap] Kafka 이벤트 발행 구성")
-
-		kafkaPublisher, err := kafka.NewKafkaPublisher(&boot.KafkaOptions{
-			Brokers: config.Kafka.Brokers,
-			Write: &boot.KafkaWriteOptions{
-				TopicPrefix: config.Kafka.Write.TopicPrefix,
-			},
-		})
-		if err != nil {
-			panic(err)
-		}
-		defer func() {
-			if err := kafkaPublisher.Close(); err != nil {
-				log.Printf("[Bootstrap] Kafka publisher close 실패: %v", err)
-			}
-		}()
-	}
-
-	// RabbitMQ 쓰기 설정이 존재하면, 발행 구성
-	if config.RabbitMQ != nil && config.RabbitMQ.Write != nil {
-		log.Println("[Bootstrap] RabbitMQ 이벤트 발행 구성")
-
-		rabbitmqWriter, err := rabbitmq.NewRabbitMqWriter(boot.RabbitMqOptions{
-			URL: config.RabbitMQ.URL,
-			Write: &boot.RabbitMqWriteOptions{
-				Exchange: config.RabbitMQ.Write.Exchange,
-			},
-		})
-		if err != nil {
-			panic(err)
-		}
-		defer func() {
-			if err := rabbitmqWriter.Close(); err != nil {
-				log.Printf("[Bootstrap] RabbitMQ writer close 실패: %v", err)
-			}
-		}()
-	}
-
 	// Kafka Read 옵션이 존재하면 Read를 Boot에 포함
 	if config.Kafka != nil && config.Kafka.Read != nil && config.ConsumerRegistry != nil && len(config.ConsumerRegistry.Registrations()) > 0 {
 		log.Println("[Bootstrap] Kafka 이벤트 컨슈머 구성")
@@ -312,7 +307,7 @@ func Run(config Config) error {
 			},
 		})
 
-		consumerPipeline := buildConsumerPipeline(container, config.ConsumerRegistry)
+		consumerPipeline := buildConsumerPipeline(container, config.ConsumerRegistry, dispatchHook)
 
 		runtime := consumer.NewRuntime(
 			config.ConsumerRegistry,
@@ -339,7 +334,7 @@ func Run(config Config) error {
 			},
 		})
 
-		consumerPipeline := buildConsumerPipeline(container, config.ConsumerRegistry)
+		consumerPipeline := buildConsumerPipeline(container, config.ConsumerRegistry, dispatchHook)
 
 		runtime := consumer.NewRuntime(
 			config.ConsumerRegistry,
@@ -353,6 +348,43 @@ func Run(config Config) error {
 
 		go runtime.Start(context.Background())
 		defer runtime.Stop()
+	}
+
+	if config.HTTP != nil {
+		// Graceful 비활성화: 서버가 종료될 때까지 블록
+		if !config.EnableGracefulShutdown {
+			if err := <-httpErrCh; err != nil {
+				return err
+			}
+			return nil
+		}
+
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+		select {
+		case err := <-httpErrCh:
+			if err != nil {
+				return err
+			}
+		case <-quit:
+		}
+
+		log.Println("[Bootstrap] 시스템 종료 감지. Graceful Shutdown 시작...")
+
+		timeout := config.ShutdownTimeout
+		if timeout == 0 {
+			timeout = 10 * time.Second
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		if err := server.Shutdown(ctx); err != nil {
+			return fmt.Errorf("[Bootstrap] 서버 강제 종료 발생: %v", err)
+		}
+
+		log.Println("[Bootstrap] 시스템이 안전하게 종료되었습니다.")
 	}
 
 	return nil
@@ -440,10 +472,10 @@ ____/ /__  /_/ /  / _  / / /  __/
 
 func printBanner() {
 	fmt.Print(spineBanner)
-	log.Printf("[Bootstrap] Spine version: %s", "v0.3.8")
+	log.Printf("[Bootstrap] Spine version: %s", "v0.3.9")
 }
 
-func buildConsumerPipeline(container *container.Container, registry *consumer.Registry) *pipeline.Pipeline {
+func buildConsumerPipeline(container *container.Container, registry *consumer.Registry, dispatchHook *hook.EventDispatchHook) *pipeline.Pipeline {
 	consumerRouter := spineRouter.NewRouter()
 	for _, registration := range registry.Registrations() {
 		consumerRouter.Register("EVENT", registration.Topic, registration.Meta)
@@ -452,10 +484,13 @@ func buildConsumerPipeline(container *container.Container, registry *consumer.Re
 	consumerInvoker := invoker.NewInvoker(container)
 	consumerPipeline := pipeline.NewPipeline(consumerRouter, consumerInvoker)
 
+	if dispatchHook != nil {
+		consumerPipeline.AddPostExecutionHook(dispatchHook)
+	}
+
 	consumerPipeline.AddArgumentResolver(
 		&resolver.StdContextResolver{},
 		&eventResolver.EventNameResolver{},
-		&eventResolver.EventBusResolver{},
 		&eventResolver.PayloadResolver{},
 		&eventResolver.DTOResolver{},
 	)

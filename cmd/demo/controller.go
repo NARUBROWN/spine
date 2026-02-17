@@ -100,22 +100,26 @@ func (c *UserController) Upload(
 	return "OK"
 }
 
-func (c *UserController) CreateOrder(ctx context.Context, orderId path.Int) string {
+func (c *UserController) CreateOrder(ctx context.Context, orderId path.Int) httpx.Response[string] {
 	publish.Event(ctx, OrderCreated{
 		OrderID: orderId.Value,
 		At:      time.Now(),
 	})
 
-	return "OK"
+	return httpx.Response[string]{
+		Body: "OK",
+	}
 }
 
-func (c *UserController) CreateStock(ctx context.Context, stockId path.Int) string {
+func (c *UserController) CreateStock(ctx context.Context, stockId path.Int) httpx.Response[string] {
 	publish.Event(ctx, StockCreated{
 		OrderID: stockId.Value,
 		At:      time.Now(),
 	})
 
-	return "OK"
+	return httpx.Response[string]{
+		Body: "OK",
+	}
 }
 
 // Headers represent the response DTO in CheckHeader.

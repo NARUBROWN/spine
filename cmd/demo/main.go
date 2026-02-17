@@ -94,19 +94,16 @@ func main() {
 			Write: &boot.KafkaWriteOptions{
 				TopicPrefix: "",
 			},
-		},
+		},*/
 		RabbitMQ: &boot.RabbitMqOptions{
 			URL: "amqp://guest:guest@localhost:5672/",
 			Read: &boot.RabbitMqReadOptions{
-				Queue:      "stock.created",
-				Exchange:   "stock-exchange",
-				RoutingKey: "stock.created",
+				Exchange: "stock-exchange",
 			},
 			Write: &boot.RabbitMqWriteOptions{
-				Exchange:   "stock-exchange",
-				RoutingKey: "stock.created",
+				Exchange: "stock-exchange",
 			},
-		},*/
+		},
 		HTTP: &boot.HTTPOptions{},
 	})
 }
