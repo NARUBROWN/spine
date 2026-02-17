@@ -137,6 +137,8 @@ func Run(config Config) error {
 
 		registeredPathsByMethod := make(map[string][]string)
 
+		loggedRouteInterceptors := make(map[reflect.Type]bool)
+
 		for _, route := range config.Routes {
 			log.Printf("[Bootstrap] 라우터 등록 : (%s) %s", route.Method, route.Path)
 			meta, err := spineRouter.NewHandlerMeta(route.Handler)
@@ -149,15 +151,25 @@ func Run(config Config) error {
 				interceptorType := reflect.TypeOf(interceptor)
 				value := reflect.ValueOf(interceptor)
 
+				// 같은 타입의 인터셉터 로깅은 한 번만 남긴다.
+				logged := loggedRouteInterceptors[interceptorType]
+
 				if interceptorType.Kind() == reflect.Pointer && value.IsNil() {
-					log.Printf("[Bootstrap] Route Interceptor %s가 컨테이너에서 생성됐습니다.", interceptorType.Elem().Name())
+					if !logged {
+						log.Printf("[Bootstrap] Route Interceptor %s가 컨테이너에서 생성됐습니다.", interceptorType.Elem().Name())
+						loggedRouteInterceptors[interceptorType] = true
+					}
+
 					inst, err := container.Resolve(interceptorType)
 					if err != nil {
 						panic(err)
 					}
 					resolved[i] = inst.(core.Interceptor)
 				} else {
-					log.Printf("[Bootstrap] Route Interceptor %T가 인스턴스에서 사용됩니다.", interceptor)
+					if !logged {
+						log.Printf("[Bootstrap] Route Interceptor %T가 인스턴스에서 사용됩니다.", interceptor)
+						loggedRouteInterceptors[interceptorType] = true
+					}
 					resolved[i] = interceptor
 				}
 			}
@@ -228,15 +240,19 @@ func Run(config Config) error {
 
 		log.Println("[Bootstrap] Interceptor 등록 시작")
 
-		uniqueInterceptors := make(map[reflect.Type]core.Interceptor)
-
-		// 전역 인터셉터 수집
+		// 전역 인터셉터 수집 (중복 타입은 최초 등록 순서를 유지)
+		seen := make(map[reflect.Type]struct{})
+		ordered := make([]core.Interceptor, 0, len(config.Interceptors))
 		for _, interceptor := range config.Interceptors {
 			t := reflect.TypeOf(interceptor)
-			uniqueInterceptors[t] = interceptor
+			if _, ok := seen[t]; ok {
+				continue
+			}
+			seen[t] = struct{}{}
+			ordered = append(ordered, interceptor)
 		}
 
-		for _, interceptor := range uniqueInterceptors {
+		for _, interceptor := range ordered {
 			v := reflect.ValueOf(interceptor)
 			t := reflect.TypeOf(interceptor)
 
