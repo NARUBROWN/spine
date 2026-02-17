@@ -50,6 +50,15 @@ func Run(config Config) error {
 	// 컨테이너 생성
 	container := container.New()
 
+	log.Printf("[Bootstrap] 생성자 등록 시작 (%d개)", len(config.Constructors))
+	// 생성자 등록 (HTTP/Consumer 공통)
+	for _, constructor := range config.Constructors {
+		log.Printf("[Bootstrap] 생성자 등록 : %T", constructor)
+		if err := container.RegisterConstructor(constructor); err != nil {
+			return err
+		}
+	}
+
 	// 이벤트 발행기 모음 (Kafka/RabbitMQ 등 옵션에 따라 채워짐)
 	var eventPublishers []eventPublish.EventPublisher
 
@@ -120,15 +129,6 @@ func Run(config Config) error {
 			}
 			prefix = strings.TrimSuffix(prefix, "/")
 			log.Printf("[Bootstrap] HTTP GlobalPrefix 적용: %s", prefix)
-		}
-
-		log.Printf("[Bootstrap] 생성자 등록 시작 (%d개)", len(config.Constructors))
-		// 생성자 등록
-		for _, constructor := range config.Constructors {
-			log.Printf("[Bootstrap] 생성자 등록 : %T", constructor)
-			if err := container.RegisterConstructor(constructor); err != nil {
-				return err
-			}
 		}
 
 		log.Printf("[Bootstrap] 라우터 구성 시작 (%d개 라우트)", len(config.Routes))
@@ -285,15 +285,6 @@ func Run(config Config) error {
 				httpErrCh <- err
 			}
 		}()
-	}
-
-	log.Printf("[Bootstrap] 생성자 등록 시작 (%d개)", len(config.Constructors))
-	// 생성자 등록
-	for _, constructor := range config.Constructors {
-		log.Printf("[Bootstrap] 생성자 등록 : %T", constructor)
-		if err := container.RegisterConstructor(constructor); err != nil {
-			return err
-		}
 	}
 
 	log.Println("[Bootstrap] 컨트롤러 의존성 Warm-up 시작")

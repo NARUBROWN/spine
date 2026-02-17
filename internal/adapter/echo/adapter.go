@@ -76,7 +76,8 @@ func (s *Server) handle(c echo.Context) error {
 
 	if err := s.pipeline.Execute(ctx); err != nil {
 		c.Logger().Errorf("pipeline error: %v", err)
-		return err
+		// 파이프라인 내부에서 이미 응답이 작성되었으므로 Echo 기본 에러 핸들러로 중복 전달하지 않는다.
+		return nil
 	}
 	return nil
 }

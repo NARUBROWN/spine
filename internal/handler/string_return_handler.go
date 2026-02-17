@@ -38,9 +38,18 @@ func (h *StringReturnHandler) Supports(returnType reflect.Type) bool {
 }
 
 func (h *StringReturnHandler) Handle(value any, ctx core.ExecutionContext) error {
-	resp, ok := value.(httpx.Response[string])
-	if !ok {
-		return fmt.Errorf("StringReturnHandler: 전달된 값이 httpx.Response[string] 타입이 아닙니다")
+	var resp httpx.Response[string]
+
+	switch v := value.(type) {
+	case httpx.Response[string]:
+		resp = v
+	case *httpx.Response[string]:
+		if v == nil {
+			return fmt.Errorf("StringReturnHandler: nil *httpx.Response[string]는 처리할 수 없습니다")
+		}
+		resp = *v
+	default:
+		return fmt.Errorf("StringReturnHandler: 전달된 값이 httpx.Response[string] 또는 *httpx.Response[string] 타입이 아닙니다: %T", value)
 	}
 
 	rwAny, ok := ctx.Get("spine.response_writer")

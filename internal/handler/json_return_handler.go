@@ -40,6 +40,13 @@ func (h *JSONReturnHandler) Supports(returnType reflect.Type) bool {
 
 func (h *JSONReturnHandler) Handle(value any, ctx core.ExecutionContext) error {
 	val := reflect.ValueOf(value)
+	if val.Kind() == reflect.Pointer {
+		if val.IsNil() {
+			return fmt.Errorf("JSONReturnHandler: nil *httpx.Response[*]는 처리할 수 없습니다")
+		}
+		val = val.Elem()
+	}
+
 	if val.Kind() != reflect.Struct {
 		return fmt.Errorf("JSONReturnHandler: value는 struct여야 합니다")
 	}
