@@ -1,6 +1,8 @@
 package spine
 
 import (
+	"strings"
+
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/bootstrap"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
@@ -40,6 +42,9 @@ func (a *app) Constructor(constructors ...any) {
 }
 
 func (a *app) Route(method string, path string, handler any, opts ...router.RouteOption) {
+	// HTTP 메서드를 대문자로 변환해 라우팅 시 대소문자 불일치 문제를 방지합니다.
+	method = strings.ToUpper(strings.TrimSpace(method))
+
 	spec := router.RouteSpec{
 		Method:  method,
 		Path:    path,
