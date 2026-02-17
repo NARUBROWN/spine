@@ -274,7 +274,8 @@ func Run(config Config) error {
 
 		log.Println("[Bootstrap] HTTP 어댑터 마운트")
 		// Echo Adapter
-		server = httpEngine.NewServer(httpPipeline, config.Address, config.TransportHooks)
+		recoverEnabled := config.HTTP == nil || !config.HTTP.DisableRecover
+		server = httpEngine.NewServer(httpPipeline, config.Address, config.TransportHooks, recoverEnabled)
 		server.Mount()
 
 		log.Printf("[Bootstrap] 서버 리스닝 시작: %s", config.Address)

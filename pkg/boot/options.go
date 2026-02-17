@@ -45,4 +45,7 @@ type HTTPOptions struct {
 	// HTTP API 전역 Prefix (예: "/api/v1")
 	// 빈 값이면 Prefix를 적용하지 않습니다.
 	GlobalPrefix string
+
+	// Recover 미들웨어 비활성화 여부 (기본: false = 활성화)
+	DisableRecover bool
 }

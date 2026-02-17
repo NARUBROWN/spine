@@ -5,6 +5,7 @@ import (
 
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
 )
 
@@ -15,8 +16,8 @@ type Server struct {
 	transportHooks []func(any)
 }
 
-func NewServer(pipeline *pipeline.Pipeline, address string, transportHooks []func(any)) *Server {
-	e := newEcho()
+func NewServer(pipeline *pipeline.Pipeline, address string, transportHooks []func(any), recoverEnabled bool) *Server {
+	e := newEcho(recoverEnabled)
 	for _, hook := range transportHooks {
 		hook(e)
 	}
@@ -29,11 +30,14 @@ func NewServer(pipeline *pipeline.Pipeline, address string, transportHooks []fun
 	}
 }
 
-func newEcho() *echo.Echo {
+func newEcho(recoverEnabled bool) *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
 	e.Logger.SetLevel(log.ERROR)
+	if recoverEnabled {
+		e.Use(middleware.Recover())
+	}
 	return e
 }
 
