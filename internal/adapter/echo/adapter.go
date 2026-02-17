@@ -2,10 +2,10 @@ package echo
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
 )
 
@@ -36,9 +36,26 @@ func newEcho(recoverEnabled bool) *echo.Echo {
 	e.HidePort = true
 	e.Logger.SetLevel(log.ERROR)
 	if recoverEnabled {
-		e.Use(middleware.Recover())
+		e.Use(simpleRecover())
 	}
 	return e
+}
+
+// simpleRecover는 외부 의존 없이 panic을 500으로 변환하는 최소한의 미들웨어입니다.
+func simpleRecover() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			defer func() {
+				if r := recover(); r != nil {
+					c.Logger().Errorf("panic recovered: %v", r)
+					_ = c.JSON(http.StatusInternalServerError, map[string]any{
+						"message": "Internal server error",
+					})
+				}
+			}()
+			return next(c)
+		}
+	}
 }
 
 func (s *Server) Mount() {
