@@ -192,9 +192,17 @@ func (p *Pipeline) handleReturn(ctx core.ExecutionContext, results []any) error 
 			resultType := reflect.TypeOf(result)
 			for _, h := range p.returnHandlers {
 				if h.Supports(resultType) {
-					return h.Handle(result, ctx)
+					if err := h.Handle(result, ctx); err != nil {
+						return err
+					}
+					// error 반환값은 여기서 소비하고 종료한다.
+					return nil
 				}
 			}
+			return fmt.Errorf(
+				"error 반환값을 처리할 ReturnValueHandler가 없습니다. (%s)",
+				resultType.String(),
+			)
 		}
 	}
 

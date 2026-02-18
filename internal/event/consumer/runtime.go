@@ -144,10 +144,3 @@ func (r *Runtime) Stop() {
 		log.Printf("[Event Consumer] 모든 컨슈머를 중지했습니다.")
 	})
 }
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
