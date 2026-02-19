@@ -66,6 +66,19 @@ func (r *testRouter) Route(ctx core.ExecutionContext) (core.HandlerMeta, error) 
 	return r.meta, nil
 }
 
+type countingRouter struct {
+	called int
+	err    error
+}
+
+func (r *countingRouter) Route(ctx core.ExecutionContext) (core.HandlerMeta, error) {
+	r.called++
+	if r.err != nil {
+		return core.HandlerMeta{}, r.err
+	}
+	return core.HandlerMeta{}, nil
+}
+
 type testInterceptor struct {
 	name   string
 	events *[]string
@@ -281,6 +294,33 @@ func TestExecute_AbortByInterceptor(t *testing.T) {
 	}
 
 	expected := []string{"pre:global", "pre:route", "after:route", "after:global"}
+	if len(events) != len(expected) {
+		t.Fatalf("예상하지 못한 인터셉터 이벤트 개수입니다: %v", events)
+	}
+	for i := range expected {
+		if events[i] != expected[i] {
+			t.Fatalf("이벤트 순서가 예상과 다릅니다 (인덱스 %d): 실제 %s, 기대 %s", i, events[i], expected[i])
+		}
+	}
+}
+
+func TestExecute_GlobalInterceptorCanAbortBeforeRouting(t *testing.T) {
+	route := &countingRouter{err: errors.New("route should not be called")}
+	p := NewPipeline(route, invoker.NewInvoker(container.New()))
+
+	events := []string{}
+	globalInterceptor := &testInterceptor{name: "global", events: &events, preErr: core.ErrAbortPipeline}
+	p.AddInterceptor(globalInterceptor)
+
+	err := p.Execute(newTestExecutionContext())
+	if err != nil {
+		t.Fatalf("전역 인터셉터 중단은 에러 없이 종료되어야 합니다. 실제 에러: %v", err)
+	}
+	if route.called != 0 {
+		t.Fatalf("전역 인터셉터가 중단하면 라우터는 호출되면 안 됩니다. 실제 호출 횟수: %d", route.called)
+	}
+
+	expected := []string{"pre:global", "after:global"}
 	if len(events) != len(expected) {
 		t.Fatalf("예상하지 못한 인터셉터 이벤트 개수입니다: %v", events)
 	}
