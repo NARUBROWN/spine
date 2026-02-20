@@ -2,8 +2,6 @@ package consumer
 
 import (
 	"context"
-	"errors"
-	"mime/multipart"
 
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/event/publish"
@@ -43,18 +41,6 @@ func (c *ConsumerRequestContextImpl) Payload() []byte {
 
 func (c *ConsumerRequestContextImpl) EventBus() publish.EventBus {
 	return c.eventBus
-}
-
-func (c *ConsumerRequestContextImpl) Bind(out any) error {
-	return errors.New("ConsumerRequestContext에서는 Bind를 지원하지 않습니다")
-}
-
-func (c *ConsumerRequestContextImpl) MultipartForm() (*multipart.Form, error) {
-	return nil, errors.New("ConsumerRequestContext에서는 Multipart를 지원하지 않습니다")
-}
-
-func (c *ConsumerRequestContextImpl) Request() core.RequestContext {
-	return c
 }
 
 func (c *ConsumerRequestContextImpl) Get(key string) (any, bool) {

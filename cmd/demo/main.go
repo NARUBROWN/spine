@@ -17,6 +17,7 @@ func main() {
 		NewUserController,
 		NewOrderConsumer,
 		NewCommonController,
+		NewChatController,
 	)
 
 	// 라우트 등록, 라우터 단위 인터셉터
@@ -80,6 +81,8 @@ func main() {
 		"stock.created",
 		(*OrderConsumer).OnCreatedRabbitMQ,
 	)
+
+	app.WebSocket().Register("/ws/chat", (*ChatController).OnMessage)
 
 	// EnableGracefulShutdown & ShutdownTimeout은 선택사항입니다.
 	app.Run(boot.Options{

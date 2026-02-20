@@ -26,7 +26,10 @@ import (
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/internal/resolver"
 	spineRouter "github.com/NARUBROWN/spine/internal/router"
+	"github.com/NARUBROWN/spine/internal/ws"
+	wsResolver "github.com/NARUBROWN/spine/internal/ws/resolver"
 	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/labstack/echo/v4"
 )
 
 type Config struct {
@@ -41,6 +44,7 @@ type Config struct {
 	RabbitMQ               *boot.RabbitMqOptions
 	ConsumerRegistry       *consumer.Registry
 	HTTP                   *boot.HTTPOptions
+	WebSocketRegistry      *ws.Registry
 }
 
 func Run(config Config) error {
@@ -115,6 +119,7 @@ func Run(config Config) error {
 	var server *httpEngine.Server
 	var httpErrCh chan error
 	var consumerErrCh chan error
+	var wsRuntime *ws.Runtime
 
 	if config.HTTP != nil {
 		prefix := config.HTTP.GlobalPrefix
@@ -274,6 +279,32 @@ func Run(config Config) error {
 		}
 
 		log.Println("[Bootstrap] HTTP 어댑터 마운트")
+
+		// WebSocket Runtime 구성
+		if config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0 {
+			log.Println("[Bootstrap] WebSocket 런타임 구성")
+
+			// WS 전용 ArgumentResolver 등록
+			wsPipeline := buildWSPipeline(container, config.WebSocketRegistry, dispatchHook)
+
+			wsRuntime = ws.NewRuntime(config.WebSocketRegistry, wsPipeline)
+			defer wsRuntime.Stop()
+
+			// Echo Transport Hook으로 마운트
+			config.TransportHooks = append(config.TransportHooks, func(e any) {
+				echoInstance, ok := e.(*echo.Echo)
+				if !ok {
+					return
+				}
+				for _, reg := range config.WebSocketRegistry.Registrations() {
+					echoInstance.GET(reg.Path, func(c echo.Context) error {
+						wsRuntime.HandleConn(c.Response().Writer, c.Request(), reg)
+						return nil
+					})
+				}
+			})
+		}
+
 		// Echo Adapter
 		recoverEnabled := config.HTTP == nil || !config.HTTP.DisableRecover
 		server = httpEngine.NewServer(httpPipeline, config.Address, config.TransportHooks, recoverEnabled)
@@ -394,6 +425,10 @@ func Run(config Config) error {
 		}
 
 		log.Println("[Bootstrap] 시스템 종료 감지. Graceful Shutdown 시작...")
+
+		if wsRuntime != nil {
+			wsRuntime.Stop()
+		}
 
 		timeout := config.ShutdownTimeout
 		if timeout == 0 {
@@ -521,7 +556,7 @@ ____/ /__  /_/ /  / _  / / /  __/
 
 func printBanner() {
 	fmt.Print(spineBanner)
-	log.Printf("[Bootstrap] Spine version: %s", "v0.4.0")
+	log.Printf("[Bootstrap] Spine version: %s", "v0.4.1")
 }
 
 func buildConsumerPipeline(container *container.Container, registry *consumer.Registry, dispatchHook *hook.EventDispatchHook) *pipeline.Pipeline {
@@ -545,4 +580,31 @@ func buildConsumerPipeline(container *container.Container, registry *consumer.Re
 	)
 
 	return consumerPipeline
+}
+
+func buildWSPipeline(
+	container *container.Container,
+	registry *ws.Registry,
+	dispatchHook *hook.EventDispatchHook,
+) *pipeline.Pipeline {
+	wsRouter := spineRouter.NewRouter()
+	for _, reg := range registry.Registrations() {
+		wsRouter.Register("WS", reg.Path, reg.Meta)
+	}
+
+	wsInvoker := invoker.NewInvoker(container)
+	wsPipeline := pipeline.NewPipeline(wsRouter, wsInvoker)
+
+	if dispatchHook != nil {
+		wsPipeline.AddPostExecutionHook(dispatchHook)
+	}
+
+	wsPipeline.AddArgumentResolver(
+		&resolver.StdContextResolver{},
+		&wsResolver.ConnectionIDResolver{},
+		&wsResolver.PayloadResolver{},
+		&wsResolver.DTOResolver{},
+	)
+
+	return wsPipeline
 }

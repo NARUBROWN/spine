@@ -88,7 +88,7 @@ func (r *Runtime) Start(ctx context.Context) {
 
 					eventBus := publish.NewEventBus()
 
-					// Consumer RequestContext 생성 (Execution Context)
+					// Consumer ExecutionContext 생성
 					reqCtx := NewRequestContext(ctx, msg, eventBus)
 
 					// 핸들러 실행

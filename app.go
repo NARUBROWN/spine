@@ -7,6 +7,7 @@ import (
 	"github.com/NARUBROWN/spine/internal/bootstrap"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	"github.com/NARUBROWN/spine/internal/router"
+	"github.com/NARUBROWN/spine/internal/ws"
 	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
@@ -23,14 +24,17 @@ type App interface {
 	Run(opts boot.Options) error
 	// 이벤트 소비자 레지스트리 반환
 	Consumers() *consumer.Registry
+	// 웹 소켓 레지스트리 반환
+	WebSocket() *ws.Registry
 }
 
 type app struct {
-	constructors     []any
-	routes           []router.RouteSpec
-	interceptors     []core.Interceptor
-	transportHooks   []func(any)
-	consumerRegistry *consumer.Registry
+	constructors      []any
+	routes            []router.RouteSpec
+	interceptors      []core.Interceptor
+	transportHooks    []func(any)
+	consumerRegistry  *consumer.Registry
+	websocketRegistry *ws.Registry
 }
 
 func New() App {
@@ -78,6 +82,7 @@ func (a *app) Run(opts boot.Options) error {
 		Kafka:                  opts.Kafka,
 		RabbitMQ:               opts.RabbitMQ,
 		ConsumerRegistry:       a.consumerRegistry,
+		WebSocketRegistry:      a.websocketRegistry,
 		HTTP:                   opts.HTTP,
 	}
 
@@ -89,4 +94,11 @@ func (a *app) Consumers() *consumer.Registry {
 		a.consumerRegistry = consumer.NewRegistry()
 	}
 	return a.consumerRegistry
+}
+
+func (a *app) WebSocket() *ws.Registry {
+	if a.websocketRegistry == nil {
+		a.websocketRegistry = ws.NewRegistry()
+	}
+	return a.websocketRegistry
 }

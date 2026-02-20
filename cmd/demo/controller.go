@@ -15,11 +15,14 @@ import (
 	"github.com/NARUBROWN/spine/pkg/path"
 	"github.com/NARUBROWN/spine/pkg/query"
 	"github.com/NARUBROWN/spine/pkg/spine"
+	"github.com/NARUBROWN/spine/pkg/ws"
 )
 
 type UserController struct{}
 
 type CommonController struct{}
+
+type ChatController struct{}
 
 func NewUserController() *UserController {
 	return &UserController{}
@@ -27,6 +30,10 @@ func NewUserController() *UserController {
 
 func NewCommonController() *CommonController {
 	return &CommonController{}
+}
+
+func NewChatController() *ChatController {
+	return &ChatController{}
 }
 
 type User struct {
@@ -142,4 +149,12 @@ func (c *CommonController) GetAvatar() httpx.Binary {
 		ContentType: "image/png",
 		Data:        data,
 	}
+}
+
+type ChatMessage struct {
+	Message string `json:"message"`
+}
+
+func (c *ChatController) OnMessage(ctx context.Context, connID ws.ConnectionID, msg ChatMessage) error {
+	return ws.Send(ctx, ws.TextMessage, []byte(msg.Message))
 }

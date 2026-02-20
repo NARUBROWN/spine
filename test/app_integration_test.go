@@ -72,6 +72,23 @@ func newTestHandlerFromApp(t *testing.T, app spine.App) http.Handler {
 		t.Fatalf("spine 앱 시작 타임아웃")
 	}
 
+	// Transport hook은 라우트 마운트 이전에 호출될 수 있으므로,
+	// 테스트에서는 마운트 완료 시점까지 짧게 대기해 404 레이스를 제거한다.
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		req := httptest.NewRequest("GET", "/hello", nil)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+
+		if rec.Result().StatusCode == http.StatusOK {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("핸들러 준비 타임아웃: /hello 상태=%d", rec.Result().StatusCode)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
 	t.Cleanup(func() {
 		stopped := false
 		select {

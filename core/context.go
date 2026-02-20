@@ -5,16 +5,6 @@ import (
 	"mime/multipart"
 )
 
-/*
-RequestContext
-- Resolver 공통 최소 계약
-- HTTP / Consumer / gRPC 공통
-*/
-type RequestContext interface {
-	ContextCarrier
-	EventBusCarrier
-}
-
 type ContextCarrier interface {
 	Context() context.Context
 }
@@ -54,10 +44,11 @@ type ControllerContext interface {
 
 /*
 HttpRequestContext
-- HTTP 전용 RequestContext 확장
+- HTTP 전용 Context 계약
 */
 type HttpRequestContext interface {
-	RequestContext
+	ContextCarrier
+	EventBusCarrier
 
 	// 개별 접근
 	Param(name string) string
@@ -81,8 +72,21 @@ ConsumerRequestContext
 - Event Consumer 전용 Context
 */
 type ConsumerRequestContext interface {
-	RequestContext
+	ContextCarrier
+	EventBusCarrier
 
 	EventName() string
+	Payload() []byte
+}
+
+/*
+WebSocketContext
+- WebSocket 전용 ExecutionContext 확장
+*/
+type WebSocketContext interface {
+	ExecutionContext
+
+	ConnID() string
+	MessageType() int
 	Payload() []byte
 }
