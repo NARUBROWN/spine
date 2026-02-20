@@ -20,6 +20,8 @@ type App interface {
 	Interceptor(interceptors ...core.Interceptor)
 	// HTTP Transport 확장 (Echo 등)
 	Transport(fn func(any))
+	// 독립 실행되는 Custom Transport 등록
+	RegisterTransport(t core.CustomTransport)
 	// 실행
 	Run(opts boot.Options) error
 	// 이벤트 소비자 레지스트리 반환
@@ -33,6 +35,7 @@ type app struct {
 	routes            []router.RouteSpec
 	interceptors      []core.Interceptor
 	transportHooks    []func(any)
+	customTransports  []core.CustomTransport
 	consumerRegistry  *consumer.Registry
 	websocketRegistry *ws.Registry
 }
@@ -70,6 +73,10 @@ func (a *app) Transport(fn func(any)) {
 	a.transportHooks = append(a.transportHooks, fn)
 }
 
+func (a *app) RegisterTransport(t core.CustomTransport) {
+	a.customTransports = append(a.customTransports, t)
+}
+
 func (a *app) Run(opts boot.Options) error {
 	internalConfig := bootstrap.Config{
 		Address:                opts.Address,
@@ -77,6 +84,7 @@ func (a *app) Run(opts boot.Options) error {
 		Routes:                 a.routes,
 		Interceptors:           a.interceptors,
 		TransportHooks:         a.transportHooks,
+		CustomTransports:       a.customTransports,
 		EnableGracefulShutdown: opts.EnableGracefulShutdown,
 		ShutdownTimeout:        opts.ShutdownTimeout,
 		Kafka:                  opts.Kafka,

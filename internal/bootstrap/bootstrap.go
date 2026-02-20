@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"reflect"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -38,6 +39,7 @@ type Config struct {
 	Routes                 []spineRouter.RouteSpec
 	Interceptors           []core.Interceptor
 	TransportHooks         []func(any)
+	CustomTransports       []core.CustomTransport
 	EnableGracefulShutdown bool
 	ShutdownTimeout        time.Duration
 	Kafka                  *boot.KafkaOptions
@@ -45,6 +47,14 @@ type Config struct {
 	ConsumerRegistry       *consumer.Registry
 	HTTP                   *boot.HTTPOptions
 	WebSocketRegistry      *ws.Registry
+}
+
+type containerFacade struct {
+	container *container.Container
+}
+
+func (f *containerFacade) Resolve(t reflect.Type) (any, error) {
+	return f.container.Resolve(t)
 }
 
 func Run(config Config) error {
@@ -119,7 +129,56 @@ func Run(config Config) error {
 	var server *httpEngine.Server
 	var httpErrCh chan error
 	var consumerErrCh chan error
+	var customTransportErrCh chan error
 	var wsRuntime *ws.Runtime
+
+	stopCustomTransportOnce := sync.Once{}
+	stopCustomTransports := func(ctx context.Context) {
+		stopCustomTransportOnce.Do(func() {
+			for _, transport := range config.CustomTransports {
+				if transport == nil {
+					continue
+				}
+				if err := transport.Stop(ctx); err != nil {
+					log.Printf("[Bootstrap] CustomTransport 종료 실패: %v", err)
+				}
+			}
+		})
+	}
+
+	if len(config.CustomTransports) > 0 {
+		log.Printf("[Bootstrap] CustomTransport 초기화 시작 (%d개)", len(config.CustomTransports))
+		facade := &containerFacade{container: container}
+
+		for i, transport := range config.CustomTransports {
+			if transport == nil {
+				return fmt.Errorf("[Bootstrap] CustomTransport[%d]가 nil입니다", i)
+			}
+			if err := transport.Init(facade); err != nil {
+				return fmt.Errorf("[Bootstrap] CustomTransport Init 실패: %w", err)
+			}
+		}
+
+		customTransportErrCh = make(chan error, len(config.CustomTransports))
+		for _, transport := range config.CustomTransports {
+			transport := transport
+			go func() {
+				if err := transport.Start(); err != nil {
+					customTransportErrCh <- err
+				}
+			}()
+		}
+
+		defer func() {
+			timeout := config.ShutdownTimeout
+			if timeout == 0 {
+				timeout = 10 * time.Second
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+			stopCustomTransports(ctx)
+		}()
+	}
 
 	if config.HTTP != nil {
 		prefix := config.HTTP.GlobalPrefix
@@ -408,6 +467,8 @@ func Run(config Config) error {
 				return nil
 			case err := <-consumerErrCh:
 				return err
+			case err := <-customTransportErrCh:
+				return err
 			}
 		}
 
@@ -420,6 +481,8 @@ func Run(config Config) error {
 				return err
 			}
 		case err := <-consumerErrCh:
+			return err
+		case err := <-customTransportErrCh:
 			return err
 		case <-quit:
 		}
@@ -438,6 +501,8 @@ func Run(config Config) error {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 
+		stopCustomTransports(ctx)
+
 		if err := server.Shutdown(ctx); err != nil {
 			return fmt.Errorf("[Bootstrap] 서버 강제 종료 발생: %v", err)
 		}
@@ -446,15 +511,25 @@ func Run(config Config) error {
 	}
 
 	// HTTP가 비활성화된 상태에서 이벤트 컨슈머만 실행 중이면 종료 신호를 기다린다.
-	if config.HTTP == nil && consumerStarted {
+	if config.HTTP == nil && (consumerStarted || customTransportErrCh != nil) {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 		select {
 		case <-quit:
-			log.Println("[Bootstrap] 시스템 종료 감지. 이벤트 컨슈머 중지...")
+			log.Println("[Bootstrap] 시스템 종료 감지. 런타임 중지...")
 		case err := <-consumerErrCh:
 			return err
+		case err := <-customTransportErrCh:
+			return err
 		}
+
+		timeout := config.ShutdownTimeout
+		if timeout == 0 {
+			timeout = 10 * time.Second
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		stopCustomTransports(ctx)
 	}
 
 	return nil
