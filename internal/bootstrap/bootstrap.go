@@ -161,7 +161,6 @@ func Run(config Config) error {
 
 		customTransportErrCh = make(chan error, len(config.CustomTransports))
 		for _, transport := range config.CustomTransports {
-			transport := transport
 			go func() {
 				if err := transport.Start(); err != nil {
 					customTransportErrCh <- err
@@ -196,7 +195,7 @@ func Run(config Config) error {
 			log.Printf("[Bootstrap] HTTP GlobalPrefix 적용: %s", prefix)
 		}
 
-		log.Printf("[Bootstrap] 라우터 구성 시작 (%d개 라우트)", len(config.Routes))
+		log.Printf("[Bootstrap] HTTP 라우트 구성 시작 (%d개 라우트)", len(config.Routes))
 		// Router 생성 및 라우트 등록
 		router := spineRouter.NewRouter()
 
@@ -205,7 +204,6 @@ func Run(config Config) error {
 		loggedRouteInterceptors := make(map[reflect.Type]bool)
 
 		for _, route := range config.Routes {
-			log.Printf("[Bootstrap] 라우터 등록 : (%s) %s", route.Method, route.Path)
 			meta, err := spineRouter.NewHandlerMeta(route.Handler)
 			if err != nil {
 				return err
@@ -241,6 +239,7 @@ func Run(config Config) error {
 
 			meta.Interceptors = resolved
 			fullPath := joinPath(prefix, route.Path)
+			log.Printf("[Bootstrap] HTTP 라우트 등록 : (%s) %s", route.Method, fullPath)
 
 			assertNoAmbiguousRoute(route.Method, fullPath, registeredPathsByMethod[route.Method])
 			registeredPathsByMethod[route.Method] = append(registeredPathsByMethod[route.Method], fullPath)
@@ -341,7 +340,9 @@ func Run(config Config) error {
 
 		// WebSocket Runtime 구성
 		if config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0 {
+			wsRegistrations := config.WebSocketRegistry.Registrations()
 			log.Println("[Bootstrap] WebSocket 런타임 구성")
+			log.Printf("[Bootstrap] WebSocket 라우트 구성 시작 (%d개 라우트)", len(wsRegistrations))
 
 			// WS 전용 ArgumentResolver 등록
 			wsPipeline := buildWSPipeline(container, config.WebSocketRegistry, dispatchHook)
@@ -355,7 +356,8 @@ func Run(config Config) error {
 				if !ok {
 					return
 				}
-				for _, reg := range config.WebSocketRegistry.Registrations() {
+				for _, reg := range wsRegistrations {
+					log.Printf("[Bootstrap] WebSocket 라우트 등록 : %s", reg.Path)
 					echoInstance.GET(reg.Path, func(c echo.Context) error {
 						wsRuntime.HandleConn(c.Response().Writer, c.Request(), reg)
 						return nil
@@ -381,8 +383,11 @@ func Run(config Config) error {
 	// Consumer 컨트롤러 Warm-up
 	if config.ConsumerRegistry != nil {
 		log.Println("[Bootstrap] Consumer 컨트롤러 의존성 Warm-up 시작")
+		consumerRegistrations := config.ConsumerRegistry.Registrations()
+		log.Printf("[Bootstrap] Consumer 라우트 구성 시작 (%d개 라우트)", len(consumerRegistrations))
 		var consumerTypes []reflect.Type
-		for _, reg := range config.ConsumerRegistry.Registrations() {
+		for _, reg := range consumerRegistrations {
+			log.Printf("[Bootstrap] Consumer 라우트 등록 : %s", reg.Topic)
 			consumerTypes = append(consumerTypes, reg.Meta.ControllerType)
 		}
 		if err := container.WarmUp(consumerTypes); err != nil {
@@ -564,7 +569,7 @@ func assertNoAmbiguousRoute(method, newPath string, existing []string) {
 
 		// 각 segment가 충돌 없이 겹치는지(교집합 존재) 검사
 		overlaps := true
-		for i := 0; i < len(newSegs); i++ {
+		for i := range newSegs {
 			a := newSegs[i]
 			b := oldSegs[i]
 
@@ -631,7 +636,7 @@ ____/ /__  /_/ /  / _  / / /  __/
 
 func printBanner() {
 	fmt.Print(spineBanner)
-	log.Printf("[Bootstrap] Spine version: %s", "v0.4.1")
+	log.Printf("[Bootstrap] Spine version: %s", "v0.4.2")
 }
 
 func buildConsumerPipeline(container *container.Container, registry *consumer.Registry, dispatchHook *hook.EventDispatchHook) *pipeline.Pipeline {
