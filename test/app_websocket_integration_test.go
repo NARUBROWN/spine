@@ -44,7 +44,9 @@ func setupWebSocketApp() spine.App {
 	app := spine.New()
 	app.Constructor(func() *wsIntegrationController { return &wsIntegrationController{} })
 	app.Route("GET", "/hello", (*wsIntegrationController).Hello)
-	app.WebSocket().Register("/ws/echo", (*wsIntegrationController).Echo)
+	if err := app.WebSocket().Register("/ws/echo", (*wsIntegrationController).Echo); err != nil {
+		panic(err)
+	}
 	return app
 }
 

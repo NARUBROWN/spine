@@ -30,6 +30,9 @@ func NewKafkaPublisher(opts *boot.KafkaOptions) (*KafkaPublisher, error) {
 	if len(opts.Brokers) == 0 {
 		return nil, errors.New("Kafka Brokers가 설정되지 않았습니다")
 	}
+	if opts.Write == nil {
+		return nil, errors.New("Kafka Write 옵션이 설정되지 않았습니다")
+	}
 
 	log.Println("[Kafka][Write] 이벤트 발행기 초기화 완료")
 

@@ -3,6 +3,8 @@ package container
 import (
 	"reflect"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -23,6 +25,10 @@ type testIface interface {
 type testImpl struct{}
 
 func (t *testImpl) Name() string { return "impl" }
+
+type otherTestImpl struct{}
+
+func (t *otherTestImpl) Name() string { return "other" }
 
 type cycleA struct {
 	b *cycleB
@@ -144,5 +150,62 @@ func TestWarmUp_DeduplicatesAndInitializesTypes(t *testing.T) {
 
 	if handlerCalls != 1 {
 		t.Fatalf("WarmUp은 타입별로 한 번만 초기화해야 합니다. 실제 호출 횟수: %d", handlerCalls)
+	}
+}
+
+func TestResolve_ConcurrentResolveBuildsSingletonOnce(t *testing.T) {
+	c := New()
+
+	start := make(chan struct{})
+	var constructorCalls atomic.Int32
+
+	if err := c.RegisterConstructor(func() *testRepo {
+		constructorCalls.Add(1)
+		<-start
+		return &testRepo{}
+	}); err != nil {
+		t.Fatalf("생성자 등록 실패: %v", err)
+	}
+
+	typeOfRepo := reflect.TypeOf(&testRepo{})
+	results := make([]any, 2)
+	errs := make([]error, 2)
+
+	var wg sync.WaitGroup
+	for i := range 2 {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			results[idx], errs[idx] = c.Resolve(typeOfRepo)
+		}(i)
+	}
+
+	close(start)
+	wg.Wait()
+
+	for _, err := range errs {
+		if err != nil {
+			t.Fatalf("동시 Resolve 실패: %v", err)
+		}
+	}
+	if constructorCalls.Load() != 1 {
+		t.Fatalf("생성자는 한 번만 호출되어야 합니다. 실제=%d", constructorCalls.Load())
+	}
+	if results[0] != results[1] {
+		t.Fatal("동시 Resolve도 동일 싱글톤을 반환해야 합니다")
+	}
+}
+
+func TestResolve_InterfaceWithMultipleImplementationsReturnsError(t *testing.T) {
+	c := New()
+	_ = c.RegisterConstructor(func() *testImpl { return &testImpl{} })
+	_ = c.RegisterConstructor(func() *otherTestImpl { return &otherTestImpl{} })
+
+	_, err := c.Resolve(reflect.TypeOf((*testIface)(nil)).Elem())
+	if err == nil {
+		t.Fatal("구현체가 여러 개면 에러가 발생해야 합니다")
+	}
+	if !strings.Contains(err.Error(), "여러 개 등록") {
+		t.Fatalf("예상하지 못한 에러입니다: %v", err)
 	}
 }

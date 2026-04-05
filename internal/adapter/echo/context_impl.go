@@ -19,10 +19,8 @@ type echoContext struct {
 
 func NewContext(c echo.Context) core.ExecutionContext {
 	return &echoContext{
-		echo:     c,
-		reqCtx:   c.Request().Context(), // 요청시 생성되는 Context
-		store:    make(map[string]any),
-		eventBus: publish.NewEventBus(),
+		echo:   c,
+		reqCtx: c.Request().Context(), // 요청시 생성되는 Context
 	}
 }
 
@@ -35,6 +33,9 @@ func (e *echoContext) Bind(out any) error {
 }
 
 func (e *echoContext) Get(key string) (any, bool) {
+	if e.store == nil {
+		return nil, false
+	}
 	value, ok := e.store[key]
 	return value, ok
 }
@@ -64,6 +65,9 @@ func (e *echoContext) Query(name string) string {
 }
 
 func (e *echoContext) Set(key string, value any) {
+	if e.store == nil {
+		e.store = make(map[string]any)
+	}
 	e.store[key] = value
 }
 
@@ -125,5 +129,8 @@ func (e *echoContext) MultipartForm() (*multipart.Form, error) {
 }
 
 func (c *echoContext) EventBus() publish.EventBus {
+	if c.eventBus == nil {
+		c.eventBus = publish.NewEventBus()
+	}
 	return c.eventBus
 }

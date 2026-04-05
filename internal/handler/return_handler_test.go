@@ -184,6 +184,17 @@ func TestBinaryReturnHandler_Handle(t *testing.T) {
 	if writer.headers["Content-Type"] != "image/png" || writer.headers["X-Bin"] != "yes" {
 		t.Fatalf("헤더가 설정되지 않았습니다: %v", writer.headers)
 	}
+
+	ptrBin := &httpx.Binary{
+		ContentType: "application/octet-stream",
+		Data:        []byte{4, 5, 6},
+	}
+	if err := h.Handle(ptrBin, ctx); err != nil {
+		t.Fatalf("포인터 binary 처리 실패: %v", err)
+	}
+	if string(writer.bytesBody) != string([]byte{4, 5, 6}) {
+		t.Fatalf("포인터 binary 응답이 잘못되었습니다: %v", writer.bytesBody)
+	}
 }
 
 func TestBinaryReturnHandler_InvalidType(t *testing.T) {
@@ -240,6 +251,14 @@ func TestRedirectReturnValueHandler_Handle(t *testing.T) {
 	}
 	if len(writer.setCookies) != 1 {
 		t.Fatalf("쿠키가 기록되어야 합니다: %v", writer.setCookies)
+	}
+
+	ptrRedirect := &httpx.Redirect{Location: "/home"}
+	if err := h.Handle(ptrRedirect, ctx); err != nil {
+		t.Fatalf("포인터 redirect 처리 실패: %v", err)
+	}
+	if writer.headers["Location"] != "/home" {
+		t.Fatalf("포인터 redirect location이 잘못되었습니다: %v", writer.headers)
 	}
 }
 

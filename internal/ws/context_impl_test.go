@@ -71,3 +71,26 @@ func TestWSExecutionContext_ContextProvidesSender(t *testing.T) {
 		t.Fatalf("전송 payload가 잘못되었습니다: %s", string(gotPayload))
 	}
 }
+
+func TestWSExecutionContext_ExposesRouterPathParams(t *testing.T) {
+	ctx := NewWSExecutionContext(
+		context.Background(),
+		"conn-1",
+		"/ws/rooms/7",
+		pkgws.TextMessage,
+		nil,
+		internalpublish.NewEventBus(),
+		func(int, []byte) error { return nil },
+	)
+
+	ctx.Set("spine.params", map[string]string{"roomId": "7"})
+	ctx.Set("spine.pathKeys", []string{"roomId"})
+
+	if got := ctx.Params(); got["roomId"] != "7" {
+		t.Fatalf("path params가 노출되어야 합니다: %v", got)
+	}
+	keys := ctx.PathKeys()
+	if len(keys) != 1 || keys[0] != "roomId" {
+		t.Fatalf("path keys가 잘못되었습니다: %v", keys)
+	}
+}

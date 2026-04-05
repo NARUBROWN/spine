@@ -110,7 +110,9 @@ func waitSignal(t *testing.T, ch <-chan string) string {
 
 func TestRuntime_NackOnPostHookFailure(t *testing.T) {
 	registry := NewRegistry()
-	registry.Register("topic", (*runtimeTestController).Handle)
+	if err := registry.Register("topic", (*runtimeTestController).Handle); err != nil {
+		t.Fatalf("등록 실패: %v", err)
+	}
 
 	signals := make(chan string, 2)
 	msg := &Message{
@@ -142,7 +144,9 @@ func TestRuntime_NackOnPostHookFailure(t *testing.T) {
 
 func TestRuntime_NackOnRecoveredPanic(t *testing.T) {
 	registry := NewRegistry()
-	registry.Register("topic", (*runtimeTestController).Panic)
+	if err := registry.Register("topic", (*runtimeTestController).Panic); err != nil {
+		t.Fatalf("등록 실패: %v", err)
+	}
 
 	signals := make(chan string, 2)
 	msg := &Message{

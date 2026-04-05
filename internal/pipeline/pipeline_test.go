@@ -83,6 +83,7 @@ type testInterceptor struct {
 	name   string
 	events *[]string
 	preErr error
+	after  func(core.HandlerMeta, error)
 }
 
 func (i *testInterceptor) PreHandle(ctx core.ExecutionContext, meta core.HandlerMeta) error {
@@ -94,6 +95,9 @@ func (i *testInterceptor) PostHandle(ctx core.ExecutionContext, meta core.Handle
 }
 func (i *testInterceptor) AfterCompletion(ctx core.ExecutionContext, meta core.HandlerMeta, err error) {
 	*i.events = append(*i.events, "after:"+i.name)
+	if i.after != nil {
+		i.after(meta, err)
+	}
 }
 
 type testArgumentResolver struct {
@@ -290,7 +294,12 @@ func TestExecute_PostHookFailurePreventsSuccessHandling(t *testing.T) {
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
 		handle: func(v any, ctx core.ExecutionContext) error {
 			handled = true
-			return nil
+			rwAny, ok := ctx.Get("spine.response_writer")
+			if !ok {
+				t.Fatal("response writer가 주입되어야 합니다")
+			}
+			rw := rwAny.(*testResponseWriter)
+			return rw.WriteStatus(204)
 		},
 	})
 
@@ -308,11 +317,11 @@ func TestExecute_PostHookFailurePreventsSuccessHandling(t *testing.T) {
 	if !postHook.called {
 		t.Fatal("post hook이 호출되어야 합니다")
 	}
-	if handled {
-		t.Fatal("post hook 실패 시 성공 응답은 작성되면 안 됩니다")
+	if !handled {
+		t.Fatal("성공 응답은 post hook 전에 작성되어야 합니다")
 	}
-	if writer.status != 500 {
-		t.Fatalf("실패 응답 상태 코드가 잘못되었습니다: %d", writer.status)
+	if writer.status != 204 {
+		t.Fatalf("성공 응답이 먼저 기록되어야 합니다: %d", writer.status)
 	}
 }
 
@@ -398,6 +407,37 @@ func TestExecute_GlobalInterceptorCanAbortBeforeRouting(t *testing.T) {
 	}
 }
 
+func TestExecute_GlobalAfterCompletionReceivesResolvedMeta(t *testing.T) {
+	controllerCalled := 0
+	p, meta := newPipelineWithController(t, "Handle", &controllerCalled)
+
+	var got core.HandlerMeta
+	events := []string{}
+	p.AddInterceptor(&testInterceptor{
+		name:   "global",
+		events: &events,
+		after: func(received core.HandlerMeta, err error) {
+			got = received
+		},
+	})
+	p.router = &testRouter{meta: meta}
+	p.AddArgumentResolver(&testArgumentResolver{
+		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
+		resolve:  func(ctx core.ExecutionContext, pm resolver.ParameterMeta) (any, error) { return 1, nil },
+	})
+	p.AddReturnValueHandler(&testReturnHandler{
+		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
+		handle:   func(v any, ctx core.ExecutionContext) error { return nil },
+	})
+
+	if err := p.Execute(newTestExecutionContext()); err != nil {
+		t.Fatalf("실행 실패: %v", err)
+	}
+	if got.Method.Name != meta.Method.Name || got.ControllerType != meta.ControllerType {
+		t.Fatalf("전역 AfterCompletion은 실제 meta를 받아야 합니다. got=%+v want=%+v", got, meta)
+	}
+}
+
 func TestExecute_MissingArgumentResolverReturnsError(t *testing.T) {
 	controllerCalled := 0
 	p, _ := newPipelineWithController(t, "Handle", &controllerCalled)
@@ -408,6 +448,37 @@ func TestExecute_MissingArgumentResolverReturnsError(t *testing.T) {
 	}
 	if controllerCalled != 0 {
 		t.Fatalf("컨트롤러가 호출되면 안 됩니다. 실제 호출 횟수: %d", controllerCalled)
+	}
+}
+
+func TestExecute_SuccessReturnFailureSkipsPostHooks(t *testing.T) {
+	controllerCalled := 0
+	p, _ := newPipelineWithController(t, "Handle", &controllerCalled)
+
+	p.AddArgumentResolver(&testArgumentResolver{
+		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
+		resolve:  func(ctx core.ExecutionContext, pm resolver.ParameterMeta) (any, error) { return 7, nil },
+	})
+	p.AddReturnValueHandler(&testReturnHandler{
+		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
+		handle: func(v any, ctx core.ExecutionContext) error {
+			return errors.New("write failed")
+		},
+	})
+
+	postHook := &testPostHook{}
+	p.AddPostExecutionHook(postHook)
+
+	ctx := newTestExecutionContext()
+	writer := &testResponseWriter{}
+	ctx.Set("spine.response_writer", writer)
+
+	err := p.Execute(ctx)
+	if err == nil {
+		t.Fatal("리턴 핸들러 실패는 에러여야 합니다")
+	}
+	if postHook.called {
+		t.Fatal("성공 응답 작성이 실패하면 post hook은 실행되면 안 됩니다")
 	}
 }
 
@@ -466,7 +537,7 @@ func TestBuildParameterMeta_AssignsPathKeysOnlyForPathTypes(t *testing.T) {
 		t.Fatal("Mixed 메서드를 찾을 수 없습니다")
 	}
 
-	metas := buildParameterMeta(method, ctx)
+	metas := buildParameterMeta(method, ctx.pathKeys)
 	if len(metas) != 3 {
 		t.Fatalf("예상하지 못한 메타 길이입니다: %d", len(metas))
 	}

@@ -36,7 +36,6 @@ func NewWSExecutionContext(ctx context.Context, connID string, path string, mess
 		messageType: messageType,
 		payload:     payload,
 		eventBus:    eventBus,
-		store:       make(map[string]any),
 	}
 }
 
@@ -49,10 +48,16 @@ func (w *WSExecutionContext) Context() context.Context {
 }
 
 func (w *WSExecutionContext) EventBus() core.EventBus {
+	if w.eventBus == nil {
+		w.eventBus = publish.NewEventBus()
+	}
 	return w.eventBus
 }
 
 func (w *WSExecutionContext) Get(key string) (any, bool) {
+	if w.store == nil {
+		return nil, false
+	}
 	v, ok := w.store[key]
 	return v, ok
 }
@@ -70,6 +75,15 @@ func (w *WSExecutionContext) Method() string {
 }
 
 func (w *WSExecutionContext) Params() map[string]string {
+	if raw, ok := w.store["spine.params"]; ok {
+		if params, ok := raw.(map[string]string); ok {
+			copyMap := make(map[string]string, len(params))
+			for k, v := range params {
+				copyMap[k] = v
+			}
+			return copyMap
+		}
+	}
 	return map[string]string{}
 }
 
@@ -78,6 +92,11 @@ func (w *WSExecutionContext) Path() string {
 }
 
 func (w *WSExecutionContext) PathKeys() []string {
+	if raw, ok := w.store["spine.pathKeys"]; ok {
+		if keys, ok := raw.([]string); ok {
+			return append([]string(nil), keys...)
+		}
+	}
 	return []string{}
 }
 
@@ -86,9 +105,12 @@ func (w *WSExecutionContext) Payload() []byte {
 }
 
 func (w *WSExecutionContext) Queries() map[string][]string {
-	return map[string][]string{}
+	return nil
 }
 
 func (w *WSExecutionContext) Set(key string, value any) {
+	if w.store == nil {
+		w.store = make(map[string]any)
+	}
 	w.store[key] = value
 }

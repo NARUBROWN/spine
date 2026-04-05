@@ -1,6 +1,7 @@
 package consumer
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/NARUBROWN/spine/core"
@@ -23,18 +24,18 @@ func NewRegistry() *Registry {
 	}
 }
 
-func (r *Registry) Register(topic string, target any) {
+func (r *Registry) Register(topic string, target any) error {
 	if topic == "" {
-		panic("consumer: 토픽이 빈 값일 수 없습니다")
+		return fmt.Errorf("consumer: 토픽이 빈 값일 수 없습니다")
 	}
 	if target == nil {
-		panic("consumer: target이 nil일 수 없습니다")
+		return fmt.Errorf("consumer: target이 nil일 수 없습니다")
 	}
 
 	meta, err := router.NewHandlerMeta(target)
 
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	r.mu.Lock()
@@ -43,6 +44,7 @@ func (r *Registry) Register(topic string, target any) {
 		Topic: topic,
 		Meta:  meta,
 	})
+	return nil
 }
 
 func (r *Registry) Registrations() []Registration {

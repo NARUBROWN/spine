@@ -40,63 +40,58 @@ func (t *testTransport) Stop(ctx context.Context) error {
 	return nil
 }
 
-func shouldPanic(t *testing.T, fn func()) {
-	t.Helper()
-	defer func() {
-		if recover() == nil {
-			t.Fatal("panic이 발생해야 합니다")
-		}
-	}()
-	fn()
-}
-
 func TestJoinPath(t *testing.T) {
-	if got := joinPath("", "users"); got != "/users" {
+	if got, err := joinPath("", "users"); err != nil || got != "/users" {
 		t.Fatalf("leading slash가 보정되어야 합니다: %s", got)
 	}
-	if got := joinPath("/api", "/users"); got != "/api/users" {
+	if got, err := joinPath("/api", "/users"); err != nil || got != "/api/users" {
 		t.Fatalf("prefix 결합이 잘못되었습니다: %s", got)
 	}
 }
 
-func TestJoinPath_EmptyPanics(t *testing.T) {
-	shouldPanic(t, func() {
-		joinPath("", "")
-	})
-}
-
-func TestAssertNoAmbiguousRoute(t *testing.T) {
-	shouldPanic(t, func() {
-		assertNoAmbiguousRoute("GET", "/users/:id", []string{"/users/me"})
-	})
-
-	assertNoAmbiguousRoute("GET", "/users/:id", []string{"/teams/me"})
-	assertNoAmbiguousRoute("GET", "/users/:id/posts", []string{"/users/me"})
-}
-
-func TestRun_InvalidGlobalPrefixPanics(t *testing.T) {
-	for _, prefix := range []string{"api", "/api/:id", "/api/*"} {
-		prefix := prefix
-		shouldPanic(t, func() {
-			_ = Run(Config{
-				HTTP: &boot.HTTPOptions{
-					GlobalPrefix: prefix,
-				},
-			})
-		})
+func TestJoinPath_EmptyReturnsError(t *testing.T) {
+	if _, err := joinPath("", ""); err == nil {
+		t.Fatal("빈 path는 에러여야 합니다")
 	}
 }
 
-func TestRun_AmbiguousRoutesPanics(t *testing.T) {
-	shouldPanic(t, func() {
-		_ = Run(Config{
-			HTTP: &boot.HTTPOptions{},
-			Routes: []spineRouter.RouteSpec{
-				{Method: "GET", Path: "/users/:id", Handler: (*testController).Handle},
-				{Method: "GET", Path: "/users/me", Handler: (*testController).Handle},
+func TestAssertNoAmbiguousRoute(t *testing.T) {
+	if err := assertNoAmbiguousRoute("GET", "/users/:id", []string{"/users/me"}); err == nil {
+		t.Fatal("모호한 라우트는 에러여야 합니다")
+	}
+	if err := assertNoAmbiguousRoute("GET", "/users/:id", []string{"/teams/me"}); err != nil {
+		t.Fatalf("예상하지 못한 에러입니다: %v", err)
+	}
+	if err := assertNoAmbiguousRoute("GET", "/users/:id/posts", []string{"/users/me"}); err != nil {
+		t.Fatalf("예상하지 못한 에러입니다: %v", err)
+	}
+}
+
+func TestRun_InvalidGlobalPrefixReturnsError(t *testing.T) {
+	for _, prefix := range []string{"api", "/api/:id", "/api/*"} {
+		prefix := prefix
+		err := Run(Config{
+			HTTP: &boot.HTTPOptions{
+				GlobalPrefix: prefix,
 			},
 		})
+		if err == nil {
+			t.Fatalf("잘못된 prefix는 에러여야 합니다: %s", prefix)
+		}
+	}
+}
+
+func TestRun_AmbiguousRoutesReturnsError(t *testing.T) {
+	err := Run(Config{
+		HTTP: &boot.HTTPOptions{},
+		Routes: []spineRouter.RouteSpec{
+			{Method: "GET", Path: "/users/:id", Handler: (*testController).Handle},
+			{Method: "GET", Path: "/users/me", Handler: (*testController).Handle},
+		},
 	})
+	if err == nil {
+		t.Fatal("모호한 라우트는 에러여야 합니다")
+	}
 }
 
 func TestRun_CustomTransportInitError(t *testing.T) {
@@ -132,5 +127,27 @@ func TestRun_CustomTransportStartError(t *testing.T) {
 	}
 	if transport.stopCalls.Load() != 1 {
 		t.Fatalf("Start 실패 후에도 Stop이 호출되어야 합니다: %d", transport.stopCalls.Load())
+	}
+}
+
+func TestRun_WarmUpResolveFailureReturnsError(t *testing.T) {
+	err := Run(Config{
+		HTTP: &boot.HTTPOptions{},
+		Routes: []spineRouter.RouteSpec{
+			{Method: "GET", Path: "/users", Handler: (*testController).Handle},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "Warm-up 실패") {
+		t.Fatalf("Warm-up 실패가 에러로 반환되어야 합니다: %v", err)
+	}
+}
+
+func TestRun_NilGlobalInterceptorReturnsError(t *testing.T) {
+	err := Run(Config{
+		HTTP:         &boot.HTTPOptions{},
+		Interceptors: []core.Interceptor{nil},
+	})
+	if err == nil || !strings.Contains(err.Error(), "Interceptor가 nil") {
+		t.Fatalf("nil 인터셉터는 에러여야 합니다: %v", err)
 	}
 }

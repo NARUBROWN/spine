@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/NARUBROWN/spine/pkg/boot"
 	eventpublish "github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/segmentio/kafka-go"
 )
@@ -49,5 +50,14 @@ func TestKafkaPublisher_PublishUsesTopicPrefix(t *testing.T) {
 	}
 	if writer.messages[0].Topic != "dev-orders.created" {
 		t.Fatalf("TopicPrefix가 반영되지 않았습니다: %s", writer.messages[0].Topic)
+	}
+}
+
+func TestNewKafkaPublisher_RequiresWriteOptions(t *testing.T) {
+	_, err := NewKafkaPublisher(&boot.KafkaOptions{
+		Brokers: []string{"localhost:9092"},
+	})
+	if err == nil {
+		t.Fatal("Write 옵션 누락 시 에러가 발생해야 합니다")
 	}
 }

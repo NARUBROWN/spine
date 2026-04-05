@@ -3,6 +3,7 @@ package rabbitmq
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 
@@ -18,6 +19,9 @@ type Writer struct {
 }
 
 func NewRabbitMqWriter(opts boot.RabbitMqOptions) (*Writer, error) {
+	if opts.Write == nil {
+		return nil, errors.New("RabbitMQ Write 옵션이 설정되지 않았습니다")
+	}
 
 	conn, err := amqp091.Dial(opts.URL)
 	if err != nil {

@@ -72,17 +72,23 @@ func main() {
 		}),
 	)
 
-	app.Consumers().Register(
+	if err := app.Consumers().Register(
 		"order.created",
 		(*OrderConsumer).OnCreatedKafka,
-	)
+	); err != nil {
+		panic(err)
+	}
 
-	app.Consumers().Register(
+	if err := app.Consumers().Register(
 		"stock.created",
 		(*OrderConsumer).OnCreatedRabbitMQ,
-	)
+	); err != nil {
+		panic(err)
+	}
 
-	app.WebSocket().Register("/ws/chat", (*ChatController).OnMessage)
+	if err := app.WebSocket().Register("/ws/chat", (*ChatController).OnMessage); err != nil {
+		panic(err)
+	}
 
 	// EnableGracefulShutdown & ShutdownTimeout은 선택사항입니다.
 	app.Run(boot.Options{

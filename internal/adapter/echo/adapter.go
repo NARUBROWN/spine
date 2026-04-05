@@ -42,9 +42,6 @@ type Server struct {
 func NewServer(pipeline *pipeline.Pipeline, address string, transportHooks []func(any), opts boot.HTTPOptions) *Server {
 	normalized := normalizeHTTPOptions(opts)
 	e := newEcho(normalized)
-	for _, hook := range transportHooks {
-		hook(e)
-	}
 
 	httpServer := &http.Server{
 		Addr:              address,
@@ -129,6 +126,9 @@ func simpleRecover() echo.MiddlewareFunc {
 
 func (s *Server) Mount() {
 	s.echo.Any("/*", s.handle)
+	for _, hook := range s.transportHooks {
+		hook(s.echo)
+	}
 }
 
 func (s *Server) Start() error {

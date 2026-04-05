@@ -10,6 +10,8 @@ type HandlerMeta struct {
 	ControllerType reflect.Type
 	// 호출할 메서드 이름
 	Method reflect.Method
+	// 라우트에 선언된 path parameter key 순서
+	PathKeys []string
 	// 핸들러에 적용된 인터셉터
 	Interceptors []Interceptor
 }

@@ -87,7 +87,7 @@ func Run(config Config) error {
 			},
 		})
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("[Bootstrap] Kafka publisher 초기화 실패: %w", err)
 		}
 		eventPublishers = append(eventPublishers, kafkaPublisher)
 		defer func() {
@@ -108,7 +108,7 @@ func Run(config Config) error {
 			},
 		})
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("[Bootstrap] RabbitMQ writer 초기화 실패: %w", err)
 		}
 		eventPublishers = append(eventPublishers, rabbitmqWriter)
 		defer func() {
@@ -183,13 +183,13 @@ func Run(config Config) error {
 		prefix := config.HTTP.GlobalPrefix
 		if prefix != "" {
 			if !strings.HasPrefix(prefix, "/") {
-				panic("HTTP GlobalPrefix는 '/'로 시작해야 합니다")
+				return fmt.Errorf("HTTP GlobalPrefix는 '/'로 시작해야 합니다")
 			}
 			if strings.Contains(prefix, ":") {
-				panic("Path 파라미터는 HTTP GlobalPrefix에서 사용될 수 없습니다")
+				return fmt.Errorf("Path 파라미터는 HTTP GlobalPrefix에서 사용될 수 없습니다")
 			}
 			if strings.Contains(prefix, "*") {
-				panic("와일드카드는 HTTP GlobalPrefix에서 사용될 수 없습니다")
+				return fmt.Errorf("와일드카드는 HTTP GlobalPrefix에서 사용될 수 없습니다")
 			}
 			prefix = strings.TrimSuffix(prefix, "/")
 			log.Printf("[Bootstrap] HTTP GlobalPrefix 적용: %s", prefix)
@@ -212,6 +212,9 @@ func Run(config Config) error {
 			resolved := make([]core.Interceptor, len(route.Interceptors))
 			for i, interceptor := range route.Interceptors {
 				interceptorType := reflect.TypeOf(interceptor)
+				if interceptorType == nil {
+					return fmt.Errorf("[Bootstrap] Route Interceptor[%d]가 nil입니다", i)
+				}
 				value := reflect.ValueOf(interceptor)
 
 				// 같은 타입의 인터셉터 로깅은 한 번만 남긴다.
@@ -225,7 +228,7 @@ func Run(config Config) error {
 
 					inst, err := container.Resolve(interceptorType)
 					if err != nil {
-						panic(err)
+						return fmt.Errorf("[Bootstrap] Route Interceptor 생성 실패: %w", err)
 					}
 					resolved[i] = inst.(core.Interceptor)
 				} else {
@@ -238,10 +241,15 @@ func Run(config Config) error {
 			}
 
 			meta.Interceptors = resolved
-			fullPath := joinPath(prefix, route.Path)
+			fullPath, err := joinPath(prefix, route.Path)
+			if err != nil {
+				return err
+			}
 			log.Printf("[Bootstrap] HTTP 라우트 등록 : (%s) %s", route.Method, fullPath)
 
-			assertNoAmbiguousRoute(route.Method, fullPath, registeredPathsByMethod[route.Method])
+			if err := assertNoAmbiguousRoute(route.Method, fullPath, registeredPathsByMethod[route.Method]); err != nil {
+				return err
+			}
 			registeredPathsByMethod[route.Method] = append(registeredPathsByMethod[route.Method], fullPath)
 
 			router.Register(route.Method, fullPath, meta)
@@ -250,8 +258,7 @@ func Run(config Config) error {
 		log.Println("[Bootstrap] 컨트롤러 의존성 Warm-up 시작")
 		// Warm-Up Component
 		if err := container.WarmUp(router.ControllerTypes()); err != nil {
-			// Warm-up 실패시 panic
-			panic(err)
+			return fmt.Errorf("[Bootstrap] HTTP 컨트롤러 Warm-up 실패: %w", err)
 		}
 
 		log.Println("[Bootstrap] 실행 파이프라인 구성")
@@ -319,13 +326,16 @@ func Run(config Config) error {
 		for _, interceptor := range ordered {
 			v := reflect.ValueOf(interceptor)
 			t := reflect.TypeOf(interceptor)
+			if t == nil {
+				return fmt.Errorf("[Bootstrap] Interceptor가 nil입니다")
+			}
 
 			if t.Kind() == reflect.Pointer && v.IsNil() {
 				log.Printf("[Bootstrap] Interceptor %s가 컨테이너에서 생성됐습니다.", t.Elem().Name())
 
 				inst, err := container.Resolve(t)
 				if err != nil {
-					panic(err)
+					return fmt.Errorf("[Bootstrap] Interceptor 생성 실패: %w", err)
 				}
 
 				httpPipeline.AddInterceptor(inst.(core.Interceptor))
@@ -351,7 +361,7 @@ func Run(config Config) error {
 			defer wsRuntime.Stop()
 
 			// Echo Transport Hook으로 마운트
-			config.TransportHooks = append(config.TransportHooks, func(e any) {
+			wsMountHook := func(e any) {
 				echoInstance, ok := e.(*echo.Echo)
 				if !ok {
 					return
@@ -363,7 +373,8 @@ func Run(config Config) error {
 						return nil
 					})
 				}
-			})
+			}
+			config.TransportHooks = append([]func(any){wsMountHook}, config.TransportHooks...)
 		}
 
 		// Echo Adapter
@@ -390,7 +401,7 @@ func Run(config Config) error {
 			consumerTypes = append(consumerTypes, reg.Meta.ControllerType)
 		}
 		if err := container.WarmUp(consumerTypes); err != nil {
-			panic(err)
+			return fmt.Errorf("[Bootstrap] Consumer 컨트롤러 Warm-up 실패: %w", err)
 		}
 	}
 
@@ -419,7 +430,7 @@ func Run(config Config) error {
 		)
 
 		if err := runtime.Validate(); err != nil {
-			panic(err)
+			return fmt.Errorf("[Bootstrap] Kafka consumer 검증 실패: %w", err)
 		}
 
 		forwardConsumerErrors("Kafka", runtime, consumerErrCh)
@@ -451,7 +462,7 @@ func Run(config Config) error {
 		)
 
 		if err := runtime.Validate(); err != nil {
-			panic(err)
+			return fmt.Errorf("[Bootstrap] RabbitMQ consumer 검증 실패: %w", err)
 		}
 
 		forwardConsumerErrors("RabbitMQ", runtime, consumerErrCh)
@@ -539,9 +550,9 @@ func Run(config Config) error {
 	return nil
 }
 
-func joinPath(prefix, path string) string {
+func joinPath(prefix, path string) (string, error) {
 	if path == "" {
-		panic("라우트 Path는 비어있을 수 없습니다")
+		return "", fmt.Errorf("라우트 Path는 비어있을 수 없습니다")
 	}
 
 	if !strings.HasPrefix(path, "/") {
@@ -549,13 +560,13 @@ func joinPath(prefix, path string) string {
 	}
 
 	if prefix == "" {
-		return path
+		return path, nil
 	}
 
-	return prefix + path
+	return prefix + path, nil
 }
 
-func assertNoAmbiguousRoute(method, newPath string, existing []string) {
+func assertNoAmbiguousRoute(method, newPath string, existing []string) error {
 	newSegs := splitPathForValidation(newPath)
 
 	for _, oldPath := range existing {
@@ -583,12 +594,13 @@ func assertNoAmbiguousRoute(method, newPath string, existing []string) {
 		}
 
 		if overlaps {
-			panic(fmt.Sprintf(
+			return fmt.Errorf(
 				"[Router] 모호한 라우트가 감지되었습니다 (부트 타임): method=%s, 신규=%s 가 기존=%s 와 충돌합니다",
 				method, newPath, oldPath,
-			))
+			)
 		}
 	}
+	return nil
 }
 
 func splitPathForValidation(path string) []string {
@@ -613,13 +625,19 @@ func isPathParam(seg string) bool {
 // forwardConsumerErrors는 특정 런타임의 치명적 에러를 공용 채널로 전달한다.
 func forwardConsumerErrors(name string, runtime *consumer.Runtime, out chan<- error) {
 	go func() {
-		if err := <-runtime.Errors(); err != nil {
+		select {
+		case err := <-runtime.Errors():
+			if err == nil {
+				return
+			}
 			wrapped := fmt.Errorf("[Bootstrap] %s consumer runtime error: %w", name, err)
 			select {
 			case out <- wrapped:
 			default:
 				log.Printf("%v (consumerErrCh가 가득 차 전파하지 못했습니다)", wrapped)
 			}
+		case <-runtime.Done():
+			return
 		}
 	}()
 }

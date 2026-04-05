@@ -23,7 +23,6 @@ func NewRequestContext(
 		ctx:      ctx,
 		msg:      msg,
 		eventBus: eventBus,
-		store:    make(map[string]any),
 	}
 }
 
@@ -40,15 +39,24 @@ func (c *ConsumerRequestContextImpl) Payload() []byte {
 }
 
 func (c *ConsumerRequestContextImpl) EventBus() publish.EventBus {
+	if c.eventBus == nil {
+		c.eventBus = publish.NewEventBus()
+	}
 	return c.eventBus
 }
 
 func (c *ConsumerRequestContextImpl) Get(key string) (any, bool) {
+	if c.store == nil {
+		return nil, false
+	}
 	v, ok := c.store[key]
 	return v, ok
 }
 
 func (c *ConsumerRequestContextImpl) Set(key string, value any) {
+	if c.store == nil {
+		c.store = make(map[string]any)
+	}
 	c.store[key] = value
 }
 
@@ -68,16 +76,13 @@ func (c *ConsumerRequestContextImpl) Path() string {
 }
 
 func (c *ConsumerRequestContextImpl) Params() map[string]string {
-	// Consumer 실행에는 Path Parameter 개념이 없습니다.
-	return map[string]string{}
+	return nil
 }
 
 func (c *ConsumerRequestContextImpl) PathKeys() []string {
-	// Consumer 실행에는 Path Key 개념이 없습니다.
-	return []string{}
+	return nil
 }
 
 func (c *ConsumerRequestContextImpl) Queries() map[string][]string {
-	// Consumer 실행에는 Query Parameter 개념이 없습니다.
-	return map[string][]string{}
+	return nil
 }

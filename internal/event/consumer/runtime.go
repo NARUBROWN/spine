@@ -6,7 +6,6 @@ import (
 	"log"
 	"sync"
 
-	"github.com/NARUBROWN/spine/internal/event/publish"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 )
 
@@ -21,6 +20,7 @@ type Runtime struct {
 	stopOnce sync.Once
 	cancel   context.CancelFunc
 	errChan  chan error
+	done     chan struct{}
 }
 
 func NewRuntime(registry *Registry, factory runnerFactory, pipeline *pipeline.Pipeline) *Runtime {
@@ -39,6 +39,7 @@ func NewRuntime(registry *Registry, factory runnerFactory, pipeline *pipeline.Pi
 		factory:  factory,
 		pipeline: pipeline,
 		errChan:  make(chan error, max(1, len(registry.Registrations()))),
+		done:     make(chan struct{}),
 	}
 }
 
@@ -47,6 +48,10 @@ func NewRuntime(registry *Registry, factory runnerFactory, pipeline *pipeline.Pi
 // non-blocking 방식으로 조회하세요.
 func (r *Runtime) Errors() <-chan error {
 	return r.errChan
+}
+
+func (r *Runtime) Done() <-chan struct{} {
+	return r.done
 }
 
 func (r *Runtime) Start(ctx context.Context) {
@@ -86,10 +91,8 @@ func (r *Runtime) Start(ctx context.Context) {
 						continue
 					}
 
-					eventBus := publish.NewEventBus()
-
 					// Consumer ExecutionContext 생성
-					reqCtx := NewRequestContext(ctx, msg, eventBus)
+					reqCtx := NewRequestContext(ctx, msg, nil)
 
 					// 핸들러 실행
 					if err := r.pipeline.Execute(reqCtx); err != nil {
@@ -141,6 +144,7 @@ func (r *Runtime) Stop() {
 		if r.cancel != nil {
 			r.cancel() // 모든 goroutine 중지
 		}
+		close(r.done)
 		log.Printf("[Event Consumer] 모든 컨슈머를 중지했습니다.")
 	})
 }

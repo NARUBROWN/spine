@@ -22,7 +22,18 @@ func (h *RedirectReturnValueHandler) Supports(returnType reflect.Type) bool {
 }
 
 func (h *RedirectReturnValueHandler) Handle(value any, ctx core.ExecutionContext) error {
-	redirect := value.(httpx.Redirect)
+	var redirect httpx.Redirect
+	switch v := value.(type) {
+	case httpx.Redirect:
+		redirect = v
+	case *httpx.Redirect:
+		if v == nil {
+			return fmt.Errorf("RedirectReturnValueHandler: nil *httpx.Redirect는 처리할 수 없습니다")
+		}
+		redirect = *v
+	default:
+		return fmt.Errorf("RedirectReturnValueHandler: 전달된 값이 httpx.Redirect 타입이 아닙니다")
+	}
 
 	rwAny, ok := ctx.Get("spine.response_writer")
 	if !ok {

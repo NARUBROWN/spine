@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"reflect"
 	"runtime/debug"
+	"strings"
+	"sync"
 
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/event/hook"
@@ -24,12 +26,30 @@ type Pipeline struct {
 	returnHandlers    []handler.ReturnValueHandler
 	invoker           *invoker.Invoker
 	postHooks         []hook.PostExecutionHook
+	plansMu           sync.RWMutex
+	plans             map[string]*compiledPlan
+}
+
+type compiledParam struct {
+	meta     resolver.ParameterMeta
+	resolver resolver.ArgumentResolver
+}
+
+type compiledResult struct {
+	isError bool
+	handler handler.ReturnValueHandler
+}
+
+type compiledPlan struct {
+	params  []compiledParam
+	results []compiledResult
 }
 
 func NewPipeline(router router.Router, invoker *invoker.Invoker) *Pipeline {
 	return &Pipeline{
 		router:  router,
 		invoker: invoker,
+		plans:   make(map[string]*compiledPlan),
 	}
 }
 
@@ -79,6 +99,7 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 	if err != nil {
 		return err
 	}
+	globalMeta = meta
 
 	routeInterceptors := meta.Interceptors
 
@@ -89,10 +110,13 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 		}
 	}()
 
-	paramMetas := buildParameterMeta(meta.Method, ctx)
+	plan, err := p.planFor(meta)
+	if err != nil {
+		return err
+	}
 
 	// Argument Resolver 체인 실행
-	args, err := p.resolveArguments(ctx, paramMetas)
+	args, err := p.resolveArguments(ctx, plan.params)
 	if err != nil {
 		return err
 	}
@@ -118,7 +142,7 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 		return err
 	}
 
-	handled, err := p.handleErrorReturn(ctx, results)
+	handled, err := p.handleErrorReturn(ctx, results, plan.results)
 	if err != nil {
 		return err
 	}
@@ -126,14 +150,14 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 		return nil
 	}
 
+	if err := p.handleSuccessReturn(ctx, results, plan.results); err != nil {
+		return err
+	}
+
 	for _, hook := range p.postHooks {
 		if err := hook.AfterExecution(ctx, results, nil); err != nil {
 			return err
 		}
-	}
-
-	if err := p.handleSuccessReturn(ctx, results); err != nil {
-		return err
 	}
 
 	// 라우트 Interceptor postHandle (역순)
@@ -149,12 +173,9 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 	return nil
 }
 
-func buildParameterMeta(method reflect.Method, ctx core.ExecutionContext) []resolver.ParameterMeta {
-
-	pathKeys := ctx.PathKeys() // ["id"]
-
+func buildParameterMeta(method reflect.Method, pathKeys []string) []resolver.ParameterMeta {
 	pathIdx := 0
-	var metas []resolver.ParameterMeta
+	metas := make([]resolver.ParameterMeta, 0, method.Type.NumIn()-1)
 
 	for i := 1; i < method.Type.NumIn(); i++ {
 		pt := method.Type.In(i)
@@ -200,90 +221,65 @@ func isNilResult(v any) bool {
 	}
 }
 
-func (p *Pipeline) handleErrorReturn(ctx core.ExecutionContext, results []any) (bool, error) {
-	for _, result := range results {
+func (p *Pipeline) handleErrorReturn(ctx core.ExecutionContext, results []any, plan []compiledResult) (bool, error) {
+	for i, result := range results {
+		if i >= len(plan) || !plan[i].isError {
+			continue
+		}
 		if isNilResult(result) {
 			continue
 		}
-		if _, isErr := result.(error); isErr {
-			resultType := reflect.TypeOf(result)
-			for _, h := range p.returnHandlers {
-				if h.Supports(resultType) {
-					if err := h.Handle(result, ctx); err != nil {
-						return false, err
-					}
-					return true, nil
-				}
-			}
-			return false, fmt.Errorf(
-				"error 반환값을 처리할 ReturnValueHandler가 없습니다. (%s)",
-				resultType.String(),
-			)
+		if _, isErr := result.(error); !isErr {
+			continue
 		}
+		if plan[i].handler != nil {
+			if err := plan[i].handler.Handle(result, ctx); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+		return false, fmt.Errorf(
+			"error 반환값을 처리할 ReturnValueHandler가 없습니다. (%s)",
+			reflect.TypeOf(result).String(),
+		)
 	}
 
 	return false, nil
 }
 
-func (p *Pipeline) handleSuccessReturn(ctx core.ExecutionContext, results []any) error {
-	for _, result := range results {
+func (p *Pipeline) handleSuccessReturn(ctx core.ExecutionContext, results []any, plan []compiledResult) error {
+	for i, result := range results {
 		if isNilResult(result) {
 			continue
 		}
-		if _, isErr := result.(error); isErr {
+		if i < len(plan) && plan[i].isError {
 			continue
 		}
 
-		resultType := reflect.TypeOf(result)
-
-		for _, h := range p.returnHandlers {
-			if !h.Supports(resultType) {
-				continue
-			}
-
-			if err := h.Handle(result, ctx); err != nil {
+		if i < len(plan) && plan[i].handler != nil {
+			if err := plan[i].handler.Handle(result, ctx); err != nil {
 				return err
 			}
-
 			return nil
 		}
 
 		return fmt.Errorf(
 			"ReturnValueHandler가 없습니다. (%s)",
-			resultType.String(),
+			reflect.TypeOf(result).String(),
 		)
 	}
 	return nil
 }
 
-func (p *Pipeline) resolveArguments(ctx core.ExecutionContext, paramMetas []resolver.ParameterMeta) ([]any, error) {
-	args := make([]any, 0, len(paramMetas))
+func (p *Pipeline) resolveArguments(ctx core.ExecutionContext, params []compiledParam) ([]any, error) {
+	args := make([]any, 0, len(params))
 
-	for _, paramMeta := range paramMetas {
-		resolved := false
-
-		for _, r := range p.argumentResolvers {
-			if !r.Supports(paramMeta) {
-				continue
-			}
-
-			val, err := r.Resolve(ctx, paramMeta)
-			if err != nil {
-				return nil, err
-			}
-
-			args = append(args, val)
-			resolved = true
-			break
+	for _, param := range params {
+		val, err := param.resolver.Resolve(ctx, param.meta)
+		if err != nil {
+			return nil, err
 		}
-
-		if !resolved {
-			return nil, fmt.Errorf(
-				"ArgumentResolver에 parameter가 없습니다. %d (%s)",
-				paramMeta.Index,
-				paramMeta.Type.String(),
-			)
-		}
+		args = append(args, val)
 	}
 	return args, nil
 }
@@ -343,4 +339,96 @@ func panicAsError(recovered any) error {
 		return fmt.Errorf("panic recovered: %w\n%s", err, debug.Stack())
 	}
 	return fmt.Errorf("panic recovered: %v\n%s", recovered, debug.Stack())
+}
+
+func (p *Pipeline) planFor(meta core.HandlerMeta) (*compiledPlan, error) {
+	key := planKey(meta)
+
+	p.plansMu.RLock()
+	if plan, ok := p.plans[key]; ok {
+		p.plansMu.RUnlock()
+		return plan, nil
+	}
+	p.plansMu.RUnlock()
+
+	plan, err := p.compilePlan(meta)
+	if err != nil {
+		return nil, err
+	}
+
+	p.plansMu.Lock()
+	if existing, ok := p.plans[key]; ok {
+		p.plansMu.Unlock()
+		return existing, nil
+	}
+	p.plans[key] = plan
+	p.plansMu.Unlock()
+	return plan, nil
+}
+
+func (p *Pipeline) compilePlan(meta core.HandlerMeta) (*compiledPlan, error) {
+	paramMetas := buildParameterMeta(meta.Method, meta.PathKeys)
+	params := make([]compiledParam, 0, len(paramMetas))
+	for _, paramMeta := range paramMetas {
+		resolver, err := p.selectResolver(paramMeta)
+		if err != nil {
+			return nil, err
+		}
+		params = append(params, compiledParam{
+			meta:     paramMeta,
+			resolver: resolver,
+		})
+	}
+
+	results := make([]compiledResult, 0, meta.Method.Type.NumOut())
+	errorType := reflect.TypeFor[error]()
+	for i := 0; i < meta.Method.Type.NumOut(); i++ {
+		resultType := meta.Method.Type.Out(i)
+		result := compiledResult{isError: resultType.Implements(errorType)}
+		if h := p.selectReturnHandler(resultType); h != nil {
+			result.handler = h
+		}
+		results = append(results, result)
+	}
+
+	return &compiledPlan{
+		params:  params,
+		results: results,
+	}, nil
+}
+
+func (p *Pipeline) selectResolver(paramMeta resolver.ParameterMeta) (resolver.ArgumentResolver, error) {
+	for _, r := range p.argumentResolvers {
+		if r.Supports(paramMeta) {
+			return r, nil
+		}
+	}
+
+	return nil, fmt.Errorf(
+		"ArgumentResolver에 parameter가 없습니다. %d (%s)",
+		paramMeta.Index,
+		paramMeta.Type.String(),
+	)
+}
+
+func (p *Pipeline) selectReturnHandler(resultType reflect.Type) handler.ReturnValueHandler {
+	for _, h := range p.returnHandlers {
+		if h.Supports(resultType) {
+			return h
+		}
+	}
+	return nil
+}
+
+func planKey(meta core.HandlerMeta) string {
+	var b strings.Builder
+	b.WriteString(meta.ControllerType.String())
+	b.WriteByte('|')
+	b.WriteString(meta.Method.Name)
+	b.WriteByte('|')
+	for _, key := range meta.PathKeys {
+		b.WriteString(key)
+		b.WriteByte(',')
+	}
+	return b.String()
 }

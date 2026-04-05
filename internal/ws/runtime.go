@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/NARUBROWN/spine/internal/event/publish"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/gorilla/websocket"
@@ -39,7 +38,32 @@ type Runtime struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	connMu   sync.Mutex
-	conns    map[string]*websocket.Conn
+	conns    map[string]*trackedConn
+}
+
+type trackedConn struct {
+	conn *websocket.Conn
+	mu   sync.Mutex
+}
+
+func (c *trackedConn) writeMessage(messageType int, data []byte, timeout time.Duration) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if timeout > 0 {
+		_ = c.conn.SetWriteDeadline(time.Now().Add(timeout))
+	}
+	return c.conn.WriteMessage(messageType, data)
+}
+
+func (c *trackedConn) writeControl(messageType int, data []byte, timeout time.Duration) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	deadline := time.Time{}
+	if timeout > 0 {
+		deadline = time.Now().Add(timeout)
+		_ = c.conn.SetWriteDeadline(deadline)
+	}
+	return c.conn.WriteControl(messageType, data, deadline)
 }
 
 func NewRuntime(registry *Registry, pipeline *pipeline.Pipeline, opts boot.WebSocketOptions) *Runtime {
@@ -58,7 +82,7 @@ func NewRuntime(registry *Registry, pipeline *pipeline.Pipeline, opts boot.WebSo
 		options:  normalizeWebSocketOptions(opts),
 		ctx:      ctx,
 		cancel:   cancel,
-		conns:    make(map[string]*websocket.Conn),
+		conns:    make(map[string]*trackedConn),
 	}
 }
 
@@ -131,7 +155,8 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 	}
 
 	connID := generateConnID()
-	if !r.trackConn(connID, conn) {
+	tracked := &trackedConn{conn: conn}
+	if !r.trackConn(connID, tracked) {
 		_ = conn.Close()
 		return
 	}
@@ -150,14 +175,8 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 		return conn.SetReadDeadline(time.Now().Add(r.options.ReadTimeout))
 	})
 
-	var writeMu sync.Mutex
 	sendFn := func(messageType int, data []byte) error {
-		writeMu.Lock()
-		defer writeMu.Unlock()
-		if r.options.WriteTimeout > 0 {
-			_ = conn.SetWriteDeadline(time.Now().Add(r.options.WriteTimeout))
-		}
-		return conn.WriteMessage(messageType, data)
+		return tracked.writeMessage(messageType, data, r.options.WriteTimeout)
 	}
 
 	done := make(chan struct{})
@@ -176,10 +195,7 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 			case <-req.Context().Done():
 				return
 			case <-ticker.C:
-				deadline := time.Now().Add(r.options.WriteTimeout)
-				writeMu.Lock()
-				err := conn.WriteControl(websocket.PingMessage, nil, deadline)
-				writeMu.Unlock()
+				err := tracked.writeControl(websocket.PingMessage, nil, r.options.WriteTimeout)
 				if err != nil {
 					return
 				}
@@ -195,25 +211,22 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 			return
 		}
 
-		eventBus := publish.NewEventBus()
-
 		ctx := NewWSExecutionContext(
 			req.Context(),
 			connID,
 			req.URL.Path,
 			msgType,
 			payload,
-			eventBus,
+			nil,
 			sendFn,
 		)
 
 		if err := r.pipeline.Execute(ctx); err != nil {
 			log.Printf("[WS] 핸들러 실패 (conn=%p): %v", &connID, err)
-			deadline := time.Now().Add(r.options.WriteTimeout)
-			_ = conn.WriteControl(
+			_ = tracked.writeControl(
 				websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "handler error"),
-				deadline,
+				r.options.WriteTimeout,
 			)
 			return
 		}
@@ -226,26 +239,26 @@ func (r *Runtime) Stop() {
 		r.cancel()
 
 		r.connMu.Lock()
-		conns := make(map[string]*websocket.Conn, len(r.conns))
+		conns := make(map[string]*trackedConn, len(r.conns))
 		for id, conn := range r.conns {
 			conns[id] = conn
 		}
 		r.connMu.Unlock()
 
 		for _, conn := range conns {
-			_ = conn.WriteControl(
+			_ = conn.writeControl(
 				websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseNormalClosure, "server shutting down"),
-				time.Now().Add(r.options.WriteTimeout),
+				r.options.WriteTimeout,
 			)
-			_ = conn.Close()
+			_ = conn.conn.Close()
 		}
 
 		log.Printf("[WS] WebSocket 런타임을 중지했습니다.")
 	})
 }
 
-func (r *Runtime) trackConn(connID string, conn *websocket.Conn) bool {
+func (r *Runtime) trackConn(connID string, conn *trackedConn) bool {
 	r.connMu.Lock()
 	defer r.connMu.Unlock()
 

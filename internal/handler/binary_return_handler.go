@@ -20,8 +20,16 @@ func (h *BinaryReturnHandler) Supports(returnType reflect.Type) bool {
 }
 
 func (h *BinaryReturnHandler) Handle(value any, ctx core.ExecutionContext) error {
-	binary, ok := value.(httpx.Binary)
-	if !ok {
+	var binary httpx.Binary
+	switch v := value.(type) {
+	case httpx.Binary:
+		binary = v
+	case *httpx.Binary:
+		if v == nil {
+			return fmt.Errorf("BinaryReturnValueHandler: nil *httpx.Binary는 처리할 수 없습니다")
+		}
+		binary = *v
+	default:
 		return fmt.Errorf("BinaryReturnValueHandler: 전달된 값이 httpx.Binary 타입이 아닙니다")
 	}
 

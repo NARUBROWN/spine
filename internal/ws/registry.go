@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/NARUBROWN/spine/core"
@@ -23,17 +24,17 @@ func NewRegistry() *Registry {
 	}
 }
 
-func (r *Registry) Register(path string, handler any) {
+func (r *Registry) Register(path string, handler any) error {
 	if path == "" {
-		panic("ws: path가 빈 값일 수 없습니다")
+		return fmt.Errorf("ws: path가 빈 값일 수 없습니다")
 	}
 	if handler == nil {
-		panic("ws: handler가 nil일 수 없습니다")
+		return fmt.Errorf("ws: handler가 nil일 수 없습니다")
 	}
 
 	meta, err := router.NewHandlerMeta(handler)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	r.mu.Lock()
@@ -42,6 +43,7 @@ func (r *Registry) Register(path string, handler any) {
 		Path: path,
 		Meta: meta,
 	})
+	return nil
 }
 
 func (r *Registry) Registrations() []Registration {

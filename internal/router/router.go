@@ -10,83 +10,124 @@ import (
 
 type RouteOption func(*RouteSpec)
 
-/*
-RouteSpec은 외부 프로토콜과 내부 핸들러 메서드를 명시적으로 연결하는 선언 정보
-
-이 구조체는 부트스트랩(부팅) 단계에서 수집되며
-Listen() 시점에 실제 라우터/실행 모델로 해석됨
-*/
 type RouteSpec struct {
-	// 외부 요청의 메서드
-	Method string
-	// 외부 요청 경로
-	Path string
-	// 컨트롤러 메서드에 대한 참조
-	Handler any
-	// 라우터 인터셉터들
+	Method       string
+	Path         string
+	Handler      any
 	Interceptors []core.Interceptor
-}
-
-type Route struct {
-	Method string
-	Path   string
-	Meta   core.HandlerMeta
 }
 
 type Router interface {
 	Route(ctx core.ExecutionContext) (core.HandlerMeta, error)
 }
 
+type routeNode struct {
+	staticChildren map[string]*routeNode
+	paramChild     *routeNode
+	paramKey       string
+	meta           *core.HandlerMeta
+}
+
 type DefaultRouter struct {
-	routes []Route
+	trees           map[string]*routeNode
+	controllerTypes []reflect.Type
+	seenControllers map[reflect.Type]struct{}
 }
 
 func NewRouter() *DefaultRouter {
-	return &DefaultRouter{}
+	return &DefaultRouter{
+		trees:           make(map[string]*routeNode),
+		seenControllers: make(map[reflect.Type]struct{}),
+	}
 }
 
 func (r *DefaultRouter) ControllerTypes() []reflect.Type {
-	seen := map[reflect.Type]struct{}{}
-	var result []reflect.Type
-
-	for _, route := range r.routes {
-		t := route.Meta.ControllerType
-		if _, ok := seen[t]; ok {
-			continue
-		}
-		seen[t] = struct{}{}
-		result = append(result, t)
-	}
-
-	return result
+	return append([]reflect.Type(nil), r.controllerTypes...)
 }
 
 func (r *DefaultRouter) Register(method string, path string, meta core.HandlerMeta) {
-	r.routes = append(r.routes, Route{
-		Method: method,
-		Path:   path,
-		Meta:   meta,
-	})
+	root := r.trees[method]
+	if root == nil {
+		root = &routeNode{}
+		r.trees[method] = root
+	}
+
+	meta.PathKeys = extractPathKeys(path)
+	node := root
+	for _, seg := range splitPath(path) {
+		if isParamSegment(seg) {
+			if node.paramChild == nil {
+				node.paramChild = &routeNode{paramKey: seg[1:]}
+			}
+			node = node.paramChild
+			continue
+		}
+
+		if node.staticChildren == nil {
+			node.staticChildren = make(map[string]*routeNode)
+		}
+		child := node.staticChildren[seg]
+		if child == nil {
+			child = &routeNode{}
+			node.staticChildren[seg] = child
+		}
+		node = child
+	}
+
+	metaCopy := meta
+	node.meta = &metaCopy
+
+	if _, ok := r.seenControllers[meta.ControllerType]; !ok {
+		r.seenControllers[meta.ControllerType] = struct{}{}
+		r.controllerTypes = append(r.controllerTypes, meta.ControllerType)
+	}
 }
 
 func (r *DefaultRouter) Route(ctx core.ExecutionContext) (core.HandlerMeta, error) {
-	for _, route := range r.routes {
-		if route.Method != ctx.Method() {
-			continue
-		}
-
-		ok, params, keys := matchPath(route.Path, ctx.Path())
-		if !ok {
-			continue
-		}
-
-		// path param 주입
-		ctx.Set("spine.params", params)
-		ctx.Set("spine.pathKeys", keys)
-
-		return route.Meta, nil
+	root := r.trees[ctx.Method()]
+	if root == nil {
+		return core.HandlerMeta{}, httperr.NotFound("핸들러가 없습니다.")
 	}
-	return core.HandlerMeta{}, httperr.NotFound("핸들러가 없습니다.")
+
+	pathSegs := splitPath(ctx.Path())
+	node := root
+
+	var params map[string]string
+	var pathKeys []string
+
+	for _, seg := range pathSegs {
+		if node.staticChildren != nil {
+			if child := node.staticChildren[seg]; child != nil {
+				node = child
+				continue
+			}
+		}
+
+		if node.paramChild == nil {
+			return core.HandlerMeta{}, httperr.NotFound("핸들러가 없습니다.")
+		}
+
+		if params == nil {
+			params = make(map[string]string, len(pathSegs))
+		}
+		if pathKeys == nil {
+			pathKeys = make([]string, 0, len(pathSegs))
+		}
+		params[node.paramChild.paramKey] = seg
+		pathKeys = append(pathKeys, node.paramChild.paramKey)
+		node = node.paramChild
+	}
+
+	if node.meta == nil {
+		return core.HandlerMeta{}, httperr.NotFound("핸들러가 없습니다.")
+	}
+
+	if params != nil {
+		ctx.Set("spine.params", params)
+		ctx.Set("spine.pathKeys", append([]string(nil), node.meta.PathKeys...))
+	}
+
+	return *node.meta, nil
 }
 
 func matchPath(pattern string, path string) (bool, map[string]string, []string) {
@@ -97,15 +138,18 @@ func matchPath(pattern string, path string) (bool, map[string]string, []string) 
 		return false, nil, nil
 	}
 
-	params := make(map[string]string)
-	keys := make([]string, 0)
+	var params map[string]string
+	var keys []string
 
 	for i := 0; i < len(patternSegs); i++ {
 		p := patternSegs[i]
 		v := pathSegs[i]
 
-		if len(p) > 0 && p[0] == ':' {
-			// :id 형태
+		if isParamSegment(p) {
+			if params == nil {
+				params = make(map[string]string, len(patternSegs))
+				keys = make([]string, 0, len(patternSegs))
+			}
 			key := p[1:]
 			params[key] = v
 			keys = append(keys, key)
@@ -125,7 +169,6 @@ func splitPath(path string) []string {
 		return []string{}
 	}
 
-	// 앞뒤 슬래시 제거
 	if path[0] == '/' {
 		path = path[1:]
 	}
@@ -139,4 +182,19 @@ func splitPath(path string) []string {
 	}
 
 	return strings.Split(path, "/")
+}
+
+func extractPathKeys(path string) []string {
+	segs := splitPath(path)
+	keys := make([]string, 0, len(segs))
+	for _, seg := range segs {
+		if isParamSegment(seg) {
+			keys = append(keys, seg[1:])
+		}
+	}
+	return keys
+}
+
+func isParamSegment(seg string) bool {
+	return len(seg) > 0 && seg[0] == ':'
 }

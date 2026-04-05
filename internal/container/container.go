@@ -12,12 +12,20 @@ type Container struct {
 	mu           sync.RWMutex
 	constructors map[reflect.Type]reflect.Value
 	instances    map[reflect.Type]any
+	building     map[reflect.Type]*buildState
+}
+
+type buildState struct {
+	done     chan struct{}
+	instance any
+	err      error
 }
 
 func New() *Container {
 	return &Container{
 		constructors: make(map[reflect.Type]reflect.Value),
 		instances:    make(map[reflect.Type]any),
+		building:     make(map[reflect.Type]*buildState),
 	}
 }
 
@@ -62,6 +70,17 @@ func (c *Container) resolve(componentType reflect.Type, stack map[reflect.Type]i
 		return nil, err
 	}
 
+	state, wait, ok := c.beginBuild(componentType)
+	if ok {
+		if wait {
+			select {
+			case <-state.done:
+				return state.instance, state.err
+			}
+		}
+		defer c.finishBuild(componentType, state)
+	}
+
 	stack[componentType] = len(path)
 	path = append(path, componentType)
 	defer delete(stack, componentType)
@@ -72,6 +91,9 @@ func (c *Container) resolve(componentType reflect.Type, stack map[reflect.Type]i
 		paramType := constructor.Type().In(i)
 		paramInstance, err := c.resolve(paramType, stack, path)
 		if err != nil {
+			if ok && !wait {
+				state.err = err
+			}
 			return nil, err
 		}
 		args[i] = reflect.ValueOf(paramInstance)
@@ -79,7 +101,13 @@ func (c *Container) resolve(componentType reflect.Type, stack map[reflect.Type]i
 
 	result := constructor.Call(args)[0].Interface()
 	if cached, existed := c.cacheInstance(componentType, result); existed {
+		if ok && !wait {
+			state.instance = cached
+		}
 		return cached, nil
+	}
+	if ok && !wait {
+		state.instance = result
 	}
 
 	return result, nil
@@ -103,10 +131,19 @@ func (c *Container) getConstructor(componentType reflect.Type) (reflect.Value, e
 
 	// 인터페이스 타입인 경우, 할당 가능한 생성자 탐색
 	if componentType.Kind() == reflect.Interface {
+		var matched reflect.Value
+		matches := 0
 		for outType, v := range c.constructors {
 			if outType.AssignableTo(componentType) {
-				return v, nil
+				matched = v
+				matches++
 			}
+		}
+		if matches == 1 {
+			return matched, nil
+		}
+		if matches > 1 {
+			return reflect.Value{}, fmt.Errorf("인터페이스 %v 에 대한 생성자가 여러 개 등록되었습니다", componentType)
 		}
 	}
 
@@ -122,6 +159,33 @@ func (c *Container) cacheInstance(componentType reflect.Type, instance any) (any
 	}
 	c.instances[componentType] = instance
 	return instance, false
+}
+
+func (c *Container) beginBuild(componentType reflect.Type) (*buildState, bool, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if existing, ok := c.instances[componentType]; ok {
+		return &buildState{instance: existing}, false, false
+	}
+
+	if state, ok := c.building[componentType]; ok {
+		return state, true, true
+	}
+
+	state := &buildState{done: make(chan struct{})}
+	c.building[componentType] = state
+	return state, false, true
+}
+
+func (c *Container) finishBuild(componentType reflect.Type, state *buildState) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if state.done != nil {
+		close(state.done)
+	}
+	delete(c.building, componentType)
 }
 
 func formatTypePath(path []reflect.Type) string {
