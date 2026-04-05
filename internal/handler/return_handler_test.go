@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/pkg/httperr"
@@ -18,25 +19,25 @@ func newFakeExecutionContext() *fakeExecutionContext {
 	return &fakeExecutionContext{store: map[string]any{}}
 }
 
-func (c *fakeExecutionContext) Context() context.Context      { return context.Background() }
-func (c *fakeExecutionContext) EventBus() core.EventBus       { return nil }
-func (c *fakeExecutionContext) Method() string                { return "" }
-func (c *fakeExecutionContext) Path() string                  { return "" }
-func (c *fakeExecutionContext) Params() map[string]string     { return nil }
-func (c *fakeExecutionContext) Header(name string) string     { return "" }
-func (c *fakeExecutionContext) PathKeys() []string            { return nil }
-func (c *fakeExecutionContext) Queries() map[string][]string  { return nil }
-func (c *fakeExecutionContext) Set(key string, value any)     { c.store[key] = value }
-func (c *fakeExecutionContext) Get(key string) (any, bool)    { v, ok := c.store[key]; return v, ok }
+func (c *fakeExecutionContext) Context() context.Context     { return context.Background() }
+func (c *fakeExecutionContext) EventBus() core.EventBus      { return nil }
+func (c *fakeExecutionContext) Method() string               { return "" }
+func (c *fakeExecutionContext) Path() string                 { return "" }
+func (c *fakeExecutionContext) Params() map[string]string    { return nil }
+func (c *fakeExecutionContext) Header(name string) string    { return "" }
+func (c *fakeExecutionContext) PathKeys() []string           { return nil }
+func (c *fakeExecutionContext) Queries() map[string][]string { return nil }
+func (c *fakeExecutionContext) Set(key string, value any)    { c.store[key] = value }
+func (c *fakeExecutionContext) Get(key string) (any, bool)   { v, ok := c.store[key]; return v, ok }
 
 type fakeResponseWriter struct {
-	headers        map[string]string
-	setCookies     []string
-	status         int
-	jsonBody       any
-	stringBody     string
-	bytesBody      []byte
-	writeJSONCalls int
+	headers          map[string]string
+	setCookies       []string
+	status           int
+	jsonBody         any
+	stringBody       string
+	bytesBody        []byte
+	writeJSONCalls   int
 	writeStringCalls int
 	writeBytesCalls  int
 }
@@ -132,6 +133,28 @@ func TestStringReturnHandler_SupportsAndHandle(t *testing.T) {
 	if writer.stringBody != "ok" {
 		t.Fatalf("문자열 응답이 잘못되었습니다: %q", writer.stringBody)
 	}
+
+	ptrResp := &httpx.Response[string]{Body: "ptr"}
+	if err := h.Handle(ptrResp, ctx); err != nil {
+		t.Fatalf("포인터 응답 처리 실패: %v", err)
+	}
+	if writer.stringBody != "ptr" {
+		t.Fatalf("포인터 문자열 응답이 잘못되었습니다: %q", writer.stringBody)
+	}
+}
+
+func TestStringReturnHandler_InvalidValues(t *testing.T) {
+	h := &StringReturnHandler{}
+	ctx := newFakeExecutionContext()
+	writer := newFakeWriter()
+	ctx.Set("spine.response_writer", writer)
+
+	if err := h.Handle((*httpx.Response[string])(nil), ctx); err == nil {
+		t.Fatal("nil 포인터는 에러여야 합니다")
+	}
+	if err := h.Handle(httpx.Response[int]{Body: 1}, ctx); err == nil {
+		t.Fatal("잘못된 타입은 에러여야 합니다")
+	}
 }
 
 func TestBinaryReturnHandler_Handle(t *testing.T) {
@@ -160,6 +183,63 @@ func TestBinaryReturnHandler_Handle(t *testing.T) {
 	}
 	if writer.headers["Content-Type"] != "image/png" || writer.headers["X-Bin"] != "yes" {
 		t.Fatalf("헤더가 설정되지 않았습니다: %v", writer.headers)
+	}
+}
+
+func TestBinaryReturnHandler_InvalidType(t *testing.T) {
+	h := &BinaryReturnHandler{}
+	ctx := newFakeExecutionContext()
+	writer := newFakeWriter()
+	ctx.Set("spine.response_writer", writer)
+
+	if err := h.Handle("not-binary", ctx); err == nil {
+		t.Fatal("잘못된 타입은 에러여야 합니다")
+	}
+}
+
+func TestRedirectReturnValueHandler_Handle(t *testing.T) {
+	h := &RedirectReturnValueHandler{}
+	ctx := newFakeExecutionContext()
+	writer := newFakeWriter()
+	ctx.Set("spine.response_writer", writer)
+
+	expires := time.Unix(1700000000, 0)
+	redirect := httpx.Redirect{
+		Location: "/login",
+		Options: httpx.ResponseOptions{
+			Status: 307,
+			Headers: map[string]string{
+				"X-Redirect": "1",
+			},
+			Cookies: []httpx.Cookie{
+				{
+					Name:     "session",
+					Value:    "abc",
+					Path:     "/",
+					HttpOnly: true,
+					Secure:   true,
+					SameSite: httpx.SameSiteLax,
+					Expires:  &expires,
+				},
+			},
+		},
+	}
+
+	if !h.Supports(reflect.TypeOf(redirect)) {
+		t.Fatal("RedirectReturnValueHandler가 Redirect를 지원해야 합니다")
+	}
+
+	if err := h.Handle(redirect, ctx); err != nil {
+		t.Fatalf("RedirectReturnValueHandler Handle 실패: %v", err)
+	}
+	if writer.status != 307 {
+		t.Fatalf("상태 코드가 잘못되었습니다: %d", writer.status)
+	}
+	if writer.headers["Location"] != "/login" || writer.headers["X-Redirect"] != "1" {
+		t.Fatalf("리다이렉트 헤더가 잘못되었습니다: %v", writer.headers)
+	}
+	if len(writer.setCookies) != 1 {
+		t.Fatalf("쿠키가 기록되어야 합니다: %v", writer.setCookies)
 	}
 }
 

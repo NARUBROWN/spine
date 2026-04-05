@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,16 +30,33 @@ func (c *appCtrl) Fail() error {
 	return httperr.BadRequest("bad")
 }
 
+func (c *appCtrl) Echo(req *echoRequest) httpx.Response[string] {
+	return httpx.Response[string]{Body: req.Name}
+}
+
+type echoRequest struct {
+	Name string `json:"name"`
+}
+
 func setupApp() spine.App {
 	app := spine.New()
 	app.Constructor(func() *appCtrl { return &appCtrl{} })
 	app.Route("GET", "/users/:id", (*appCtrl).GetUser)
 	app.Route("GET", "/hello", (*appCtrl).Hello)
 	app.Route("GET", "/fail", (*appCtrl).Fail)
+	app.Route("POST", "/echo", (*appCtrl).Echo)
 	return app
 }
 
 func newTestHandlerFromApp(t *testing.T, app spine.App) http.Handler {
+	return newTestHandlerFromAppWithOptions(t, app, boot.Options{
+		Address:                "127.0.0.1:0",
+		EnableGracefulShutdown: true,
+		HTTP:                   &boot.HTTPOptions{},
+	})
+}
+
+func newTestHandlerFromAppWithOptions(t *testing.T, app spine.App, opts boot.Options) http.Handler {
 	t.Helper()
 
 	ready := make(chan http.Handler, 1)
@@ -56,11 +74,13 @@ func newTestHandlerFromApp(t *testing.T, app spine.App) http.Handler {
 	})
 
 	go func() {
-		runErr <- app.Run(boot.Options{
-			Address:                "127.0.0.1:0",
-			EnableGracefulShutdown: true,
-			HTTP:                   &boot.HTTPOptions{},
-		})
+		if opts.Address == "" {
+			opts.Address = "127.0.0.1:0"
+		}
+		if opts.HTTP == nil {
+			opts.HTTP = &boot.HTTPOptions{}
+		}
+		runErr <- app.Run(opts)
 	}()
 
 	var h http.Handler
@@ -177,5 +197,29 @@ func TestAppIntegration_Error(t *testing.T) {
 
 	if parsed["message"] != "bad" {
 		t.Fatalf("에러 메시지가 잘못되었습니다: %v", parsed)
+	}
+}
+
+func TestAppIntegration_BodyLimit(t *testing.T) {
+	app := setupApp()
+	handler := newTestHandlerFromAppWithOptions(t, app, boot.Options{
+		Address:                "127.0.0.1:0",
+		EnableGracefulShutdown: true,
+		HTTP: &boot.HTTPOptions{
+			MaxBodyBytes: 16,
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/echo", strings.NewReader(`{"name":"payload too large"}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("상태 코드는 413이어야 합니다. 실제=%d", resp.StatusCode)
 	}
 }

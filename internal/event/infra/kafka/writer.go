@@ -12,8 +12,15 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
+type kafkaMessageWriter interface {
+	WriteMessages(ctx context.Context, msgs ...kafka.Message) error
+	Close() error
+}
+
 type KafkaPublisher struct {
-	Writer *kafka.Writer
+	Writer      *kafka.Writer
+	writer      kafkaMessageWriter
+	topicPrefix string
 }
 
 func NewKafkaPublisher(opts *boot.KafkaOptions) (*KafkaPublisher, error) {
@@ -26,11 +33,15 @@ func NewKafkaPublisher(opts *boot.KafkaOptions) (*KafkaPublisher, error) {
 
 	log.Println("[Kafka][Write] 이벤트 발행기 초기화 완료")
 
+	writer := &kafka.Writer{
+		Addr:     kafka.TCP(opts.Brokers...),
+		Balancer: &kafka.LeastBytes{},
+	}
+
 	return &KafkaPublisher{
-		Writer: &kafka.Writer{
-			Addr:     kafka.TCP(opts.Brokers...),
-			Balancer: &kafka.LeastBytes{},
-		},
+		Writer:      writer,
+		writer:      writer,
+		topicPrefix: opts.Write.TopicPrefix,
 	}, nil
 }
 
@@ -40,16 +51,34 @@ func (p *KafkaPublisher) Publish(ctx context.Context, event publish.DomainEvent)
 		return fmt.Errorf("KafkaPublisher 직렬화 실패: %w", err)
 	}
 
-	return p.Writer.WriteMessages(ctx, kafka.Message{
-		Topic: event.Name(),
+	return p.client().WriteMessages(ctx, kafka.Message{
+		Topic: p.topicName(event.Name()),
 		Value: payload,
 		Time:  event.OccurredAt(),
 	})
 }
 
 func (p *KafkaPublisher) Close() error {
-	if p.Writer == nil {
+	client := p.client()
+	if client == nil {
 		return nil
 	}
-	return p.Writer.Close()
+	return client.Close()
+}
+
+func (p *KafkaPublisher) client() kafkaMessageWriter {
+	if p.writer != nil {
+		return p.writer
+	}
+	if p.Writer != nil {
+		return p.Writer
+	}
+	return nil
+}
+
+func (p *KafkaPublisher) topicName(eventName string) string {
+	if p.topicPrefix == "" {
+		return eventName
+	}
+	return p.topicPrefix + eventName
 }

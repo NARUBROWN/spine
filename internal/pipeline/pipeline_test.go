@@ -121,15 +121,17 @@ func (h *testReturnHandler) Handle(v any, ctx core.ExecutionContext) error {
 }
 
 type testPostHook struct {
-	called  bool
-	results []any
-	err     error
+	called      bool
+	results     []any
+	err         error
+	returnedErr error
 }
 
-func (h *testPostHook) AfterExecution(ctx core.ExecutionContext, result []any, err error) {
+func (h *testPostHook) AfterExecution(ctx core.ExecutionContext, result []any, err error) error {
 	h.called = true
 	h.results = result
 	h.err = err
+	return h.returnedErr
 }
 
 type testResponseWriter struct {
@@ -182,6 +184,11 @@ func (c *testController) Handle(v int) string {
 func (c *testController) Fail() (string, error) {
 	*c.called = *c.called + 1
 	return "ignored", errors.New("boom")
+}
+
+func (c *testController) Panic() string {
+	*c.called = *c.called + 1
+	panic("boom")
 }
 
 type pathController struct{}
@@ -266,6 +273,66 @@ func TestExecute_SuccessFlow(t *testing.T) {
 		if events[i] != expected[i] {
 			t.Fatalf("이벤트 순서가 예상과 다릅니다 (인덱스 %d): 실제 %s, 기대 %s", i, events[i], expected[i])
 		}
+	}
+}
+
+func TestExecute_PostHookFailurePreventsSuccessHandling(t *testing.T) {
+	controllerCalled := 0
+	p, _ := newPipelineWithController(t, "Handle", &controllerCalled)
+
+	p.AddArgumentResolver(&testArgumentResolver{
+		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
+		resolve:  func(ctx core.ExecutionContext, pm resolver.ParameterMeta) (any, error) { return 7, nil },
+	})
+
+	handled := false
+	p.AddReturnValueHandler(&testReturnHandler{
+		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
+		handle: func(v any, ctx core.ExecutionContext) error {
+			handled = true
+			return nil
+		},
+	})
+
+	postHook := &testPostHook{returnedErr: errors.New("dispatch failed")}
+	p.AddPostExecutionHook(postHook)
+
+	ctx := newTestExecutionContext()
+	writer := &testResponseWriter{}
+	ctx.Set("spine.response_writer", writer)
+
+	err := p.Execute(ctx)
+	if err == nil {
+		t.Fatal("post hook 실패는 실행 오류로 전파되어야 합니다")
+	}
+	if !postHook.called {
+		t.Fatal("post hook이 호출되어야 합니다")
+	}
+	if handled {
+		t.Fatal("post hook 실패 시 성공 응답은 작성되면 안 됩니다")
+	}
+	if writer.status != 500 {
+		t.Fatalf("실패 응답 상태 코드가 잘못되었습니다: %d", writer.status)
+	}
+}
+
+func TestExecute_RecoversFromPanic(t *testing.T) {
+	controllerCalled := 0
+	p, _ := newPipelineWithController(t, "Panic", &controllerCalled)
+
+	ctx := newTestExecutionContext()
+	writer := &testResponseWriter{}
+	ctx.Set("spine.response_writer", writer)
+
+	err := p.Execute(ctx)
+	if err == nil {
+		t.Fatal("panic은 error로 복구되어야 합니다")
+	}
+	if controllerCalled != 1 {
+		t.Fatalf("컨트롤러는 한 번 호출되어야 합니다. 실제 호출 횟수: %d", controllerCalled)
+	}
+	if writer.status != 500 {
+		t.Fatalf("panic 복구 시 500 응답이 작성되어야 합니다: %d", writer.status)
 	}
 }
 

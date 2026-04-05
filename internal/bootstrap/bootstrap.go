@@ -347,7 +347,7 @@ func Run(config Config) error {
 			// WS 전용 ArgumentResolver 등록
 			wsPipeline := buildWSPipeline(container, config.WebSocketRegistry, dispatchHook)
 
-			wsRuntime = ws.NewRuntime(config.WebSocketRegistry, wsPipeline)
+			wsRuntime = ws.NewRuntime(config.WebSocketRegistry, wsPipeline, config.HTTP.WebSocket)
 			defer wsRuntime.Stop()
 
 			// Echo Transport Hook으로 마운트
@@ -367,8 +367,7 @@ func Run(config Config) error {
 		}
 
 		// Echo Adapter
-		recoverEnabled := config.HTTP == nil || !config.HTTP.DisableRecover
-		server = httpEngine.NewServer(httpPipeline, config.Address, config.TransportHooks, recoverEnabled)
+		server = httpEngine.NewServer(httpPipeline, config.Address, config.TransportHooks, *config.HTTP)
 		server.Mount()
 
 		log.Printf("[Bootstrap] 서버 리스닝 시작: %s", config.Address)
@@ -636,7 +635,7 @@ ____/ /__  /_/ /  / _  / / /  __/
 
 func printBanner() {
 	fmt.Print(spineBanner)
-	log.Printf("[Bootstrap] Spine version: %s", "v0.4.2")
+	log.Printf("[Bootstrap] Spine version: %s", "v0.4.3")
 }
 
 func buildConsumerPipeline(container *container.Container, registry *consumer.Registry, dispatchHook *hook.EventDispatchHook) *pipeline.Pipeline {

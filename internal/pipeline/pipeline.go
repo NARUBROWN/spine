@@ -3,7 +3,9 @@ package pipeline
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
+	"runtime/debug"
 
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/event/hook"
@@ -46,6 +48,9 @@ func (p *Pipeline) AddReturnValueHandler(handlers ...handler.ReturnValueHandler)
 // Execute는 하나의 요청 실행 전체를 소유합니다.
 func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 	defer func() {
+		if recovered := recover(); recovered != nil {
+			finalErr = panicAsError(recovered)
+		}
 		if finalErr != nil {
 			p.handleExecutionError(ctx, finalErr)
 		}
@@ -113,16 +118,22 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 		return err
 	}
 
-	// ReturnValueHandler 처리
-	returnError := p.handleReturn(ctx, results)
-
-	// PostHooks 추가
-	for _, hook := range p.postHooks {
-		hook.AfterExecution(ctx, results, returnError)
+	handled, err := p.handleErrorReturn(ctx, results)
+	if err != nil {
+		return err
+	}
+	if handled {
+		return nil
 	}
 
-	if returnError != nil {
-		return returnError
+	for _, hook := range p.postHooks {
+		if err := hook.AfterExecution(ctx, results, nil); err != nil {
+			return err
+		}
+	}
+
+	if err := p.handleSuccessReturn(ctx, results); err != nil {
+		return err
 	}
 
 	// 라우트 Interceptor postHandle (역순)
@@ -189,8 +200,7 @@ func isNilResult(v any) bool {
 	}
 }
 
-func (p *Pipeline) handleReturn(ctx core.ExecutionContext, results []any) error {
-	// error가 있으면 error만 처리하고 종료
+func (p *Pipeline) handleErrorReturn(ctx core.ExecutionContext, results []any) (bool, error) {
 	for _, result := range results {
 		if isNilResult(result) {
 			continue
@@ -200,27 +210,31 @@ func (p *Pipeline) handleReturn(ctx core.ExecutionContext, results []any) error 
 			for _, h := range p.returnHandlers {
 				if h.Supports(resultType) {
 					if err := h.Handle(result, ctx); err != nil {
-						return err
+						return false, err
 					}
-					// error 반환값은 여기서 소비하고 종료한다.
-					return nil
+					return true, nil
 				}
 			}
-			return fmt.Errorf(
+			return false, fmt.Errorf(
 				"error 반환값을 처리할 ReturnValueHandler가 없습니다. (%s)",
 				resultType.String(),
 			)
 		}
 	}
 
-	// error가 없으면 척번째 non-nil 값 처리
+	return false, nil
+}
+
+func (p *Pipeline) handleSuccessReturn(ctx core.ExecutionContext, results []any) error {
 	for _, result := range results {
 		if isNilResult(result) {
 			continue
 		}
+		if _, isErr := result.(error); isErr {
+			continue
+		}
 
 		resultType := reflect.TypeOf(result)
-		handled := false
 
 		for _, h := range p.returnHandlers {
 			if !h.Supports(resultType) {
@@ -231,16 +245,13 @@ func (p *Pipeline) handleReturn(ctx core.ExecutionContext, results []any) error 
 				return err
 			}
 
-			handled = true
-			break
+			return nil
 		}
 
-		if !handled {
-			return fmt.Errorf(
-				"ReturnValueHandler가 없습니다. (%s)",
-				resultType.String(),
-			)
-		}
+		return fmt.Errorf(
+			"ReturnValueHandler가 없습니다. (%s)",
+			resultType.String(),
+		)
 	}
 	return nil
 }
@@ -308,10 +319,28 @@ func (p *Pipeline) handleExecutionError(ctx core.ExecutionContext, err error) {
 		return
 	}
 
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		rw.WriteJSON(
+			http.StatusRequestEntityTooLarge,
+			map[string]any{
+				"message": "Request entity too large",
+			},
+		)
+		return
+	}
+
 	rw.WriteJSON(
 		500,
 		map[string]any{
 			"message": "Internal server error",
 		},
 	)
+}
+
+func panicAsError(recovered any) error {
+	if err, ok := recovered.(error); ok {
+		return fmt.Errorf("panic recovered: %w\n%s", err, debug.Stack())
+	}
+	return fmt.Errorf("panic recovered: %v\n%s", recovered, debug.Stack())
 }

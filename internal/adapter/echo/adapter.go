@@ -3,23 +3,57 @@ package echo
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/NARUBROWN/spine/internal/pipeline"
+	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
 )
+
+const (
+	defaultReadHeaderTimeout = 5 * time.Second
+	defaultReadTimeout       = 30 * time.Second
+	defaultWriteTimeout      = 30 * time.Second
+	defaultIdleTimeout       = 120 * time.Second
+	defaultMaxHeaderBytes    = 1 << 20
+	defaultMaxBodyBytes      = 32 << 20
+)
+
+type normalizedHTTPOptions struct {
+	DisableRecover    bool
+	ReadHeaderTimeout time.Duration
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
+	MaxHeaderBytes    int
+	MaxBodyBytes      int64
+}
 
 type Server struct {
 	echo           *echo.Echo
 	pipeline       *pipeline.Pipeline
 	address        string
 	transportHooks []func(any)
+	httpServer     *http.Server
+	maxBodyBytes   int64
 }
 
-func NewServer(pipeline *pipeline.Pipeline, address string, transportHooks []func(any), recoverEnabled bool) *Server {
-	e := newEcho(recoverEnabled)
+func NewServer(pipeline *pipeline.Pipeline, address string, transportHooks []func(any), opts boot.HTTPOptions) *Server {
+	normalized := normalizeHTTPOptions(opts)
+	e := newEcho(normalized)
 	for _, hook := range transportHooks {
 		hook(e)
+	}
+
+	httpServer := &http.Server{
+		Addr:              address,
+		Handler:           e,
+		ReadHeaderTimeout: normalized.ReadHeaderTimeout,
+		ReadTimeout:       normalized.ReadTimeout,
+		WriteTimeout:      normalized.WriteTimeout,
+		IdleTimeout:       normalized.IdleTimeout,
+		MaxHeaderBytes:    normalized.MaxHeaderBytes,
 	}
 
 	return &Server{
@@ -27,15 +61,50 @@ func NewServer(pipeline *pipeline.Pipeline, address string, transportHooks []fun
 		pipeline:       pipeline,
 		address:        address,
 		transportHooks: transportHooks,
+		httpServer:     httpServer,
+		maxBodyBytes:   normalized.MaxBodyBytes,
 	}
 }
 
-func newEcho(recoverEnabled bool) *echo.Echo {
+func normalizeHTTPOptions(opts boot.HTTPOptions) normalizedHTTPOptions {
+	normalized := normalizedHTTPOptions{
+		DisableRecover:    opts.DisableRecover,
+		ReadHeaderTimeout: opts.ReadHeaderTimeout,
+		ReadTimeout:       opts.ReadTimeout,
+		WriteTimeout:      opts.WriteTimeout,
+		IdleTimeout:       opts.IdleTimeout,
+		MaxHeaderBytes:    opts.MaxHeaderBytes,
+		MaxBodyBytes:      opts.MaxBodyBytes,
+	}
+
+	if normalized.ReadHeaderTimeout == 0 {
+		normalized.ReadHeaderTimeout = defaultReadHeaderTimeout
+	}
+	if normalized.ReadTimeout == 0 {
+		normalized.ReadTimeout = defaultReadTimeout
+	}
+	if normalized.WriteTimeout == 0 {
+		normalized.WriteTimeout = defaultWriteTimeout
+	}
+	if normalized.IdleTimeout == 0 {
+		normalized.IdleTimeout = defaultIdleTimeout
+	}
+	if normalized.MaxHeaderBytes == 0 {
+		normalized.MaxHeaderBytes = defaultMaxHeaderBytes
+	}
+	if normalized.MaxBodyBytes == 0 {
+		normalized.MaxBodyBytes = defaultMaxBodyBytes
+	}
+
+	return normalized
+}
+
+func newEcho(opts normalizedHTTPOptions) *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
 	e.Logger.SetLevel(log.ERROR)
-	if recoverEnabled {
+	if !opts.DisableRecover {
 		e.Use(simpleRecover())
 	}
 	return e
@@ -63,10 +132,16 @@ func (s *Server) Mount() {
 }
 
 func (s *Server) Start() error {
-	return s.echo.Start(s.address)
+	return s.httpServer.ListenAndServe()
 }
 
 func (s *Server) handle(c echo.Context) error {
+	if s.maxBodyBytes > 0 {
+		req := c.Request()
+		req.Body = http.MaxBytesReader(c.Response(), req.Body, s.maxBodyBytes)
+		c.SetRequest(req)
+	}
+
 	ctx := NewContext(c)
 
 	ctx.Set(
@@ -83,5 +158,5 @@ func (s *Server) handle(c echo.Context) error {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
-	return s.echo.Shutdown(ctx)
+	return s.httpServer.Shutdown(ctx)
 }

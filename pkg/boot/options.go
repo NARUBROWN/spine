@@ -48,4 +48,60 @@ type HTTPOptions struct {
 
 	// Recover 미들웨어 비활성화 여부 (기본: false = 활성화)
 	DisableRecover bool
+
+	// HTTP 헤더 수신 최대 대기 시간입니다.
+	// 0이면 Spine 기본값을 사용합니다.
+	ReadHeaderTimeout time.Duration
+
+	// HTTP 요청 전체 읽기 최대 대기 시간입니다.
+	// 0이면 Spine 기본값을 사용합니다.
+	ReadTimeout time.Duration
+
+	// HTTP 응답 쓰기 최대 대기 시간입니다.
+	// 0이면 Spine 기본값을 사용합니다.
+	WriteTimeout time.Duration
+
+	// keep-alive idle 최대 대기 시간입니다.
+	// 0이면 Spine 기본값을 사용합니다.
+	IdleTimeout time.Duration
+
+	// HTTP 헤더 최대 크기입니다.
+	// 0이면 Spine 기본값을 사용합니다.
+	MaxHeaderBytes int
+
+	// HTTP 요청 바디 최대 크기입니다.
+	// 0이면 Spine 기본값을 사용하고, 음수면 제한을 비활성화합니다.
+	MaxBodyBytes int64
+
+	// WebSocket Runtime 설정입니다.
+	WebSocket WebSocketOptions
+}
+
+/*
+WebSocket Runtime 설정입니다.
+*/
+type WebSocketOptions struct {
+	// 허용할 Origin 목록입니다.
+	// 비어 있으면 브라우저 요청에 대해 same-origin만 허용합니다.
+	AllowedOrigins []string
+
+	// 허용할 최대 메시지 크기입니다.
+	// 0이면 Spine 기본값을 사용합니다.
+	MaxMessageBytes int64
+
+	// 핸드셰이크 최대 대기 시간입니다.
+	// 0이면 Spine 기본값을 사용합니다.
+	HandshakeTimeout time.Duration
+
+	// 메시지 수신 또는 pong 대기 최대 시간입니다.
+	// 0이면 Spine 기본값을 사용합니다.
+	ReadTimeout time.Duration
+
+	// 메시지 또는 제어 프레임 쓰기 최대 시간입니다.
+	// 0이면 Spine 기본값을 사용합니다.
+	WriteTimeout time.Duration
+
+	// 서버 ping 전송 간격입니다.
+	// 0이면 Spine 기본값을 사용합니다.
+	PingInterval time.Duration
 }
