@@ -20,18 +20,18 @@ type Writer struct {
 
 func NewRabbitMqWriter(opts boot.RabbitMqOptions) (*Writer, error) {
 	if opts.Write == nil {
-		return nil, errors.New("RabbitMQ Write 옵션이 설정되지 않았습니다")
+		return nil, errors.New("RabbitMQ write options are not configured")
 	}
 
 	conn, err := amqp091.Dial(opts.URL)
 	if err != nil {
-		return nil, fmt.Errorf("RabbitMQ 연결 실패: %w", err)
+		return nil, fmt.Errorf("RabbitMQ connection failed: %w", err)
 	}
 
 	ch, err := conn.Channel()
 	if err != nil {
 		_ = conn.Close()
-		return nil, fmt.Errorf("RabbitMQ 채널 생성 실패: %w", err)
+		return nil, fmt.Errorf("RabbitMQ channel creation failed: %w", err)
 	}
 
 	err = ch.ExchangeDeclare(
@@ -47,10 +47,10 @@ func NewRabbitMqWriter(opts boot.RabbitMqOptions) (*Writer, error) {
 	if err != nil {
 		_ = ch.Close()
 		_ = conn.Close()
-		return nil, fmt.Errorf("RabbitMQ Exchange 선언 실패: %w", err)
+		return nil, fmt.Errorf("RabbitMQ exchange declaration failed: %w", err)
 	}
 
-	log.Println("[RabbitMQ][Write] 이벤트 발행기 초기화 완료")
+	log.Println("[RabbitMQ][Write] Event publisher initialized")
 
 	return &Writer{
 		conn:     conn,

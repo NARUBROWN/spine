@@ -2,6 +2,7 @@ package ws
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	internalpublish "github.com/NARUBROWN/spine/internal/event/publish"
@@ -92,5 +93,38 @@ func TestWSExecutionContext_ExposesRouterPathParams(t *testing.T) {
 	keys := ctx.PathKeys()
 	if len(keys) != 1 || keys[0] != "roomId" {
 		t.Fatalf("path keys가 잘못되었습니다: %v", keys)
+	}
+}
+
+func TestWSExecutionContext_EventBusIsSafeForConcurrentAccess(t *testing.T) {
+	ctx := NewWSExecutionContext(
+		context.Background(),
+		"conn-1",
+		"/ws/echo",
+		pkgws.TextMessage,
+		nil,
+		nil,
+		func(int, []byte) error { return nil },
+	)
+
+	const goroutines = 32
+	buses := make([]any, goroutines)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := range goroutines {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			<-start
+			buses[index] = ctx.EventBus()
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	for i := 1; i < len(buses); i++ {
+		if buses[i] != buses[0] {
+			t.Fatal("동시 접근에서도 동일한 EventBus 인스턴스를 반환해야 합니다")
+		}
 	}
 }

@@ -137,7 +137,7 @@ func TestRun_WarmUpResolveFailureReturnsError(t *testing.T) {
 			{Method: "GET", Path: "/users", Handler: (*testController).Handle},
 		},
 	})
-	if err == nil || !strings.Contains(err.Error(), "Warm-up 실패") {
+	if err == nil || !strings.Contains(err.Error(), "warm-up failed") {
 		t.Fatalf("Warm-up 실패가 에러로 반환되어야 합니다: %v", err)
 	}
 }
@@ -147,7 +147,7 @@ func TestRun_NilGlobalInterceptorReturnsError(t *testing.T) {
 		HTTP:         &boot.HTTPOptions{},
 		Interceptors: []core.Interceptor{nil},
 	})
-	if err == nil || !strings.Contains(err.Error(), "Interceptor가 nil") {
+	if err == nil || !strings.Contains(err.Error(), "interceptor is nil") {
 		t.Fatalf("nil 인터셉터는 에러여야 합니다: %v", err)
 	}
 }

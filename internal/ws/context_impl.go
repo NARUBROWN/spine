@@ -2,6 +2,7 @@ package ws
 
 import (
 	"context"
+	"sync"
 
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/event/publish"
@@ -17,6 +18,7 @@ func (s *connSender) Send(messageType int, data []byte) error {
 }
 
 type WSExecutionContext struct {
+	mu          sync.RWMutex
 	ctx         context.Context
 	connID      string
 	path        string
@@ -48,6 +50,8 @@ func (w *WSExecutionContext) Context() context.Context {
 }
 
 func (w *WSExecutionContext) EventBus() core.EventBus {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	if w.eventBus == nil {
 		w.eventBus = publish.NewEventBus()
 	}
@@ -55,6 +59,8 @@ func (w *WSExecutionContext) EventBus() core.EventBus {
 }
 
 func (w *WSExecutionContext) Get(key string) (any, bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	if w.store == nil {
 		return nil, false
 	}
@@ -75,6 +81,8 @@ func (w *WSExecutionContext) Method() string {
 }
 
 func (w *WSExecutionContext) Params() map[string]string {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	if raw, ok := w.store["spine.params"]; ok {
 		if params, ok := raw.(map[string]string); ok {
 			copyMap := make(map[string]string, len(params))
@@ -92,6 +100,8 @@ func (w *WSExecutionContext) Path() string {
 }
 
 func (w *WSExecutionContext) PathKeys() []string {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	if raw, ok := w.store["spine.pathKeys"]; ok {
 		if keys, ok := raw.([]string); ok {
 			return append([]string(nil), keys...)
@@ -109,6 +119,8 @@ func (w *WSExecutionContext) Queries() map[string][]string {
 }
 
 func (w *WSExecutionContext) Set(key string, value any) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	if w.store == nil {
 		w.store = make(map[string]any)
 	}

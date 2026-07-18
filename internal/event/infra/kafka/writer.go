@@ -25,16 +25,16 @@ type KafkaPublisher struct {
 
 func NewKafkaPublisher(opts *boot.KafkaOptions) (*KafkaPublisher, error) {
 	if opts == nil {
-		return nil, errors.New("Kafka 옵션이 nil입니다")
+		return nil, errors.New("Kafka options cannot be nil")
 	}
 	if len(opts.Brokers) == 0 {
-		return nil, errors.New("Kafka Brokers가 설정되지 않았습니다")
+		return nil, errors.New("Kafka brokers are not configured")
 	}
 	if opts.Write == nil {
-		return nil, errors.New("Kafka Write 옵션이 설정되지 않았습니다")
+		return nil, errors.New("Kafka write options are not configured")
 	}
 
-	log.Println("[Kafka][Write] 이벤트 발행기 초기화 완료")
+	log.Println("[Kafka][Write] Event publisher initialized")
 
 	writer := &kafka.Writer{
 		Addr:     kafka.TCP(opts.Brokers...),
@@ -51,7 +51,7 @@ func NewKafkaPublisher(opts *boot.KafkaOptions) (*KafkaPublisher, error) {
 func (p *KafkaPublisher) Publish(ctx context.Context, event publish.DomainEvent) error {
 	payload, err := json.Marshal(event)
 	if err != nil {
-		return fmt.Errorf("KafkaPublisher 직렬화 실패: %w", err)
+		return fmt.Errorf("KafkaPublisher serialization failed: %w", err)
 	}
 
 	return p.client().WriteMessages(ctx, kafka.Message{

@@ -26,21 +26,21 @@ func (h *BinaryReturnHandler) Handle(value any, ctx core.ExecutionContext) error
 		binary = v
 	case *httpx.Binary:
 		if v == nil {
-			return fmt.Errorf("BinaryReturnValueHandler: nil *httpx.Binary는 처리할 수 없습니다")
+			return fmt.Errorf("BinaryReturnValueHandler: cannot handle nil *httpx.Binary")
 		}
 		binary = *v
 	default:
-		return fmt.Errorf("BinaryReturnValueHandler: 전달된 값이 httpx.Binary 타입이 아닙니다")
+		return fmt.Errorf("BinaryReturnValueHandler: value is not an httpx.Binary")
 	}
 
 	rwAny, ok := ctx.Get("spine.response_writer")
 	if !ok {
-		return fmt.Errorf("ExecutionContext 안에서 ResponseWriter를 찾을 수 없습니다.")
+		return fmt.Errorf("ResponseWriter not found in ExecutionContext")
 	}
 
 	rw, ok := rwAny.(core.ResponseWriter)
 	if !ok {
-		return fmt.Errorf("ResponseWriter 타입이 올바르지 않습니다.")
+		return fmt.Errorf("invalid ResponseWriter type")
 	}
 
 	// 사용자 정의 헤더 설정

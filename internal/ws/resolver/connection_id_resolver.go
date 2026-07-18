@@ -18,7 +18,7 @@ func (r *ConnectionIDResolver) Supports(meta resolver.ParameterMeta) bool {
 func (r *ConnectionIDResolver) Resolve(ctx core.ExecutionContext, meta resolver.ParameterMeta) (any, error) {
 	wsCtx, ok := ctx.(core.WebSocketContext)
 	if !ok {
-		return nil, fmt.Errorf("WebSocketContext가 아닙니다")
+		return nil, fmt.Errorf("context is not a WebSocketContext")
 	}
 	return pkgws.ConnectionID{
 		Value: wsCtx.ConnID(),

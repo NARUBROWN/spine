@@ -44,10 +44,10 @@ type User struct {
 func (c *UserController) GetUser(ctx context.Context, userId path.Int, spineCtx spine.Ctx) (User, error) {
 	v, ok := spineCtx.Get("test")
 	if !ok {
-		return User{}, httperr.BadRequest("컨텍스트에 내용이 없습니다.")
+		return User{}, httperr.BadRequest("context does not contain content")
 	}
 	log.Printf("%s", v)
-	return User{}, httperr.NotFound("사용자를 찾을 수 없습니다.")
+	return User{}, httperr.NotFound("user not found")
 }
 
 type CreateUserRequest struct {

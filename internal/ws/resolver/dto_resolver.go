@@ -18,17 +18,17 @@ func (r *DTOResolver) Supports(meta resolver.ParameterMeta) bool {
 func (r *DTOResolver) Resolve(ctx core.ExecutionContext, meta resolver.ParameterMeta) (any, error) {
 	wsCtx, ok := ctx.(core.WebSocketContext)
 	if !ok {
-		return nil, fmt.Errorf("WebSocketContext가 아닙니다")
+		return nil, fmt.Errorf("context is not a WebSocketContext")
 	}
 
 	payload := wsCtx.Payload()
 	if payload == nil {
-		return nil, fmt.Errorf("Payload가 비어있어 DTO를 생성할 수 없습니다")
+		return nil, fmt.Errorf("cannot create DTO because payload is empty")
 	}
 
 	dtoPtr := reflect.New(meta.Type)
 	if err := json.Unmarshal(payload, dtoPtr.Interface()); err != nil {
-		return nil, fmt.Errorf("DTO 역직렬화 실패: %w", err)
+		return nil, fmt.Errorf("DTO deserialization failed: %w", err)
 	}
 
 	return dtoPtr.Elem().Interface(), nil

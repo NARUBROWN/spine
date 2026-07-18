@@ -34,11 +34,11 @@ func (c *Container) RegisterConstructor(function any) error {
 	typ := val.Type()
 
 	if typ.Kind() != reflect.Func {
-		return errors.New("생성자는 함수여야 합니다")
+		return errors.New("constructor must be a function")
 	}
 
 	if typ.NumOut() != 1 {
-		return errors.New("생성자는 하나의 반환값만 가져야 합니다")
+		return errors.New("constructor must return exactly one value")
 	}
 
 	outType := typ.Out(0)
@@ -51,14 +51,56 @@ func (c *Container) RegisterConstructor(function any) error {
 }
 
 func (c *Container) Resolve(componentType reflect.Type) (any, error) {
+	if instance, ok := c.getInstance(componentType); ok {
+		return instance, nil
+	}
+	if err := c.validateDependencyGraph(componentType, map[reflect.Type]int{}, nil, map[reflect.Type]struct{}{}); err != nil {
+		return nil, err
+	}
 	return c.resolve(componentType, map[reflect.Type]int{}, nil)
+}
+
+func (c *Container) validateDependencyGraph(
+	componentType reflect.Type,
+	stack map[reflect.Type]int,
+	path []reflect.Type,
+	validated map[reflect.Type]struct{},
+) error {
+	if _, ok := c.getInstance(componentType); ok {
+		return nil
+	}
+	if _, ok := validated[componentType]; ok {
+		return nil
+	}
+	if idx, ok := stack[componentType]; ok {
+		cycle := append([]reflect.Type{}, path[idx:]...)
+		cycle = append(cycle, componentType)
+		return fmt.Errorf("circular dependency detected: %s", formatTypePath(cycle))
+	}
+
+	constructor, err := c.getConstructor(componentType)
+	if err != nil {
+		return err
+	}
+
+	stack[componentType] = len(path)
+	path = append(path, componentType)
+	defer delete(stack, componentType)
+
+	for i := 0; i < constructor.Type().NumIn(); i++ {
+		if err := c.validateDependencyGraph(constructor.Type().In(i), stack, path, validated); err != nil {
+			return err
+		}
+	}
+	validated[componentType] = struct{}{}
+	return nil
 }
 
 func (c *Container) resolve(componentType reflect.Type, stack map[reflect.Type]int, path []reflect.Type) (any, error) {
 	if idx, ok := stack[componentType]; ok {
 		cycle := append([]reflect.Type{}, path[idx:]...)
 		cycle = append(cycle, componentType)
-		return nil, fmt.Errorf("순환 의존성 감지: %s", formatTypePath(cycle))
+		return nil, fmt.Errorf("circular dependency detected: %s", formatTypePath(cycle))
 	}
 
 	if instance, ok := c.getInstance(componentType); ok {
@@ -71,15 +113,16 @@ func (c *Container) resolve(componentType reflect.Type, stack map[reflect.Type]i
 	}
 
 	state, wait, ok := c.beginBuild(componentType)
-	if ok {
-		if wait {
-			select {
-			case <-state.done:
-				return state.instance, state.err
-			}
-		}
-		defer c.finishBuild(componentType, state)
+	if !ok {
+		return state.instance, state.err
 	}
+	if wait {
+		select {
+		case <-state.done:
+			return state.instance, state.err
+		}
+	}
+	defer c.finishBuild(componentType, state)
 
 	stack[componentType] = len(path)
 	path = append(path, componentType)
@@ -91,26 +134,38 @@ func (c *Container) resolve(componentType reflect.Type, stack map[reflect.Type]i
 		paramType := constructor.Type().In(i)
 		paramInstance, err := c.resolve(paramType, stack, path)
 		if err != nil {
-			if ok && !wait {
-				state.err = err
-			}
+			state.err = err
 			return nil, err
 		}
 		args[i] = reflect.ValueOf(paramInstance)
 	}
 
-	result := constructor.Call(args)[0].Interface()
+	result, err := callConstructor(constructor, args)
+	if err != nil {
+		state.err = err
+		return nil, err
+	}
 	if cached, existed := c.cacheInstance(componentType, result); existed {
-		if ok && !wait {
-			state.instance = cached
-		}
+		state.instance = cached
 		return cached, nil
 	}
-	if ok && !wait {
-		state.instance = result
-	}
+	state.instance = result
 
 	return result, nil
+}
+
+func callConstructor(constructor reflect.Value, args []reflect.Value) (result any, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			if recoveredErr, ok := recovered.(error); ok {
+				err = fmt.Errorf("panic while executing constructor: %w", recoveredErr)
+				return
+			}
+			err = fmt.Errorf("panic while executing constructor: %v", recovered)
+		}
+	}()
+
+	return constructor.Call(args)[0].Interface(), nil
 }
 
 func (c *Container) getInstance(componentType reflect.Type) (any, bool) {
@@ -143,11 +198,11 @@ func (c *Container) getConstructor(componentType reflect.Type) (reflect.Value, e
 			return matched, nil
 		}
 		if matches > 1 {
-			return reflect.Value{}, fmt.Errorf("인터페이스 %v 에 대한 생성자가 여러 개 등록되었습니다", componentType)
+			return reflect.Value{}, fmt.Errorf("multiple constructors registered for interface %v", componentType)
 		}
 	}
 
-	return reflect.Value{}, fmt.Errorf("등록된 생성자가 없습니다: %v", componentType)
+	return reflect.Value{}, fmt.Errorf("no constructor registered for %v", componentType)
 }
 
 func (c *Container) cacheInstance(componentType reflect.Type, instance any) (any, bool) {

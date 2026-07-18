@@ -25,13 +25,13 @@ type Runtime struct {
 
 func NewRuntime(registry *Registry, factory runnerFactory, pipeline *pipeline.Pipeline) *Runtime {
 	if registry == nil {
-		panic("consumer: 레지스트리는 nil일 수 없습니다")
+		panic("consumer: registry cannot be nil")
 	}
 	if factory == nil {
-		panic("consumer: factory는 nil일 수 없습니다")
+		panic("consumer: factory cannot be nil")
 	}
 	if pipeline == nil {
-		panic("consumer: pipeline은 nil일 수 없습니다")
+		panic("consumer: pipeline cannot be nil")
 	}
 
 	return &Runtime{
@@ -57,19 +57,19 @@ func (r *Runtime) Done() <-chan struct{} {
 func (r *Runtime) Start(ctx context.Context) {
 	ctx, r.cancel = context.WithCancel(ctx)
 	for _, registration := range r.registry.Registrations() {
-		log.Printf("[Event Consumer] 토픽 '%s'에 대한 컨슈머를 시작합니다.", registration.Topic)
+		log.Printf("[Event Consumer] Starting consumer for topic '%s'", registration.Topic)
 		go func(reg Registration) {
 			reader, err := r.factory.Build(reg)
 			if err != nil {
 				startErr := fmt.Errorf(
-					"[Event Consumer] 컨슈머 초기화 실패 (topic=%s): %w",
+					"[Event Consumer] Consumer initialization failed (topic=%s): %w",
 					reg.Topic,
 					err,
 				)
 				select {
 				case r.errChan <- startErr:
 				default:
-					log.Printf("%v (에러 채널이 가득 차 전파하지 못했습니다)", startErr)
+					log.Printf("%v (could not forward because the error channel is full)", startErr)
 				}
 				// 초기화 실패는 치명적이므로 전체 런타임을 중단한다.
 				r.Stop()
@@ -87,7 +87,7 @@ func (r *Runtime) Start(ctx context.Context) {
 						if ctx.Err() != nil {
 							return
 						}
-						log.Printf("[Event Consumer] 메시지 읽기 실패: %v", err)
+						log.Printf("[Event Consumer] Failed to read message: %v", err)
 						continue
 					}
 
@@ -97,14 +97,14 @@ func (r *Runtime) Start(ctx context.Context) {
 					// 핸들러 실행
 					if err := r.pipeline.Execute(reqCtx); err != nil {
 						log.Printf(
-							"[Event Consumer] 핸들러 실행 실패 (%s): %v",
+							"[Event Consumer] Handler execution failed (%s): %v",
 							reg.Topic,
 							err,
 						)
 						// 핸들러 실패 시 NACK
 						if nackErr := msg.Nack(); nackErr != nil {
 							log.Printf(
-								"[Event Consumer] NACK 실패 (%s): %v",
+								"[Event Consumer] NACK failed (%s): %v",
 								reg.Topic,
 								nackErr,
 							)
@@ -115,7 +115,7 @@ func (r *Runtime) Start(ctx context.Context) {
 					// 핸들러 성공 시 ACK
 					if ackErr := msg.Ack(); ackErr != nil {
 						log.Printf(
-							"[Event Consumer] ACK 실패 (%s): %v",
+							"[Event Consumer] ACK failed (%s): %v",
 							reg.Topic,
 							ackErr,
 						)
@@ -130,10 +130,10 @@ func (r *Runtime) Validate() error {
 	for _, reg := range r.registry.Registrations() {
 		reader, err := r.factory.Build(reg)
 		if err != nil {
-			return fmt.Errorf("Consumer 초기화 실패 (%s): %w", reg.Topic, err)
+			return fmt.Errorf("Consumer initialization failed (%s): %w", reg.Topic, err)
 		}
 		if err := reader.Close(); err != nil {
-			return fmt.Errorf("Consumer 종료 실패 (%s): %w", reg.Topic, err)
+			return fmt.Errorf("Consumer shutdown failed (%s): %w", reg.Topic, err)
 		}
 	}
 	return nil
@@ -145,6 +145,6 @@ func (r *Runtime) Stop() {
 			r.cancel() // 모든 goroutine 중지
 		}
 		close(r.done)
-		log.Printf("[Event Consumer] 모든 컨슈머를 중지했습니다.")
+		log.Printf("[Event Consumer] All consumers stopped")
 	})
 }

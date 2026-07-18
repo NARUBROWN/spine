@@ -86,7 +86,7 @@ func (r *DefaultRouter) Register(method string, path string, meta core.HandlerMe
 func (r *DefaultRouter) Route(ctx core.ExecutionContext) (core.HandlerMeta, error) {
 	root := r.trees[ctx.Method()]
 	if root == nil {
-		return core.HandlerMeta{}, httperr.NotFound("핸들러가 없습니다.")
+		return core.HandlerMeta{}, httperr.NotFound("handler not found")
 	}
 
 	pathSegs := splitPath(ctx.Path())
@@ -104,7 +104,7 @@ func (r *DefaultRouter) Route(ctx core.ExecutionContext) (core.HandlerMeta, erro
 		}
 
 		if node.paramChild == nil {
-			return core.HandlerMeta{}, httperr.NotFound("핸들러가 없습니다.")
+			return core.HandlerMeta{}, httperr.NotFound("handler not found")
 		}
 
 		if params == nil {
@@ -119,7 +119,7 @@ func (r *DefaultRouter) Route(ctx core.ExecutionContext) (core.HandlerMeta, erro
 	}
 
 	if node.meta == nil {
-		return core.HandlerMeta{}, httperr.NotFound("핸들러가 없습니다.")
+		return core.HandlerMeta{}, httperr.NotFound("handler not found")
 	}
 
 	if params != nil {

@@ -68,10 +68,10 @@ func (c *trackedConn) writeControl(messageType int, data []byte, timeout time.Du
 
 func NewRuntime(registry *Registry, pipeline *pipeline.Pipeline, opts boot.WebSocketOptions) *Runtime {
 	if registry == nil {
-		panic("ws: registry는 nil일 수 없습니다")
+		panic("ws: registry cannot be nil")
 	}
 	if pipeline == nil {
-		panic("ws: pipeline은 nil일 수 없습니다")
+		panic("ws: pipeline cannot be nil")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -131,7 +131,7 @@ func (r *Runtime) upgrader() websocket.Upgrader {
 func (r *Runtime) Mount(mux *http.ServeMux) {
 	for _, reg := range r.registry.Registrations() {
 		reg := reg
-		log.Printf("[WS] 경로 등록: %s", reg.Path)
+		log.Printf("[WS] Registered path: %s", reg.Path)
 
 		mux.HandleFunc(reg.Path, func(w http.ResponseWriter, req *http.Request) {
 			r.HandleConn(w, req, reg)
@@ -150,7 +150,7 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 	upgrader := r.upgrader()
 	conn, err := upgrader.Upgrade(w, req, nil)
 	if err != nil {
-		log.Printf("[WS] 업그레이드 실패 (%s): %v", reg.Path, err)
+		log.Printf("[WS] Upgrade failed (%s): %v", reg.Path, err)
 		return
 	}
 
@@ -160,12 +160,16 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 		_ = conn.Close()
 		return
 	}
+	connCtx, cancelConn := context.WithCancel(req.Context())
+	stopRuntimeCancellation := context.AfterFunc(r.ctx, cancelConn)
 	defer func() {
+		stopRuntimeCancellation()
+		cancelConn()
 		r.untrackConn(connID)
 		_ = conn.Close()
 	}()
 
-	log.Printf("[WS] 연결 수립 (conn=%p, path=%s)", &connID, reg.Path)
+	log.Printf("[WS] Connection established (conn=%p, path=%s)", &connID, reg.Path)
 
 	if r.options.MaxMessageBytes > 0 {
 		conn.SetReadLimit(r.options.MaxMessageBytes)
@@ -190,9 +194,7 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 			select {
 			case <-done:
 				return
-			case <-r.ctx.Done():
-				return
-			case <-req.Context().Done():
+			case <-connCtx.Done():
 				return
 			case <-ticker.C:
 				err := tracked.writeControl(websocket.PingMessage, nil, r.options.WriteTimeout)
@@ -207,12 +209,12 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 	for {
 		msgType, payload, err := conn.ReadMessage()
 		if err != nil {
-			log.Printf("[WS] 연결 종료 (conn=%p): %v", &connID, err)
+			log.Printf("[WS] Connection closed (conn=%p): %v", &connID, err)
 			return
 		}
 
 		ctx := NewWSExecutionContext(
-			req.Context(),
+			connCtx,
 			connID,
 			req.URL.Path,
 			msgType,
@@ -222,7 +224,7 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 		)
 
 		if err := r.pipeline.Execute(ctx); err != nil {
-			log.Printf("[WS] 핸들러 실패 (conn=%p): %v", &connID, err)
+			log.Printf("[WS] Handler failed (conn=%p): %v", &connID, err)
 			_ = tracked.writeControl(
 				websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "handler error"),
@@ -254,7 +256,7 @@ func (r *Runtime) Stop() {
 			_ = conn.conn.Close()
 		}
 
-		log.Printf("[WS] WebSocket 런타임을 중지했습니다.")
+		log.Printf("[WS] WebSocket runtime stopped")
 	})
 }
 

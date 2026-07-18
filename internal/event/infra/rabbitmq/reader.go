@@ -27,10 +27,10 @@ type RabbitMqReadOptions struct {
 
 func NewRabbitMqReader(opts RabbitMqOptions) (*Reader, error) {
 	if opts.Read == nil {
-		return nil, errors.New("RabbitMQ Read 옵션이 설정되지 않았습니다.")
+		return nil, errors.New("RabbitMQ read options are not configured")
 	}
 	if opts.Read.Exchange == "" {
-		return nil, errors.New("RabbitMQ default exchange는 Spine에서 지원하지 않습니다.")
+		return nil, errors.New("RabbitMQ default exchange is not supported by Spine")
 	}
 
 	conn, err := amqp091.Dial(opts.URL)
@@ -115,7 +115,7 @@ func (r *Reader) Read(ctx context.Context) (*consumer.Message, error) {
 
 	case msg, ok := <-r.msgs:
 		if !ok {
-			return nil, errors.New("RabbitMQ 채널이 닫혔습니다.")
+			return nil, errors.New("RabbitMQ channel is closed")
 		}
 
 		eventName := msg.Type

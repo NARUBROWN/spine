@@ -17,12 +17,12 @@ func (r *PathStringResolver) Supports(parameterMeta ParameterMeta) bool {
 func (r *PathStringResolver) Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error) {
 	httpCtx, ok := ctx.(core.HttpRequestContext)
 	if !ok {
-		return nil, fmt.Errorf("HTTP 요청 컨텍스트가 아닙니다")
+		return nil, fmt.Errorf("context is not an HTTP request context")
 	}
 
 	if parameterMeta.PathKey == "" {
 		return nil, fmt.Errorf(
-			"path key가 바인딩되지 않았습니다: %v",
+			"path key is not bound: %v",
 			parameterMeta.Type,
 		)
 	}
@@ -30,7 +30,7 @@ func (r *PathStringResolver) Resolve(ctx core.ExecutionContext, parameterMeta Pa
 	raw, ok := httpCtx.Params()[parameterMeta.PathKey]
 	if !ok {
 		return nil, fmt.Errorf(
-			"path param을 찾을 수 없습니다: %s",
+			"path parameter not found: %s",
 			parameterMeta.PathKey,
 		)
 	}

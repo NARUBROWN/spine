@@ -1,0 +1,474 @@
+# Spine
+
+This document is a compact implementation guide for agents building applications with Spine.
+
+Use the current Spine source code and tests as the only API authority. In particular:
+
+- Register every controller, service, repository, and DI-resolved interceptor with `app.Constructor`.
+- Register HTTP routes with method expressions such as `(*UserController).Get`.
+- Return `httpx.Response[T]` for successful HTTP responses and `httperr.*` errors for expected HTTP failures.
+- Check errors from `WebSocket().Register`, `Consumers().Register`, and `Run`.
+- Enable HTTP explicitly with `HTTP: &boot.HTTPOptions{}`. Without it, the current runtime does not start an HTTP server.
+
+The examples require Go `1.25.5` or later and the module:
+
+```sh
+go get github.com/NARUBROWN/spine
+```
+
+## 1. Minimal HTTP application
+
+Create a `main.go` file:
+
+```go
+package main
+
+import (
+	"log"
+
+	"github.com/NARUBROWN/spine"
+	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/NARUBROWN/spine/pkg/httpx"
+	"github.com/NARUBROWN/spine/pkg/path"
+)
+
+type HealthController struct{}
+
+func NewHealthController() *HealthController {
+	return &HealthController{}
+}
+
+func (c *HealthController) Get(id path.Int) httpx.Response[map[string]any] {
+	return httpx.Response[map[string]any]{
+		Body: map[string]any{
+			"id":      id.Value,
+			"status":  "ok",
+			"service": "spine",
+		},
+	}
+}
+
+func main() {
+	app := spine.New()
+
+	app.Constructor(NewHealthController)
+	app.Route("GET", "/health/:id", (*HealthController).Get)
+
+	if err := app.Run(boot.Options{
+		Address: ":8080",
+		HTTP:    &boot.HTTPOptions{},
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+
+Run and verify it:
+
+```sh
+go run .
+curl http://localhost:8080/health/42
+```
+
+The `path.Int` parameter is resolved from `:id`; access the parsed value through `id.Value`.
+
+## 2. CRUD + DI + error handling
+
+This small in-memory API demonstrates the intended dependency direction:
+
+```text
+UserController -> UserService -> UserRepository
+```
+
+Place the following in `main.go`:
+
+```go
+package main
+
+import (
+	"context"
+	"log"
+	"sync"
+
+	"github.com/NARUBROWN/spine"
+	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/NARUBROWN/spine/pkg/httperr"
+	"github.com/NARUBROWN/spine/pkg/httpx"
+	"github.com/NARUBROWN/spine/pkg/path"
+)
+
+type User struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+type CreateUserRequest struct {
+	Name string `json:"name"`
+}
+
+type UserRepository struct {
+	mu     sync.RWMutex
+	nextID int64
+	users  map[int64]User
+}
+
+func NewUserRepository() *UserRepository {
+	return &UserRepository{nextID: 1, users: make(map[int64]User)}
+}
+
+func (r *UserRepository) Create(user User) User {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	user.ID = r.nextID
+	r.nextID++
+	r.users[user.ID] = user
+	return user
+}
+
+func (r *UserRepository) FindByID(id int64) (User, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	user, ok := r.users[id]
+	return user, ok
+}
+
+type UserService struct {
+	repo *UserRepository
+}
+
+func NewUserService(repo *UserRepository) *UserService {
+	return &UserService{repo: repo}
+}
+
+func (s *UserService) Create(name string) User {
+	return s.repo.Create(User{Name: name})
+}
+
+func (s *UserService) Get(id int64) (User, bool) {
+	return s.repo.FindByID(id)
+}
+
+type UserController struct {
+	service *UserService
+}
+
+func NewUserController(service *UserService) *UserController {
+	return &UserController{service: service}
+}
+
+func (c *UserController) Create(
+	ctx context.Context,
+	req *CreateUserRequest,
+) (httpx.Response[User], error) {
+	if req == nil || req.Name == "" {
+		return httpx.Response[User]{}, httperr.BadRequest("name is required")
+	}
+
+	return httpx.Response[User]{
+		Body: c.service.Create(req.Name),
+		Options: httpx.ResponseOptions{Status: 201},
+	}, nil
+}
+
+func (c *UserController) Get(id path.Int) (httpx.Response[User], error) {
+	user, ok := c.service.Get(id.Value)
+	if !ok {
+		return httpx.Response[User]{}, httperr.NotFound("user not found")
+	}
+	return httpx.Response[User]{Body: user}, nil
+}
+
+func main() {
+	app := spine.New()
+
+	app.Constructor(
+		NewUserRepository,
+		NewUserService,
+		NewUserController,
+	)
+
+	app.Route("POST", "/users", (*UserController).Create)
+	app.Route("GET", "/users/:id", (*UserController).Get)
+
+	if err := app.Run(boot.Options{
+		Address: ":8080",
+		HTTP:    &boot.HTTPOptions{},
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+
+Verify the contract:
+
+```sh
+go run .
+curl -i -X POST http://localhost:8080/users \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Ada"}'
+curl -i http://localhost:8080/users/1
+curl -i http://localhost:8080/users/999
+```
+
+Expected failure responses are returned through `httperr.BadRequest` and `httperr.NotFound`; Spine serializes them as JSON with a `message` field.
+
+## 3. WebSocket chat
+
+This application receives a JSON message on `/ws/chat` and broadcasts it to every connected client. Create `main.go`:
+
+```go
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"log"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/NARUBROWN/spine"
+	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/NARUBROWN/spine/pkg/ws"
+)
+
+type ChatController struct {
+	mu      sync.RWMutex
+	clients map[string]ws.Sender
+}
+
+func NewChatController() *ChatController {
+	return &ChatController{clients: make(map[string]ws.Sender)}
+}
+
+type ChatMessage struct {
+	Message string `json:"message"`
+}
+
+type ChatEvent struct {
+	Type    string `json:"type"`
+	From    string `json:"from"`
+	Message string `json:"message"`
+	At      string `json:"at"`
+}
+
+func (c *ChatController) OnMessage(
+	ctx context.Context,
+	connID ws.ConnectionID,
+	msg ChatMessage,
+) error {
+	sender, ok := ctx.Value(ws.SenderKey).(ws.Sender)
+	if ok && sender != nil {
+		c.mu.Lock()
+		c.clients[connID.Value] = sender
+		c.mu.Unlock()
+	}
+
+	message := strings.TrimSpace(msg.Message)
+	if message == "" {
+		return nil
+	}
+
+	payload, err := json.Marshal(ChatEvent{
+		Type:    "message",
+		From:    connID.Value,
+		Message: message,
+		At:      time.Now().UTC().Format(time.RFC3339),
+	})
+	if err != nil {
+		return err
+	}
+
+	c.mu.RLock()
+	clients := make(map[string]ws.Sender, len(c.clients))
+	for id, client := range c.clients {
+		clients[id] = client
+	}
+	c.mu.RUnlock()
+
+	var firstErr error
+	for id, client := range clients {
+		if err := client.Send(ws.TextMessage, payload); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			c.mu.Lock()
+			delete(c.clients, id)
+			c.mu.Unlock()
+		}
+	}
+	return firstErr
+}
+
+func main() {
+	app := spine.New()
+	app.Constructor(NewChatController)
+
+	if err := app.WebSocket().Register(
+		"/ws/chat",
+		(*ChatController).OnMessage,
+	); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := app.Run(boot.Options{
+		Address: ":8080",
+		HTTP:    &boot.HTTPOptions{},
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+
+Run two WebSocket clients against `ws://localhost:8080/ws/chat`, then send:
+
+```json
+{"message":"hello"}
+```
+
+Each connected client receives a JSON `ChatEvent`. `ws.ConnectionID` identifies the sender, and `ws.Sender` is obtained from the request context using `ws.SenderKey`.
+
+## 4. Kafka event publishing and consumption
+
+Use two applications with a shared event type. The order application publishes `order.created`; the stock application consumes it.
+
+Assume the module path is `example.com/spine-kafka` and Kafka is available at `localhost:9092`.
+
+Create `shared/events/order_created.go`:
+
+```go
+package events
+
+import "time"
+
+type OrderCreated struct {
+	OrderID int64     `json:"order_id"`
+	At      time.Time `json:"at"`
+}
+
+func (e OrderCreated) Name() string {
+	return "order.created"
+}
+
+func (e OrderCreated) OccurredAt() time.Time {
+	return e.At
+}
+```
+
+Create `order-app/main.go`:
+
+```go
+package main
+
+import (
+	"context"
+	"log"
+	"time"
+
+	"example.com/spine-kafka/shared/events"
+	"github.com/NARUBROWN/spine"
+	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/NARUBROWN/spine/pkg/event/publish"
+	"github.com/NARUBROWN/spine/pkg/httpx"
+	"github.com/NARUBROWN/spine/pkg/path"
+)
+
+type OrderController struct{}
+
+func NewOrderController() *OrderController {
+	return &OrderController{}
+}
+
+func (c *OrderController) Create(
+	ctx context.Context,
+	orderID path.Int,
+) httpx.Response[string] {
+	publish.Event(ctx, events.OrderCreated{
+		OrderID: orderID.Value,
+		At:      time.Now(),
+	})
+
+	return httpx.Response[string]{
+		Body:    "accepted",
+		Options: httpx.ResponseOptions{Status: 202},
+	}
+}
+
+func main() {
+	app := spine.New()
+	app.Constructor(NewOrderController)
+	app.Route("POST", "/orders/:id", (*OrderController).Create)
+
+	if err := app.Run(boot.Options{
+		Address: ":8080",
+		Kafka: &boot.KafkaOptions{
+			Brokers: []string{"localhost:9092"},
+			Write:   &boot.KafkaWriteOptions{},
+		},
+		HTTP: &boot.HTTPOptions{},
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+
+Create `stock-app/main.go`:
+
+```go
+package main
+
+import (
+	"context"
+	"log"
+
+	"example.com/spine-kafka/shared/events"
+	"github.com/NARUBROWN/spine"
+	"github.com/NARUBROWN/spine/pkg/boot"
+)
+
+type OrderConsumer struct{}
+
+func NewOrderConsumer() *OrderConsumer {
+	return &OrderConsumer{}
+}
+
+func (c *OrderConsumer) OnCreated(
+	ctx context.Context,
+	eventName string,
+	event events.OrderCreated,
+) error {
+	log.Printf("received %s for order %d", eventName, event.OrderID)
+	return nil
+}
+
+func main() {
+	app := spine.New()
+	app.Constructor(NewOrderConsumer)
+
+	if err := app.Consumers().Register(
+		"order.created",
+		(*OrderConsumer).OnCreated,
+	); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := app.Run(boot.Options{
+		Kafka: &boot.KafkaOptions{
+			Brokers: []string{"localhost:9092"},
+			Read: &boot.KafkaReadOptions{
+				GroupID: "stock-service",
+			},
+		},
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+
+Start `stock-app` before `order-app`, then call:
+
+```sh
+curl -i -X POST http://localhost:8080/orders/123
+```
+
+`publish.Event` queues events on the request context. Spine dispatches them only after the controller finishes successfully, using the configured Kafka publisher. The consumer handler receives `context.Context`, the event name, and the DTO decoded from the Kafka message.

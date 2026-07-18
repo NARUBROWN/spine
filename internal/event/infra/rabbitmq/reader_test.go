@@ -63,8 +63,8 @@ func TestReader_ReadClosedChannel(t *testing.T) {
 
 	reader := &Reader{msgs: msgs}
 	_, err := reader.Read(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "채널이 닫혔습니다") {
-		t.Fatalf("닫힌 채널 에러가 반환되어야 합니다: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "channel is closed") {
+		t.Fatalf("closed channel error should be returned: %v", err)
 	}
 }
 

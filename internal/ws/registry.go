@@ -26,10 +26,10 @@ func NewRegistry() *Registry {
 
 func (r *Registry) Register(path string, handler any) error {
 	if path == "" {
-		return fmt.Errorf("ws: path가 빈 값일 수 없습니다")
+		return fmt.Errorf("ws: path cannot be empty")
 	}
 	if handler == nil {
-		return fmt.Errorf("ws: handler가 nil일 수 없습니다")
+		return fmt.Errorf("ws: handler cannot be nil")
 	}
 
 	meta, err := router.NewHandlerMeta(handler)

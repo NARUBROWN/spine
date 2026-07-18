@@ -298,7 +298,10 @@ func TestErrorReturnHandler_GenericError(t *testing.T) {
 		t.Fatalf("기본 상태 코드는 500이어야 합니다: %d", writer.status)
 	}
 	body := writer.jsonBody.(map[string]any)
-	if body["message"] != "boom" {
+	if body["message"] != "Internal server error" {
 		t.Fatalf("메시지가 잘못되었습니다: %v", body)
+	}
+	if body["message"] == "boom" {
+		t.Fatal("일반 오류 원문이 응답에 노출되었습니다")
 	}
 }

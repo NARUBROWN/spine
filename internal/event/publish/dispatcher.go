@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"reflect"
 	"sync"
 
 	"github.com/NARUBROWN/spine/pkg/event/publish"
@@ -15,36 +16,58 @@ type EventDispatcher interface {
 }
 
 type DefaultEventDispatcher struct {
-	Publishers []EventPublisher
+	publishers []EventPublisher
+}
+
+func NewDefaultEventDispatcher(publishers ...EventPublisher) (*DefaultEventDispatcher, error) {
+	for i, publisher := range publishers {
+		if isNilEventPublisher(publisher) {
+			return nil, fmt.Errorf("event publisher[%d] cannot be nil", i)
+		}
+	}
+
+	return &DefaultEventDispatcher{
+		publishers: append([]EventPublisher(nil), publishers...),
+	}, nil
+}
+
+func isNilEventPublisher(publisher EventPublisher) bool {
+	if publisher == nil {
+		return true
+	}
+
+	value := reflect.ValueOf(publisher)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
 func (d *DefaultEventDispatcher) Dispatch(ctx context.Context, events []publish.DomainEvent) error {
 	var dispatchErrs []error
 
 	for _, e := range events {
-		if len(d.Publishers) == 1 {
-			if err := d.Publishers[0].Publish(ctx, e); err != nil {
-				log.Printf("[EventDispatcher] 이벤트 발행 실패 (%s): %v", e.Name(), err)
-				dispatchErrs = append(dispatchErrs, fmt.Errorf("이벤트 발행 실패 (%s): %w", e.Name(), err))
-			}
-			continue
-		}
-
 		var wg sync.WaitGroup
-		var mu sync.Mutex
-		for _, p := range d.Publishers {
+		publisherErrs := make([]error, len(d.publishers))
+		for i, p := range d.publishers {
 			wg.Add(1)
-			go func(p EventPublisher) {
+			go func(index int, p EventPublisher) {
 				defer wg.Done()
 				if err := p.Publish(ctx, e); err != nil {
-					log.Printf("[EventDispatcher] 이벤트 발행 실패 (%s): %v", e.Name(), err)
-					mu.Lock()
-					dispatchErrs = append(dispatchErrs, fmt.Errorf("이벤트 발행 실패 (%s): %w", e.Name(), err))
-					mu.Unlock()
+					log.Printf("[EventDispatcher] Failed to publish event (%s): %v", e.Name(), err)
+					publisherErrs[index] = fmt.Errorf("failed to publish event (%s): %w", e.Name(), err)
 				}
-			}(p)
+			}(i, p)
 		}
 		wg.Wait()
+
+		for _, err := range publisherErrs {
+			if err != nil {
+				dispatchErrs = append(dispatchErrs, err)
+			}
+		}
 	}
 
 	return errors.Join(dispatchErrs...)

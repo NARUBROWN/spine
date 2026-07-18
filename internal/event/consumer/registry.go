@@ -26,10 +26,10 @@ func NewRegistry() *Registry {
 
 func (r *Registry) Register(topic string, target any) error {
 	if topic == "" {
-		return fmt.Errorf("consumer: 토픽이 빈 값일 수 없습니다")
+		return fmt.Errorf("consumer: topic cannot be empty")
 	}
 	if target == nil {
-		return fmt.Errorf("consumer: target이 nil일 수 없습니다")
+		return fmt.Errorf("consumer: target cannot be nil")
 	}
 
 	meta, err := router.NewHandlerMeta(target)

@@ -16,16 +16,16 @@ type Reader struct {
 
 func NewKafkaReader(topic string, opts boot.KafkaOptions) (*Reader, error) {
 	if len(opts.Brokers) == 0 {
-		return nil, errors.New("Kafka Brokers가 설정되지 않았습니다")
+		return nil, errors.New("Kafka brokers are not configured")
 	}
 	if opts.Read == nil {
-		return nil, errors.New("Kafka Read 옵션이 설정되지 않았습니다")
+		return nil, errors.New("Kafka read options are not configured")
 	}
 	if opts.Read.GroupID == "" {
-		return nil, errors.New("Kafka Read GroupID가 비어 있습니다")
+		return nil, errors.New("Kafka read group ID cannot be empty")
 	}
 	if topic == "" {
-		return nil, errors.New("Kafka topic이 비어 있습니다")
+		return nil, errors.New("Kafka topic cannot be empty")
 	}
 
 	reader := kafka.NewReader(kafka.ReaderConfig{

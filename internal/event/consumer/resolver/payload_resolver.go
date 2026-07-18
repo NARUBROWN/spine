@@ -18,12 +18,12 @@ func (r *PayloadResolver) Supports(meta resolver.ParameterMeta) bool {
 func (r *PayloadResolver) Resolve(ctx core.ExecutionContext, meta resolver.ParameterMeta) (any, error) {
 	consumerCtx, ok := ctx.(core.ConsumerRequestContext)
 	if !ok {
-		return nil, fmt.Errorf("ConsumerRequestContext가 아닙니다")
+		return nil, fmt.Errorf("context is not a ConsumerRequestContext")
 	}
 
 	payload := consumerCtx.Payload()
 	if payload == nil {
-		return nil, fmt.Errorf("Payload를 RequestContext에서 찾을 수 없습니다")
+		return nil, fmt.Errorf("Payload not found in RequestContext")
 	}
 
 	return payload, nil

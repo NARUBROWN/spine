@@ -1,11 +1,13 @@
 package container
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 type testRepo struct{}
@@ -37,6 +39,18 @@ type cycleA struct {
 type cycleB struct {
 	a *cycleA
 }
+
+type concurrentCycleA struct {
+	b *concurrentCycleB
+}
+
+type concurrentCycleB struct {
+	a *concurrentCycleA
+}
+
+type cycleBarrierA struct{}
+
+type cycleBarrierB struct{}
 
 func TestRegisterConstructor_Validation(t *testing.T) {
 	c := New()
@@ -112,7 +126,7 @@ func TestResolve_NoConstructor(t *testing.T) {
 	if err == nil {
 		t.Fatal("등록되지 않은 생성자에 대해 에러가 발생해야 합니다")
 	}
-	if !strings.Contains(err.Error(), "등록된 생성자가 없습니다") {
+	if !strings.Contains(err.Error(), "no constructor registered") {
 		t.Fatalf("예상하지 못한 에러입니다: %v", err)
 	}
 }
@@ -126,7 +140,7 @@ func TestResolve_CycleDetection(t *testing.T) {
 	if err == nil {
 		t.Fatal("순환 의존성 감지 에러가 발생해야 합니다")
 	}
-	if !strings.Contains(err.Error(), "순환 의존성 감지") {
+	if !strings.Contains(err.Error(), "circular dependency detected") {
 		t.Fatalf("예상하지 못한 에러입니다: %v", err)
 	}
 }
@@ -205,7 +219,109 @@ func TestResolve_InterfaceWithMultipleImplementationsReturnsError(t *testing.T) 
 	if err == nil {
 		t.Fatal("구현체가 여러 개면 에러가 발생해야 합니다")
 	}
-	if !strings.Contains(err.Error(), "여러 개 등록") {
+	if !strings.Contains(err.Error(), "multiple constructors registered") {
 		t.Fatalf("예상하지 못한 에러입니다: %v", err)
+	}
+}
+
+func TestResolve_ConcurrentConstructorPanicIsReturnedToAllWaiters(t *testing.T) {
+	c := New()
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	panicErr := errors.New("constructor panic")
+	if err := c.RegisterConstructor(func() *testRepo {
+		close(started)
+		<-release
+		panic(panicErr)
+	}); err != nil {
+		t.Fatalf("생성자 등록 실패: %v", err)
+	}
+
+	type result struct {
+		instance any
+		err      error
+		panicVal any
+	}
+	resolve := func(out chan<- result) {
+		res := result{}
+		defer func() {
+			res.panicVal = recover()
+			out <- res
+		}()
+		res.instance, res.err = c.Resolve(reflect.TypeOf(&testRepo{}))
+	}
+
+	results := make(chan result, 2)
+	go resolve(results)
+	<-started
+	go resolve(results)
+
+	select {
+	case res := <-results:
+		t.Fatalf("두 번째 Resolve는 첫 생성이 끝날 때까지 기다려야 합니다: %+v", res)
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(release)
+
+	for range 2 {
+		select {
+		case res := <-results:
+			if res.panicVal != nil {
+				t.Fatalf("생성자 panic은 Resolve 오류로 변환되어야 합니다: %v", res.panicVal)
+			}
+			if res.instance != nil {
+				t.Fatalf("생성 실패 시 인스턴스는 nil이어야 합니다: %T", res.instance)
+			}
+			if !errors.Is(res.err, panicErr) {
+				t.Fatalf("모든 대기자에게 생성자 panic 원인이 전달되어야 합니다: %v", res.err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("생성자 panic 이후 Resolve가 종료되지 않았습니다")
+		}
+	}
+}
+
+func TestResolve_ConcurrentCycleReturnsErrorWithoutDeadlock(t *testing.T) {
+	c := New()
+
+	aStarted := make(chan struct{})
+	bStarted := make(chan struct{})
+	_ = c.RegisterConstructor(func() *cycleBarrierA {
+		close(aStarted)
+		<-bStarted
+		return &cycleBarrierA{}
+	})
+	_ = c.RegisterConstructor(func() *cycleBarrierB {
+		close(bStarted)
+		<-aStarted
+		return &cycleBarrierB{}
+	})
+	_ = c.RegisterConstructor(func(_ *cycleBarrierA, b *concurrentCycleB) *concurrentCycleA {
+		return &concurrentCycleA{b: b}
+	})
+	_ = c.RegisterConstructor(func(_ *cycleBarrierB, a *concurrentCycleA) *concurrentCycleB {
+		return &concurrentCycleB{a: a}
+	})
+
+	errs := make(chan error, 2)
+	go func() {
+		_, err := c.Resolve(reflect.TypeOf(&concurrentCycleA{}))
+		errs <- err
+	}()
+	go func() {
+		_, err := c.Resolve(reflect.TypeOf(&concurrentCycleB{}))
+		errs <- err
+	}()
+
+	for range 2 {
+		select {
+		case err := <-errs:
+			if err == nil || !strings.Contains(err.Error(), "circular dependency detected") {
+				t.Fatalf("동시 순환 의존성은 명시적 오류여야 합니다: %v", err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("동시 순환 의존성 해석이 교착 상태에 빠졌습니다")
+		}
 	}
 }

@@ -42,37 +42,37 @@ func (h *JSONReturnHandler) Handle(value any, ctx core.ExecutionContext) error {
 	val := reflect.ValueOf(value)
 	if val.Kind() == reflect.Pointer {
 		if val.IsNil() {
-			return fmt.Errorf("JSONReturnHandler: nil *httpx.Response[*]는 처리할 수 없습니다")
+			return fmt.Errorf("JSONReturnHandler: cannot handle nil *httpx.Response[*]")
 		}
 		val = val.Elem()
 	}
 
 	if val.Kind() != reflect.Struct {
-		return fmt.Errorf("JSONReturnHandler: value는 struct여야 합니다")
+		return fmt.Errorf("JSONReturnHandler: value must be a struct")
 	}
 
 	bodyField := val.FieldByName("Body")
 	if !bodyField.IsValid() {
-		return fmt.Errorf("JSONReturnHandler: Body 필드를 찾을 수 없습니다")
+		return fmt.Errorf("JSONReturnHandler: Body field not found")
 	}
 
 	body := bodyField.Interface()
 
 	optionsField := val.FieldByName("Options")
 	if !optionsField.IsValid() {
-		return fmt.Errorf("JSONReturnHandler: Options 필드를 찾을 수 없습니다")
+		return fmt.Errorf("JSONReturnHandler: Options field not found")
 	}
 
 	options := optionsField.Interface().(httpx.ResponseOptions)
 
 	rwAny, ok := ctx.Get("spine.response_writer")
 	if !ok {
-		return fmt.Errorf("ExecutionContext 안에서 ResponseWriter를 찾을 수 없습니다.")
+		return fmt.Errorf("ResponseWriter not found in ExecutionContext")
 	}
 
 	rw, ok := rwAny.(core.ResponseWriter)
 	if !ok {
-		return fmt.Errorf("ResponseWriter 타입이 올바르지 않습니다.")
+		return fmt.Errorf("invalid ResponseWriter type")
 	}
 
 	for k, v := range options.Headers {

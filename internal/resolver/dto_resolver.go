@@ -38,7 +38,7 @@ func (r *DTOResolver) Supports(pm ParameterMeta) bool {
 func (r *DTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error) {
 	httpCtx, ok := ctx.(core.HttpRequestContext)
 	if !ok {
-		return nil, fmt.Errorf("HTTP 요청 컨텍스트가 아닙니다")
+		return nil, fmt.Errorf("context is not an HTTP request context")
 	}
 
 	// 빈 DTO 생성 (*T)
@@ -46,7 +46,7 @@ func (r *DTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta Parameter
 
 	if err := httpCtx.Bind(valuePtr.Interface()); err != nil {
 		return nil, fmt.Errorf(
-			"DTO 바인딩 실패 (%s): %w",
+			"DTO binding failed (%s): %w",
 			parameterMeta.Type.Name(),
 			err,
 		)

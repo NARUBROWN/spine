@@ -8,10 +8,54 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  quality:
+    name: Formatting, Vet, and Modules
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GOCACHE: /tmp/gocache
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "The following files are not formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Check module files
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
   unit:
     name: Unit Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       GOCACHE: /tmp/gocache
     steps:
@@ -39,6 +83,7 @@ jobs:
   integration:
     name: Integration Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       GOCACHE: /tmp/gocache
     steps:
@@ -56,3 +101,25 @@ jobs:
 
       - name: Run integration tests
         run: go test ./test -count=1
+
+  race:
+    name: Race Detector
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOCACHE: /tmp/gocache
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run race detector
+        run: go test -race ./... -count=1
