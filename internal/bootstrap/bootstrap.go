@@ -60,6 +60,16 @@ func (f *containerFacade) Resolve(t reflect.Type) (any, error) {
 func Run(config Config) error {
 	printBanner()
 
+	// Graceful shutdown signals must be subscribed before the HTTP handler is
+	// exposed through transport hooks. Otherwise a shutdown arriving during
+	// startup can still terminate the process with the operating-system default.
+	var httpShutdownSignals chan os.Signal
+	if config.HTTP != nil && config.EnableGracefulShutdown {
+		httpShutdownSignals = make(chan os.Signal, 1)
+		signal.Notify(httpShutdownSignals, syscall.SIGINT, syscall.SIGTERM)
+		defer signal.Stop(httpShutdownSignals)
+	}
+
 	log.Println("[Bootstrap] Initializing container")
 	// 컨테이너 생성
 	container := container.New()
@@ -491,9 +501,6 @@ func Run(config Config) error {
 			}
 		}
 
-		quit := make(chan os.Signal, 1)
-		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-
 		select {
 		case err := <-httpErrCh:
 			if err != nil {
@@ -503,7 +510,7 @@ func Run(config Config) error {
 			return err
 		case err := <-customTransportErrCh:
 			return err
-		case <-quit:
+		case <-httpShutdownSignals:
 		}
 
 		log.Println("[Bootstrap] Shutdown signal received. Starting graceful shutdown...")
@@ -533,6 +540,7 @@ func Run(config Config) error {
 	if config.HTTP == nil && (consumerStarted || customTransportErrCh != nil) {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+		defer signal.Stop(quit)
 		select {
 		case <-quit:
 			log.Println("[Bootstrap] Shutdown signal received. Stopping runtimes...")

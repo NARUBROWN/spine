@@ -49,6 +49,7 @@ jobs:
 
       - name: Check module files
         run: |
+          go mod verify
           go mod tidy
           git diff --exit-code -- go.mod go.sum
 
@@ -78,7 +79,7 @@ jobs:
             echo "No package to test."
             exit 0
           fi
-          go test $packages
+          go test $packages -count=1 -shuffle=on -timeout=8m
 
   integration:
     name: Integration Tests
@@ -100,7 +101,29 @@ jobs:
         run: go mod download
 
       - name: Run integration tests
-        run: go test ./test -count=1
+        run: go test ./test -run '^TestAppIntegration_' -count=1 -shuffle=on -timeout=8m
+
+  e2e:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GOCACHE: /tmp/gocache
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run real-network E2E tests
+        run: go test ./test -run '^TestAppE2E_' -count=1 -timeout=8m
 
   race:
     name: Race Detector
@@ -122,4 +145,4 @@ jobs:
         run: go mod download
 
       - name: Run race detector
-        run: go test -race ./... -count=1
+        run: go test -race ./... -count=1 -shuffle=on -timeout=12m
