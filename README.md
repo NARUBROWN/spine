@@ -3,69 +3,74 @@
 </p>
 
 # 🦴 Spine
+
 <p align="center">
   <img src="assets/spine-logo.png" alt="Spine" width="420" />
 </p>
 
-**Spine는 실행 흐름이 드러나는 백엔드 프레임워크입니다.**  
-요청이 어떻게 해석되고 실행되는지 숨기지 않습니다.
+**Spine은 요청을 해석하고 실행하는 흐름을 명시적으로 구성하는 Go 백엔드 프레임워크입니다.**
 
 ## 핵심 아이디어
 
-- 실행 순서와 책임을 코드 구조로 고정합니다
-- 메서드 시그니처가 API 계약입니다
-- `path.*`, `query.*`, `httperr.*` 의미 타입을 사용합니다
+- 요청 해석, 핸들러 실행, 반환 처리의 책임을 분리합니다.
+- 컨트롤러의 메서드 시그니처로 요청 입력과 응답 형식을 정의합니다.
+- `path.*`, `query.*`, `httperr.*`로 경로 매개변수, 쿼리, HTTP 오류의 의미를 표현합니다.
 
 ## 권장 환경
 
 - 권장 Go 버전: **1.27.3**
 
-## 링크
-
-- 공식 사이트: https://spine.na2ru2.me/ko/
-- Spine CLI (프로젝트 생성 및 실행 계약 검사): https://github.com/NARUBROWN/spine-cli
-- Bun ORM + Swagger 통합 예제 프로젝트: https://github.com/NARUBROWN/spine-user-demo
-- Kafka MSA 예제 프로젝트: https://github.com/NARUBROWN/spine-simple-msa-demo
-- 간단한 WebSocket 채팅 예제 프로젝트: https://github.com/NARUBROWN/spine-simple-chat-demo
-
----
-
 ## Spine CLI
 
-[Spine CLI](https://github.com/NARUBROWN/spine-cli)는 Spine 프로젝트와 구성 요소를 생성하고,
-소스 코드에서 HTTP·DI·interceptor·consumer·WebSocket 실행 계약을 검사하는 Go CLI입니다.
-계약 snapshot/diff와 OpenAPI·AsyncAPI 내보내기도 지원합니다.
+[Spine CLI](https://github.com/NARUBROWN/spine-cli)로 프로젝트와 구성 요소를 생성하고 실행 계약을 검사할 수 있습니다.
+HTTP 라우트, 의존성 주입(DI), 인터셉터, 메시지 소비자, WebSocket의 등록 정보를 소스 코드에서 분석합니다.
+계약 스냅샷 저장과 비교, OpenAPI와 AsyncAPI 문서 내보내기도 지원합니다.
 
-Go 1.27.3 사용을 권장합니다. 짧은 `spine` 명령은 다음과 같이 설치합니다.
+### 설치
+
+다음 명령으로 CLI를 설치하고 버전을 확인합니다.
 
 ```sh
 go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.1.4
 spine version
 ```
 
-새 프로젝트를 만들거나 기존 프로젝트의 계약을 검사합니다.
+### 프로젝트 생성과 검증
+
+프로젝트를 만든 뒤 의존성을 정리하고 실행 계약을 검사합니다.
 
 ```sh
 spine new todo-api --module github.com/acme/todo-api
+go -C ./todo-api mod tidy
 spine context --root ./todo-api --json
 spine contract check --root ./todo-api --warnings-as-errors --json
 spine verify --root ./todo-api --warnings-as-errors --json
 ```
 
-생성기는 기존 파일을 기본적으로 덮어쓰지 않습니다. 변경 전에는 dry-run의 diff와
-`base_hash`를 검토한 뒤 같은 hash를 `--if-match`로 전달하세요.
+`spine verify`가 성공하면 실행 계약, 코드 서식, `go vet`, Go 테스트 검사를 통과한 것입니다.
+실제 데이터베이스나 메시지 브로커 연결과 배포 환경의 동작은 별도로 검증해야 합니다.
+
+### 기존 파일 변경 전 확인
+
+생성기는 기본적으로 기존 파일을 덮어쓰지 않습니다. 먼저 dry-run으로 변경 내용을 확인하고,
+출력의 `base_hash` 값을 아래 `<base_hash>`에 넣어 적용합니다.
 
 ```sh
 spine g resource order --root . --dry-run --json
 spine g resource order --root . --if-match <base_hash> --json
 ```
 
-현재 CLI `v0.1.4`가 새 프로젝트에 지정하는 Spine 버전은 `v0.5.1`입니다. 이 저장소의 다른
-버전이나 개발 snapshot과 함께 사용할 때는 생성된 `go.mod`와 계약 검사 결과를 확인하세요.
-전체 명령과 정확한 분석 범위는 [Spine CLI 문서](https://github.com/NARUBROWN/spine-cli#readme)를
-참고하세요.
+CLI `v0.1.4`가 생성하는 프로젝트는 Spine `v0.5.1`을 사용합니다.
+다른 Spine 버전이나 이 저장소의 개발 버전과 함께 사용할 때는 생성된 `go.mod`와 계약 검사 결과를 확인하세요.
+전체 명령과 분석 범위는 [Spine CLI 문서](https://github.com/NARUBROWN/spine-cli#readme)를 참고하세요.
 
----
+## 문서와 예제
+
+- [공식 사이트](https://spine.na2ru2.me/ko/)
+- [Spine CLI](https://github.com/NARUBROWN/spine-cli): 프로젝트 생성과 실행 계약 검사
+- [사용자 API 예제](https://github.com/NARUBROWN/spine-user-demo): Bun ORM과 Swagger 통합
+- [Kafka MSA 예제](https://github.com/NARUBROWN/spine-simple-msa-demo): 주문 서버와 재고 워커의 이벤트 처리
+- [WebSocket 채팅 예제](https://github.com/NARUBROWN/spine-simple-chat-demo): 인증과 방별 메시지 전송
 
 ## 지원
 
@@ -77,9 +82,8 @@ spine g resource order --root . --if-match <base_hash> --json
 
 **Spine은 [FOSS for All Microgrants 2026](https://fossforall.org/docs/microgrants/2026/#spine)의 수혜 프로젝트로 선정되었습니다.**
 
-[FOSS for All(포스포올)](https://fossforall.org/)은 지속 가능한 자유·오픈소스 생태계를 위해
-프로젝트와 커뮤니티의 개발과 운영을 지원합니다. Microgrants는 필요한 운영비를 대리 집행하거나
-적격 증빙 확인 후 환급하는 소규모 재정 지원 사업입니다.
+[FOSS for All(포스포올)](https://fossforall.org/)은 자유 소프트웨어와 오픈소스 생태계의 지속 가능한 발전을 지원합니다.
+Microgrants 사업에서는 FOSS for All이 프로젝트 운영비를 거래처에 직접 지급하거나, 적격 증빙을 확인한 뒤 환급합니다.
 Spine을 지원해 주신 FOSS for All과 기부자 여러분께 감사드립니다.
 
 <sub>로고 출처: <a href="https://fossforall.org/android-chrome-512x512.png">FOSS for All 공식 사이트</a>.
@@ -87,8 +91,6 @@ FOSS for All 로고의 저작권은 FOSS for All에 있습니다(© FOSS for All
 이 로고는 Spine의 MIT 라이선스 적용 대상에 포함되지 않습니다.
 <a href="assets/foss-for-all/README.md">로고 출처 및 권리 표기</a>.</sub>
 
----
-
-## License
+## 라이선스
 
 MIT
