@@ -77,7 +77,6 @@ Spine CLI `v0.1.4` 会将新生成项目的 Spine 版本固定为 `v0.5.1`。与
 **Spine 已入选 [FOSS for All Microgrants 2026](https://fossforall.org/docs/microgrants/2026/#spine) 资助项目。**
 
 [FOSS for All](https://fossforall.org/) 支持项目和社区的开发与运营，推动自由及开源生态的可持续发展。
-Microgrants 是一项小额资助计划，通过直接向供应商付款，或审核合格凭证后报销的方式支持运营支出。
 感谢 FOSS for All 及捐赠者对 Spine 的支持。
 
 <sub>标志来源：<a href="https://fossforall.org/android-chrome-512x512.png">FOSS for All 官方网站</a>。

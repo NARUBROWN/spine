@@ -83,7 +83,6 @@ CLI `v0.1.4`가 생성하는 프로젝트는 Spine `v0.5.1`을 사용합니다.
 **Spine은 [FOSS for All Microgrants 2026](https://fossforall.org/docs/microgrants/2026/#spine)의 수혜 프로젝트로 선정되었습니다.**
 
 [FOSS for All(포스포올)](https://fossforall.org/)은 자유 소프트웨어와 오픈소스 생태계의 지속 가능한 발전을 지원합니다.
-Microgrants 사업에서는 FOSS for All이 프로젝트 운영비를 거래처에 직접 지급하거나, 적격 증빙을 확인한 뒤 환급합니다.
 Spine을 지원해 주신 FOSS for All과 기부자 여러분께 감사드립니다.
 
 <sub>로고 출처: <a href="https://fossforall.org/android-chrome-512x512.png">FOSS for All 공식 사이트</a>.

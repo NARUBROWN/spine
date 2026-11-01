@@ -78,8 +78,7 @@ precise analysis boundaries.
 **Spine has been selected as a recipient of [FOSS for All Microgrants 2026](https://fossforall.org/docs/microgrants/2026/#spine).**
 
 [FOSS for All](https://fossforall.org/) supports the development and operation of projects and communities
-to help sustain the free and open source ecosystem. Its Microgrants program supports operating expenses
-through direct vendor payments or reimbursement after reviewing eligible documentation.
+to help sustain the free and open source ecosystem.
 Thank you to FOSS for All and its donors for supporting Spine.
 
 <sub>Logo source: <a href="https://fossforall.org/android-chrome-512x512.png">the official FOSS for All website</a>.
