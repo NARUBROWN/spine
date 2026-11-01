@@ -67,6 +67,28 @@ spine g resource order --root . --if-match <base_hash> --json
 
 ---
 
+## 지원
+
+<p align="center">
+  <a href="https://fossforall.org/">
+    <img src="assets/foss-for-all/logo.png" alt="FOSS for All" width="96" height="96" />
+  </a>
+</p>
+
+**Spine은 [FOSS for All Microgrants 2026](https://fossforall.org/docs/microgrants/2026/#spine)의 수혜 프로젝트로 선정되었습니다.**
+
+[FOSS for All(포스포올)](https://fossforall.org/)은 지속 가능한 자유·오픈소스 생태계를 위해
+프로젝트와 커뮤니티의 개발과 운영을 지원합니다. Microgrants는 필요한 운영비를 대리 집행하거나
+적격 증빙 확인 후 환급하는 소규모 재정 지원 사업입니다.
+Spine을 지원해 주신 FOSS for All과 기부자 여러분께 감사드립니다.
+
+<sub>로고 출처: <a href="https://fossforall.org/android-chrome-512x512.png">FOSS for All 공식 사이트</a>.
+FOSS for All 로고의 저작권은 FOSS for All에 있습니다(© FOSS for All).
+이 로고는 Spine의 MIT 라이선스 적용 대상에 포함되지 않습니다.
+<a href="assets/foss-for-all/README.md">로고 출처 및 권리 표기</a>.</sub>
+
+---
+
 ## License
 
 MIT

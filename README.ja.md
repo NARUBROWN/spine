@@ -67,6 +67,28 @@ Spine CLI `v0.1.4`が新規プロジェクトに指定するSpineのバージョ
 
 ---
 
+## 支援
+
+<p align="center">
+  <a href="https://fossforall.org/">
+    <img src="assets/foss-for-all/logo.png" alt="FOSS for All" width="96" height="96" />
+  </a>
+</p>
+
+**Spineは[FOSS for All Microgrants 2026](https://fossforall.org/docs/microgrants/2026/#spine)の支援対象プロジェクトに選定されました。**
+
+[FOSS for All](https://fossforall.org/)は、持続可能な自由・オープンソースのエコシステムに向けて、
+プロジェクトやコミュニティの開発と運営を支援しています。Micrograntsは、取引先への直接支払いや
+適切な証憑の確認後の払い戻しによって運営費を支援する小規模な資金援助プログラムです。
+Spineを支援してくださるFOSS for Allと寄付者の皆さまに感謝します。
+
+<sub>ロゴ出典：<a href="https://fossforall.org/android-chrome-512x512.png">FOSS for All公式サイト</a>。
+FOSS for Allロゴの著作権はFOSS for Allに帰属します（© FOSS for All）。
+このロゴはSpineのMITライセンスの対象には含まれません。
+<a href="assets/foss-for-all/README.md">ロゴの出典と権利表記</a>。</sub>
+
+---
+
 ## ライセンス
 
 MIT

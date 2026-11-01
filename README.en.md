@@ -67,6 +67,27 @@ precise analysis boundaries.
 
 ---
 
+## Support
+
+<p align="center">
+  <a href="https://fossforall.org/">
+    <img src="assets/foss-for-all/logo.png" alt="FOSS for All" width="96" height="96" />
+  </a>
+</p>
+
+**Spine has been selected as a recipient of [FOSS for All Microgrants 2026](https://fossforall.org/docs/microgrants/2026/#spine).**
+
+[FOSS for All](https://fossforall.org/) supports the development and operation of projects and communities
+to help sustain the free and open source ecosystem. Its Microgrants program supports operating expenses
+through direct vendor payments or reimbursement after reviewing eligible documentation.
+Thank you to FOSS for All and its donors for supporting Spine.
+
+<sub>Logo source: <a href="https://fossforall.org/android-chrome-512x512.png">the official FOSS for All website</a>.
+The FOSS for All logo is copyright © FOSS for All and is not covered by Spine's MIT license.
+<a href="assets/foss-for-all/README.md">Logo source and attribution</a>.</sub>
+
+---
+
 ## License
 
 MIT
