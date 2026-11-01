@@ -13,6 +13,9 @@ on:
 permissions:
   contents: read
 
+env:
+  GOWORK: "off"
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -59,11 +62,21 @@ jobs:
             exit 1
           fi
 
+      - name: Prepare platform workspace
+        shell: bash
+        run: |
+          platform_workspace="$RUNNER_TEMP/spine-platform"
+          mkdir -p "$platform_workspace"
+          go -C "$platform_workspace" work init "$GITHUB_WORKSPACE/spine" "$GITHUB_WORKSPACE/spine-echo-platform"
+          local_spine=$(GOWORK="$platform_workspace/go.work" go -C ../spine-echo-platform list -m -f '{{.Main}}' github.com/NARUBROWN/spine)
+          test "$local_spine" = true
+
       - name: Run go vet
         run: |
-          for module in . ../spine-echo-platform test cmd/demo cmd/reference examples/security-config; do
+          for module in . test cmd/demo cmd/reference examples/security-config; do
             go -C "$module" vet ./...
           done
+          GOWORK="$RUNNER_TEMP/spine-platform/go.work" go -C ../spine-echo-platform vet ./...
           bash scripts/check-module-boundaries.sh
 
       - name: Check module files
@@ -74,6 +87,8 @@ jobs:
           done
           git diff --exit-code -- go.mod go.sum ':(glob)**/go.mod' ':(glob)**/go.sum'
           git -C ../spine-echo-platform diff --exit-code -- go.mod go.sum
+          test "$(go -C ../spine-echo-platform list -m -f '{{.Main}}' github.com/NARUBROWN/spine)" = false
+          test -z "$(go -C ../spine-echo-platform list -m -f '{{if .Replace}}{{.Path}}{{end}}' all)"
 
   unit:
     name: Unit Tests (${{ matrix.os }})
@@ -107,12 +122,22 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
+      - name: Prepare platform workspace
+        shell: bash
+        run: |
+          platform_workspace="$RUNNER_TEMP/spine-platform"
+          mkdir -p "$platform_workspace"
+          go -C "$platform_workspace" work init "$GITHUB_WORKSPACE/spine" "$GITHUB_WORKSPACE/spine-echo-platform"
+          local_spine=$(GOWORK="$platform_workspace/go.work" go -C ../spine-echo-platform list -m -f '{{.Main}}' github.com/NARUBROWN/spine)
+          test "$local_spine" = true
+
       - name: Run unit tests
         shell: bash
         run: |
-          for module in . ../spine-echo-platform cmd/reference examples/security-config; do
+          for module in . cmd/reference examples/security-config; do
             go -C "$module" test ./... -count=1 -shuffle=on -timeout=8m
           done
+          GOWORK="$RUNNER_TEMP/spine-platform/go.work" go -C ../spine-echo-platform test ./... -count=1 -shuffle=on -timeout=8m
           go -C cmd/demo test ./... -run '^TestBuildApplication$' -count=1 -shuffle=on -timeout=8m
 
   integration:
@@ -226,8 +251,18 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
+      - name: Prepare platform workspace
+        shell: bash
+        run: |
+          platform_workspace="$RUNNER_TEMP/spine-platform"
+          mkdir -p "$platform_workspace"
+          go -C "$platform_workspace" work init "$GITHUB_WORKSPACE/spine" "$GITHUB_WORKSPACE/spine-echo-platform"
+          local_spine=$(GOWORK="$platform_workspace/go.work" go -C ../spine-echo-platform list -m -f '{{.Main}}' github.com/NARUBROWN/spine)
+          test "$local_spine" = true
+
       - name: Run race detector
         run: |
-          for module in . ../spine-echo-platform test cmd/demo cmd/reference examples/security-config; do
+          for module in . test cmd/demo cmd/reference examples/security-config; do
             go -C "$module" test -race ./... -count=1 -shuffle=on -timeout=12m
           done
+          GOWORK="$RUNNER_TEMP/spine-platform/go.work" go -C ../spine-echo-platform test -race ./... -count=1 -shuffle=on -timeout=12m

@@ -134,6 +134,8 @@ bash scripts/check-published-demo.sh
 
 [PR 커밋 93cfac1](https://github.com/NARUBROWN/spine/commit/93cfac157468c54a0f2ceccbf243fbaff7792007)의 [원격 CI 10개 검사](https://github.com/NARUBROWN/spine/actions/runs/41327017512)가 통과했습니다. 새 clone과 Go 1.25.5 / Linux arm64 컨테이너에서도 6개 모듈과 CLI, 공개 소비자 demo를 검증했습니다. 실브로커가 필요한 Kafka/RabbitMQ 테스트 2개는 환경이 없어 생략했습니다.
 
-독립 검토에서 CI의 플랫폼 단독 vet/unit/race가 PR checkout 대신 고정된 공개 Spine 버전을 검사한다는 보완 지점을 확인했습니다. 현재 공개 pin과 위 PR 커밋의 런타임 소스는 같습니다. 이후 커널 변경의 회귀도 검출하려면 플랫폼 검사에만 임시 Go workspace로 PR 소스를 연결해야 합니다. 모듈 정합성과 공개 소비자 검사는 `GOWORK=off`를 유지합니다. 이 CI 보완은 아직 반영하지 않았습니다.
+CI의 플랫폼 단독 vet/unit/race는 `RUNNER_TEMP` 아래의 임시 Go workspace로 두 checkout을 연결해 PR의 Spine 소스를 검사합니다. 플랫폼 검사 전에 Spine이 workspace의 주 모듈로 선택됐는지도 확인합니다. 이 workspace는 플랫폼 명령에만 적용합니다.
+
+모듈 정합성과 공개 소비자 검사는 `GOWORK=off`를 유지합니다. 공개 플랫폼의 go.mod에 로컬 `replace`를 넣지 않고도 PR 커널과의 호환성 검사 및 공개 의존 버전 검사를 각각 수행합니다.
 
 PR 리뷰 승인과 main 병합, 정식 릴리스 태그 발행도 남아 있습니다.
