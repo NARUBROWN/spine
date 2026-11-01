@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	adapter "github.com/NARUBROWN/spine/adapter"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/bootstrap"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
@@ -38,17 +39,39 @@ type App interface {
 }
 
 type app struct {
-	constructors      []any
-	routes            []router.RouteSpec
-	interceptors      []bootstrap.InterceptorBinding
-	transportHooks    []func(any)
-	customTransports  []core.CustomTransport
-	consumerRegistry  *consumer.Registry
-	websocketRegistry *ws.Registry
+	constructors       []any
+	routes             []router.RouteSpec
+	interceptors       []bootstrap.InterceptorBinding
+	transportHooks     []func(any)
+	customTransports   []core.CustomTransport
+	consumerRegistry   *consumer.Registry
+	websocketRegistry  *ws.Registry
+	httpAdapterFactory adapter.Factory
 }
 
-func New() App {
-	return &app{}
+// Option은 애플리케이션의 통합 구현을 명시적으로 선택하는 생성 옵션입니다.
+type Option func(*app)
+
+// WithHTTPAdapter는 HTTP 실행에 사용할 독립 계약의 factory를 지정합니다.
+func WithHTTPAdapter(factory adapter.Factory) Option {
+	return func(a *app) { a.httpAdapterFactory = factory }
+}
+
+// New는 특정 HTTP 서버 구현을 선택하지 않는 Spine 커널 앱을 생성합니다.
+// HTTP를 사용할 때는 통합 모듈의 생성자 또는 WithHTTPAdapter를 사용합니다.
+func New(options ...Option) App {
+	a := &app{}
+	for _, option := range options {
+		if option != nil {
+			option(a)
+		}
+	}
+	return a
+}
+
+// NewWithHTTPAdapter는 factory를 명시적으로 주입하는 생성자입니다.
+func NewWithHTTPAdapter(factory adapter.Factory) App {
+	return New(WithHTTPAdapter(factory))
 }
 
 func (a *app) Constructor(constructors ...any) {
@@ -108,6 +131,7 @@ func (a *app) bootstrapConfig(opts boot.Options) bootstrap.Config {
 		ConsumerRegistry:       a.consumerRegistry,
 		WebSocketRegistry:      a.websocketRegistry,
 		HTTP:                   opts.HTTP,
+		HTTPAdapterFactory:     a.httpAdapterFactory,
 	}
 }
 

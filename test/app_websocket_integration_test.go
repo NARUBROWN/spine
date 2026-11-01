@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/NARUBROWN/spine"
+	platform "github.com/NARUBROWN/spine-echo-platform"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	pkgws "github.com/NARUBROWN/spine/pkg/ws"
@@ -41,7 +42,7 @@ func (c *wsIntegrationController) Echo(ctx context.Context, connID pkgws.Connect
 }
 
 func setupWebSocketApp() spine.App {
-	app := spine.New()
+	app := platform.New()
 	app.Constructor(func() *wsIntegrationController { return &wsIntegrationController{} })
 	app.Route("GET", "/hello", (*wsIntegrationController).Hello)
 	if err := app.WebSocket().Register("/ws/echo", (*wsIntegrationController).Echo); err != nil {

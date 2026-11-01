@@ -17,6 +17,10 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    working-directory: spine
+
 jobs:
   quality:
     name: Formatting, Vet, and Modules
@@ -25,21 +29,29 @@ jobs:
     env:
       GOCACHE: ${{ github.workspace }}/.cache/go-build
     steps:
-      - name: Checkout
+      - name: Checkout Spine
         uses: actions/checkout@v4
+        with:
+          path: spine
+
+      - name: Checkout Echo integration
+        uses: actions/checkout@v4
+        with:
+          repository: NARUBROWN/spine-echo-platform
+          path: spine-echo-platform
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          go-version-file: spine/go.mod
+          cache-dependency-path: "**/go.sum"
 
       - name: Download dependencies
         run: go mod download
 
       - name: Check formatting
         run: |
-          unformatted=$(gofmt -l .)
+          unformatted=$(gofmt -l . ../spine-echo-platform)
           if [ -n "$unformatted" ]; then
             echo "The following files are not formatted:"
             echo "$unformatted"
@@ -47,15 +59,20 @@ jobs:
           fi
 
       - name: Run go vet
-        run: go vet ./...
+        run: |
+          for module in . ../spine-echo-platform test cmd/demo cmd/reference examples/security-config; do
+            go -C "$module" vet ./...
+          done
+          bash scripts/check-module-boundaries.sh
 
       - name: Check module files
         run: |
-          go mod verify
-          go mod tidy
-          go -C cmd/demo mod verify
-          go -C cmd/demo mod tidy
-          git diff --exit-code -- go.mod go.sum cmd/demo/go.mod cmd/demo/go.sum
+          for module in . ../spine-echo-platform test cmd/demo cmd/reference examples/security-config; do
+            go -C "$module" mod verify
+            go -C "$module" mod tidy
+          done
+          git diff --exit-code -- go.mod go.sum ':(glob)**/go.mod' ':(glob)**/go.sum'
+          git -C ../spine-echo-platform diff --exit-code -- go.mod go.sum
 
   unit:
     name: Unit Tests (${{ matrix.os }})
@@ -68,14 +85,22 @@ jobs:
     env:
       GOCACHE: ${{ github.workspace }}/.cache/go-build
     steps:
-      - name: Checkout
+      - name: Checkout Spine
         uses: actions/checkout@v4
+        with:
+          path: spine
+
+      - name: Checkout Echo integration
+        uses: actions/checkout@v4
+        with:
+          repository: NARUBROWN/spine-echo-platform
+          path: spine-echo-platform
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          go-version-file: spine/go.mod
+          cache-dependency-path: "**/go.sum"
 
       - name: Download dependencies
         run: go mod download
@@ -83,12 +108,9 @@ jobs:
       - name: Run unit tests
         shell: bash
         run: |
-          packages=$(go list ./... | grep -v '/test$')
-          if [ -z "$packages" ]; then
-            echo "No package to test."
-            exit 0
-          fi
-          go test $packages -count=1 -shuffle=on -timeout=8m
+          for module in . ../spine-echo-platform cmd/reference examples/security-config; do
+            go -C "$module" test ./... -count=1 -shuffle=on -timeout=8m
+          done
           go -C cmd/demo test ./... -run '^TestBuildApplication$' -count=1 -shuffle=on -timeout=8m
 
   integration:
@@ -102,20 +124,28 @@ jobs:
     env:
       GOCACHE: ${{ github.workspace }}/.cache/go-build
     steps:
-      - name: Checkout
+      - name: Checkout Spine
         uses: actions/checkout@v4
+        with:
+          path: spine
+
+      - name: Checkout Echo integration
+        uses: actions/checkout@v4
+        with:
+          repository: NARUBROWN/spine-echo-platform
+          path: spine-echo-platform
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          go-version-file: spine/go.mod
+          cache-dependency-path: "**/go.sum"
 
       - name: Download dependencies
         run: go mod download
 
       - name: Run integration tests
-        run: go test ./test -run '^TestAppIntegration_' -count=1 -shuffle=on -timeout=8m
+        run: go -C test test ./... -run '^TestAppIntegration_' -count=1 -shuffle=on -timeout=8m
 
   e2e:
     name: End-to-End Tests (${{ matrix.os }})
@@ -128,14 +158,22 @@ jobs:
     env:
       GOCACHE: ${{ github.workspace }}/.cache/go-build
     steps:
-      - name: Checkout
+      - name: Checkout Spine
         uses: actions/checkout@v4
+        with:
+          path: spine
+
+      - name: Checkout Echo integration
+        uses: actions/checkout@v4
+        with:
+          repository: NARUBROWN/spine-echo-platform
+          path: spine-echo-platform
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          go-version-file: spine/go.mod
+          cache-dependency-path: "**/go.sum"
 
       - name: Download dependencies
         run: go mod download
@@ -163,19 +201,28 @@ jobs:
     env:
       GOCACHE: ${{ github.workspace }}/.cache/go-build
     steps:
-      - name: Checkout
+      - name: Checkout Spine
         uses: actions/checkout@v4
+        with:
+          path: spine
+
+      - name: Checkout Echo integration
+        uses: actions/checkout@v4
+        with:
+          repository: NARUBROWN/spine-echo-platform
+          path: spine-echo-platform
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.27.3'
-          cache-dependency-path: go.sum
+          cache-dependency-path: "**/go.sum"
 
       - name: Download dependencies
         run: go mod download
 
       - name: Run race detector
         run: |
-          go test -race ./... -count=1 -shuffle=on -timeout=12m
-          go -C cmd/demo test -race ./... -count=1 -shuffle=on -timeout=12m
+          for module in . ../spine-echo-platform test cmd/demo cmd/reference examples/security-config; do
+            go -C "$module" test -race ./... -count=1 -shuffle=on -timeout=12m
+          done

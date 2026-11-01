@@ -2,6 +2,9 @@
   <a href="README.md">한국어</a> | <a href="README.en.md">English</a> | 日本語 | <a href="README.zh-Hans.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a>
 </p>
 
+> 未リリースの issue #9 開発ブランチでは、公開 HTTP 契約を Spine 内で管理し、Echo 統合を独立したプラットフォームモジュールとして提供します。HTTP アプリには `platform.New()` を使用し、カーネルの `spine.New()` は HTTP 実装を自動選択しません。[移行ガイド](docs/migration/http-adapter-modules.md)と[ローカル例](cmd/demo/README.md)を参照してください。
+
+
 # 🦴 Spine
 <p align="center">
   <img src="assets/spine-logo.png" alt="Spine" width="420" />

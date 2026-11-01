@@ -44,3 +44,7 @@ examples/*
 !examples/security-config/
 examples/security-config/*
 !examples/security-config/main.go
+
+!examples/security-config/go.mod
+!examples/security-config/go.sum
+!docs/migration/http-adapter-modules.md

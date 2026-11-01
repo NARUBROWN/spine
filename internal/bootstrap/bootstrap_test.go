@@ -141,6 +141,7 @@ func TestRun_InvalidGlobalPrefixReturnsError(t *testing.T) {
 	for _, prefix := range []string{"api", "/api/:id", "/api/*"} {
 		prefix := prefix
 		err := Run(Config{
+			HTTPAdapterFactory: testHTTPFactory{},
 			HTTP: &boot.HTTPOptions{
 				GlobalPrefix: prefix,
 			},
@@ -153,7 +154,8 @@ func TestRun_InvalidGlobalPrefixReturnsError(t *testing.T) {
 
 func TestRun_AmbiguousRoutesReturnsError(t *testing.T) {
 	err := Run(Config{
-		HTTP: &boot.HTTPOptions{},
+		HTTPAdapterFactory: testHTTPFactory{},
+		HTTP:               &boot.HTTPOptions{},
 		Routes: []spineRouter.RouteSpec{
 			{Method: "GET", Path: "/users/:id", Handler: (*testController).Handle},
 			{Method: "GET", Path: "/users/me", Handler: (*testController).Handle},
@@ -168,8 +170,9 @@ func TestRun_CustomTransportInitError(t *testing.T) {
 	transport := &testTransport{initErr: errors.New("init fail")}
 
 	err := Run(Config{
-		CustomTransports: []core.CustomTransport{transport},
-		ShutdownTimeout:  10 * time.Millisecond,
+		HTTPAdapterFactory: testHTTPFactory{},
+		CustomTransports:   []core.CustomTransport{transport},
+		ShutdownTimeout:    10 * time.Millisecond,
 	})
 	if err == nil || !strings.Contains(err.Error(), "init fail") {
 		t.Fatalf("Init 에러가 반환되어야 합니다: %v", err)
@@ -190,8 +193,9 @@ func TestRun_CustomTransportPartialInitStopsOnlySuccessfulTransportsInReverseOrd
 	failed := &orderedTransport{id: "C", initErr: errors.New("C init failed"), stopMu: &mu, stopOrder: &stopOrder}
 
 	err := Run(Config{
-		CustomTransports: []core.CustomTransport{first, second, failed},
-		ShutdownTimeout:  time.Second,
+		HTTPAdapterFactory: testHTTPFactory{},
+		CustomTransports:   []core.CustomTransport{first, second, failed},
+		ShutdownTimeout:    time.Second,
 	})
 	if err == nil || !strings.Contains(err.Error(), "C init failed") {
 		t.Fatalf("partial init error = %v", err)
@@ -207,8 +211,9 @@ func TestRun_CustomTransportStartError(t *testing.T) {
 	transport := &testTransport{startErr: errors.New("start fail")}
 
 	err := Run(Config{
-		CustomTransports: []core.CustomTransport{transport},
-		ShutdownTimeout:  10 * time.Millisecond,
+		HTTPAdapterFactory: testHTTPFactory{},
+		CustomTransports:   []core.CustomTransport{transport},
+		ShutdownTimeout:    10 * time.Millisecond,
 	})
 	if err == nil || !strings.Contains(err.Error(), "start fail") {
 		t.Fatalf("Start 에러가 반환되어야 합니다: %v", err)
@@ -228,7 +233,8 @@ func TestRun_WaitsForCustomTransportStopBeforeReturning(t *testing.T) {
 	}
 	runDone := make(chan error, 1)
 	go func() {
-		runDone <- Run(Config{CustomTransports: []core.CustomTransport{transport}, ShutdownTimeout: time.Second})
+		runDone <- Run(Config{
+			HTTPAdapterFactory: testHTTPFactory{}, CustomTransports: []core.CustomTransport{transport}, ShutdownTimeout: time.Second})
 	}()
 
 	select {
@@ -308,8 +314,9 @@ func TestRun_DoesNotExposeHTTPListenerBeforeConsumerWarmUpSucceeds(t *testing.T)
 	runDone := make(chan error, 1)
 	go func() {
 		runDone <- Run(Config{
-			Address: address,
-			HTTP:    &boot.HTTPOptions{},
+			HTTPAdapterFactory: testHTTPFactory{},
+			Address:            address,
+			HTTP:               &boot.HTTPOptions{},
 			Constructors: []any{func() *delayedFailConsumer {
 				close(warmUpStarted)
 				<-releaseWarmUp
@@ -367,10 +374,11 @@ func TestRun_DoesNotExposeHTTPListenerWhenKafkaStartupHandshakeFails(t *testing.
 		t.Fatalf("register consumer: %v", err)
 	}
 	err = Run(Config{
-		Address:          httpAddress,
-		HTTP:             &boot.HTTPOptions{},
-		Constructors:     []any{func() *testController { return &testController{} }},
-		ConsumerRegistry: registry,
+		HTTPAdapterFactory: testHTTPFactory{},
+		Address:            httpAddress,
+		HTTP:               &boot.HTTPOptions{},
+		Constructors:       []any{func() *testController { return &testController{} }},
+		ConsumerRegistry:   registry,
 		Kafka: &boot.KafkaOptions{
 			Brokers:                []string{brokerAddress},
 			AllowInsecureTransport: true,
@@ -435,10 +443,11 @@ func TestRun_CustomTransportFatalErrorShutsDownHTTPListener(t *testing.T) {
 	fatalErr := errors.New("custom transport fatal")
 	transport := &listenerFatalTransport{address: address, fatalErr: fatalErr}
 	runErr := Run(Config{
-		Address:          address,
-		HTTP:             &boot.HTTPOptions{},
-		CustomTransports: []core.CustomTransport{transport},
-		ShutdownTimeout:  time.Second,
+		HTTPAdapterFactory: testHTTPFactory{},
+		Address:            address,
+		HTTP:               &boot.HTTPOptions{},
+		CustomTransports:   []core.CustomTransport{transport},
+		ShutdownTimeout:    time.Second,
 	})
 	if !errors.Is(runErr, fatalErr) {
 		t.Fatalf("original custom transport error must be preserved: %v", runErr)
@@ -473,6 +482,7 @@ func TestRunContext_CancellationShutsDownHTTPListener(t *testing.T) {
 	runDone := make(chan error, 1)
 	go func() {
 		runDone <- RunContext(ctx, Config{
+			HTTPAdapterFactory:     testHTTPFactory{},
 			Address:                address,
 			HTTP:                   &boot.HTTPOptions{},
 			EnableGracefulShutdown: true,
@@ -548,7 +558,8 @@ func TestWaitConsumerError_NormalStopDoesNotProduceError(t *testing.T) {
 
 func TestRun_WarmUpResolveFailureReturnsError(t *testing.T) {
 	err := Run(Config{
-		HTTP: &boot.HTTPOptions{},
+		HTTPAdapterFactory: testHTTPFactory{},
+		HTTP:               &boot.HTTPOptions{},
 		Routes: []spineRouter.RouteSpec{
 			{Method: "GET", Path: "/users", Handler: (*testController).Handle},
 		},
@@ -560,8 +571,9 @@ func TestRun_WarmUpResolveFailureReturnsError(t *testing.T) {
 
 func TestRun_NilGlobalInterceptorReturnsError(t *testing.T) {
 	err := Run(Config{
-		HTTP:         &boot.HTTPOptions{},
-		Interceptors: []core.Interceptor{nil},
+		HTTPAdapterFactory: testHTTPFactory{},
+		HTTP:               &boot.HTTPOptions{},
+		Interceptors:       []core.Interceptor{nil},
 	})
 	if err == nil || !strings.Contains(err.Error(), "interceptor is nil") {
 		t.Fatalf("nil 인터셉터는 에러여야 합니다: %v", err)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,8 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	adapter "github.com/NARUBROWN/spine/adapter"
 	"github.com/NARUBROWN/spine/core"
-	httpEngine "github.com/NARUBROWN/spine/internal/adapter/echo"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	eventResolver "github.com/NARUBROWN/spine/internal/event/consumer/resolver"
@@ -28,10 +29,10 @@ import (
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/internal/resolver"
 	spineRouter "github.com/NARUBROWN/spine/internal/router"
+	"github.com/NARUBROWN/spine/internal/transport"
 	"github.com/NARUBROWN/spine/internal/ws"
 	wsResolver "github.com/NARUBROWN/spine/internal/ws/resolver"
 	"github.com/NARUBROWN/spine/pkg/boot"
-	"github.com/labstack/echo/v4"
 )
 
 type Config struct {
@@ -48,6 +49,7 @@ type Config struct {
 	RabbitMQ               *boot.RabbitMqOptions
 	ConsumerRegistry       *consumer.Registry
 	HTTP                   *boot.HTTPOptions
+	HTTPAdapterFactory     adapter.Factory
 	WebSocketRegistry      *ws.Registry
 }
 
@@ -194,7 +196,8 @@ func RunContext(ctx context.Context, config Config) error {
 		}
 	}
 
-	var server *httpEngine.Server
+	var server adapter.HTTPAdapter
+	var httpListener *managedHTTPListener
 	var httpErrCh chan error
 	var consumerErrCh chan error
 	var customTransportErrCh chan error
@@ -408,7 +411,8 @@ func RunContext(ctx context.Context, config Config) error {
 
 		log.Println("[Bootstrap] Mounting HTTP adapter")
 
-		// WebSocket 런타임 구성
+		// WebSocket 런타임은 업그레이드 이후의 연결과 메시지를 계속 소유합니다.
+		var upgrades []adapter.UpgradeRoute
 		if config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0 {
 			wsRegistrations := config.WebSocketRegistry.Registrations()
 			log.Println("[Bootstrap] Configuring WebSocket runtime")
@@ -424,35 +428,43 @@ func RunContext(ctx context.Context, config Config) error {
 				webSocketHandshakeInterceptors(resolvedWSInterceptors)...,
 			)
 
-			// Echo 전송 훅으로 마운트
-			wsMountHook := func(e any) {
-				echoInstance, ok := e.(*echo.Echo)
-				if !ok {
-					return
-				}
-				for _, reg := range wsRegistrations {
-					log.Printf("[Bootstrap] Registered WebSocket route: %s", reg.Path)
-					echoInstance.GET(reg.Path, func(c echo.Context) error {
-						wsRuntime.HandleConn(c.Response().Writer, c.Request(), reg)
-						return nil
-					})
-				}
+			for _, reg := range wsRegistrations {
+				log.Printf("[Bootstrap] Registered WebSocket route: %s", reg.Path)
+				upgrades = append(upgrades, adapter.UpgradeRoute{
+					Path: reg.Path,
+					Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						wsRuntime.HandleConn(w, r, reg)
+					}),
+				})
 			}
-			config.TransportHooks = append([]func(any){wsMountHook}, config.TransportHooks...)
 		}
 
-		// Echo 어댑터
-		server = httpEngine.NewServer(httpPipeline, config.Address, config.TransportHooks, *config.HTTP)
-		server.Mount()
+		server, err = config.HTTPAdapterFactory.New(adapter.Config{
+			Options: serverOptions(*config.HTTP),
+			Execute: func(scope adapter.HTTPContext) error {
+				return httpPipeline.Execute(transport.NewHTTPContext(scope))
+			},
+			Upgrades:    upgrades,
+			NativeHooks: config.TransportHooks,
+		})
+		if err != nil {
+			return fmt.Errorf("[Bootstrap] failed to configure HTTP adapter: %w", err)
+		}
+		if isNilHTTPValue(server) {
+			return fmt.Errorf("%w: factory returned a nil adapter", adapter.ErrInvalidAdapter)
+		}
 
 		httpErrCh = make(chan error, 1)
-		shutdownHTTPServerOnce := sync.Once{}
-		var shutdownHTTPServerErr error
 		shutdownHTTPServer = func(ctx context.Context) error {
-			shutdownHTTPServerOnce.Do(func() {
-				shutdownHTTPServerErr = server.Shutdown(ctx)
-			})
-			return shutdownHTTPServerErr
+			err := server.Shutdown(ctx)
+			if httpListener != nil {
+				// Serve goroutine으로 전달되기 전에 종료되어도 열린 리스너를 남기지 않습니다.
+				return errors.Join(err, httpListener.Close())
+			}
+			return err
+		}
+		if isNilHTTPValue(server.Handler()) {
+			return fmt.Errorf("%w: factory returned a nil handler", adapter.ErrInvalidAdapter)
 		}
 	}
 
@@ -576,9 +588,30 @@ func RunContext(ctx context.Context, config Config) error {
 		}()
 	}
 	if server != nil {
-		log.Printf("[Bootstrap] Server listening on: %s", config.Address)
+		if runCtx.Err() != nil {
+			return cleanup()
+		}
+		address := config.Address
+		if address == "" {
+			// 기존 http.Server.ListenAndServe의 빈 주소 기본값을 유지합니다.
+			address = ":http"
+		}
+		listener, err := net.Listen("tcp", address)
+		if err != nil {
+			return fmt.Errorf("[Bootstrap] failed to listen on %s: %w", address, err)
+		}
+		httpListener = &managedHTTPListener{Listener: listener}
+		if runCtx.Err() != nil {
+			_ = httpListener.Close()
+			return cleanup()
+		}
+		log.Printf("[Bootstrap] Server listening on: %s", listener.Addr())
 		go func() {
-			if err := server.Start(); err != nil && err != http.ErrServerClosed {
+			err := server.Serve(httpListener)
+			if err == nil {
+				err = fmt.Errorf("%w: Serve returned nil", adapter.ErrInvalidAdapter)
+			}
+			if !errors.Is(err, http.ErrServerClosed) {
 				httpErrCh <- err
 			}
 		}()
@@ -716,7 +749,41 @@ func Validate(config Config) error {
 			issues = append(issues, boot.ConfigIssue{Path: path + ".Scope", Code: "INTERCEPTOR_SCOPE_INVALID", Message: "Interceptor transport scope is invalid.", Hint: "Use boot.InterceptorHTTP, boot.InterceptorWebSocket, or boot.InterceptorAll."})
 		}
 	}
-	return boot.ValidationError(issues...)
+	if err := boot.ValidationError(issues...); err != nil {
+		return err
+	}
+	if config.HTTP != nil {
+		return adapter.ValidateFactory(config.HTTPAdapterFactory, adapter.Requirements{
+			WebSocketUpgrade: config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0,
+			NativeHooks:      len(config.TransportHooks) > 0,
+		})
+	}
+	return nil
+}
+
+func serverOptions(options boot.HTTPOptions) adapter.ServerOptions {
+	return adapter.ServerOptions{
+		DisableRecover:    options.DisableRecover,
+		ReadHeaderTimeout: options.ReadHeaderTimeout,
+		ReadTimeout:       options.ReadTimeout,
+		WriteTimeout:      options.WriteTimeout,
+		IdleTimeout:       options.IdleTimeout,
+		MaxHeaderBytes:    options.MaxHeaderBytes,
+		MaxBodyBytes:      options.MaxBodyBytes,
+	}
+}
+
+func isNilHTTPValue(value any) bool {
+	if value == nil {
+		return true
+	}
+	v := reflect.ValueOf(value)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return v.IsNil()
+	default:
+		return false
+	}
 }
 
 func resolveGlobalInterceptors(ctr *container.Container, config Config) ([]core.Interceptor, []core.Interceptor, error) {

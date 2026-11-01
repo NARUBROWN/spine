@@ -7,14 +7,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/NARUBROWN/spine"
+	platform "github.com/NARUBROWN/spine-echo-platform"
 	"github.com/NARUBROWN/spine/interceptor/cors"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/route"
 )
 
 func main() {
-	app := spine.New()
+	app := platform.New()
 	config, err := buildDemoConfig()
 	if err != nil {
 		log.Fatalf("[Demo] invalid environment configuration: %v", err)

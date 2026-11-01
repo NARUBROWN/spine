@@ -9,16 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/NARUBROWN/spine/adapter"
-	"github.com/NARUBROWN/spine/core"
+	adapter "github.com/NARUBROWN/spine/adapter"
 )
 
 // 외부 패키지에서 공개 계약만으로 구현할 수 있는지 컴파일 시 확인합니다.
 var (
-	_ adapter.Factory         = (*testFactory)(nil)
-	_ adapter.HTTPAdapter     = (*testHTTPAdapter)(nil)
-	_ core.ExecutionContext   = adapter.HTTPContext(nil)
-	_ core.HttpRequestContext = adapter.HTTPContext(nil)
+	_ adapter.Factory     = (*testFactory)(nil)
+	_ adapter.HTTPAdapter = (*testHTTPAdapter)(nil)
 )
 
 type testFactory struct {

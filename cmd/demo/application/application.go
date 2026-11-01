@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/NARUBROWN/spine"
+	platform "github.com/NARUBROWN/spine-echo-platform"
 	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 // BuildApplication은 리스너나 외부 브로커를 열지 않고 최소 HTTP/WS 앱을 구성합니다.
 func BuildApplication() (spine.App, boot.Options, error) {
-	app := spine.New()
+	app := spine.New(platform.Option())
 	app.Constructor(NewController)
 	app.Route("GET", "/health", (*Controller).Health)
 	app.Route("GET", "/users/:id", (*Controller).User)

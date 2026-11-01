@@ -2,6 +2,9 @@
   <a href="README.md">한국어</a> | <a href="README.en.md">English</a> | <a href="README.ja.md">日本語</a> | <a href="README.zh-Hans.md">简体中文</a> | 繁體中文
 </p>
 
+> 尚未發布的 issue #9 開發分支在 Spine 內管理公開 HTTP 契約，並將 Echo 整合作為獨立平台模組提供。HTTP 應用使用 `platform.New()`；核心的 `spine.New()` 不會自動選擇 HTTP 實作。請參閱[遷移指南](docs/migration/http-adapter-modules.md)和[本機範例](cmd/demo/README.md)。
+
+
 # 🦴 Spine
 <p align="center">
   <img src="assets/spine-logo.png" alt="Spine" width="420" />

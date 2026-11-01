@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/NARUBROWN/spine"
+	platform "github.com/NARUBROWN/spine-echo-platform"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
@@ -39,7 +40,7 @@ type echoRequest struct {
 }
 
 func setupApp() spine.App {
-	app := spine.New()
+	app := platform.New()
 	app.Constructor(func() *appCtrl { return &appCtrl{} })
 	app.Route("GET", "/users/:id", (*appCtrl).GetUser)
 	app.Route("GET", "/hello", (*appCtrl).Hello)

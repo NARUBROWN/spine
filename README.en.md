@@ -2,6 +2,9 @@
   <a href="README.md">한국어</a> | English | <a href="README.ja.md">日本語</a> | <a href="README.zh-Hans.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a>
 </p>
 
+> The unreleased issue #9 development branch keeps the public HTTP contract in Spine and distributes the Echo integration as a separate platform module. Create HTTP apps with `platform.New()`; kernel `spine.New()` selects no HTTP implementation. See the [migration guide](docs/migration/http-adapter-modules.md) and [local demo](cmd/demo/README.md).
+
+
 # 🦴 Spine
 <p align="center">
   <img src="assets/spine-logo.png" alt="Spine" width="420" />

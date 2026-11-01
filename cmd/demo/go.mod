@@ -3,7 +3,8 @@ module github.com/NARUBROWN/spine/cmd/demo
 go 1.25.5
 
 require (
-	github.com/NARUBROWN/spine v0.5.2
+	github.com/NARUBROWN/spine v0.0.0
+	github.com/NARUBROWN/spine-echo-platform v0.0.0
 	github.com/gorilla/websocket v1.5.3
 )
 
@@ -25,3 +26,5 @@ require (
 )
 
 replace github.com/NARUBROWN/spine => ../..
+
+replace github.com/NARUBROWN/spine-echo-platform => ../../../spine-echo-platform

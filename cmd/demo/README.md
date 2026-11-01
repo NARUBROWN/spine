@@ -49,6 +49,14 @@ go -C cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=90s
 CLI 정적 계약 검사, 부분 runtime probe와 실제 네트워크 E2E 결과를 구분해서 기록합니다.
 SIGINT 검사는 Unix에서 실행하며 Windows에서는 해당 E2E를 생략합니다.
 
-예제는 독립 Go 모듈입니다. `go.mod`의 `replace ../..`를 통해 현재 프레임워크 checkout을 사용합니다.
+## 통합 모듈과 CLI
+
+HTTP 구성은 `spine.New(platform.Option())`으로 Echo 통합 모듈을 명시적으로 선택합니다.
+이는 `platform.New()`와 같은 설정이며, 현재 CLI가 `spine.New(...)`를 시작점으로 찾는 규칙을 지킵니다.
+커널의 `spine.New()`만 호출하면 HTTP 구현이 선택되지 않습니다.
+
+예제는 독립 Go 모듈입니다. `go.mod`의 replace로 공개 계약을 포함한 현재 커널과 별도 Echo 플랫폼 모듈을 함께 사용합니다. 공개 모듈 릴리스 전의 로컬 구성입니다.
 저장소 루트의 `go test ./...`는 이 중첩 모듈을 검사하지 않으므로 위 E2E 명령을 별도로 실행해야 합니다.
 프레임워크 자체의 전체 검사는 루트에서 `spine check --root .`로 수행합니다.
+
+전체 검증에서는 `../spine-echo-platform`, `test`, `cmd/reference`, `examples/security-config`의 테스트도 각각 실행하고 `bash scripts/check-module-boundaries.sh`로 의존 경계를 검사합니다.

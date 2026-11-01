@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/NARUBROWN/spine"
+	platform "github.com/NARUBROWN/spine-echo-platform"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	spinemultipart "github.com/NARUBROWN/spine/pkg/multipart"
@@ -129,7 +130,7 @@ func newHTTPBaselineHandler(t *testing.T, app spine.App, options boot.HTTPOption
 }
 
 func setupHTTPBaselineApp() spine.App {
-	app := spine.New()
+	app := platform.New()
 	app.Constructor(func() *httpBaselineController { return &httpBaselineController{} })
 	for _, method := range []string{http.MethodGet, http.MethodDelete, http.MethodPost} {
 		app.Route(method, "/body", (*httpBaselineController).Bind)

@@ -14,20 +14,20 @@ CLI 계약과 최소 E2E 예제는 [cmd/demo](../demo/README.md)를 사용합니
 이 애플리케이션은 브로커 없이 HTTP/WebSocket 서비스로 실행됩니다.
 
 ```sh
-go run ./cmd/reference
+go -C cmd/reference run .
 ```
 
 기본 브라우저 출처는 `http://localhost:5173`입니다. 필요한 경우 다음과 같이 변경합니다.
 
 ```sh
-SPINE_DEMO_ALLOWED_ORIGIN=https://app.example.com go run ./cmd/reference
+SPINE_DEMO_ALLOWED_ORIGIN=https://app.example.com go -C cmd/reference run .
 ```
 
 운영 환경용 Kafka 연결에는 TLS가 자동으로 적용됩니다.
 
 ```sh
 SPINE_DEMO_KAFKA_BROKERS=kafka-a.example:9093,kafka-b.example:9093 \
-go run ./cmd/reference
+go -C cmd/reference run .
 ```
 
 운영 환경의 RabbitMQ에는 `amqps://` URL을 사용해야 합니다. 자격 증명은 소스 관리에 포함하지 마십시오.
@@ -36,7 +36,7 @@ go run ./cmd/reference
 SPINE_DEMO_RABBITMQ_URL="$RABBITMQ_URL" \
 SPINE_DEMO_RABBITMQ_DLX=events.dlx \
 SPINE_DEMO_RABBITMQ_DLX_ROUTING_KEY=events.failed \
-go run ./cmd/reference
+go -C cmd/reference run .
 ```
 
 평문 브로커 연결은 로컬 개발 환경에서 명시적으로 허용해야 합니다.
@@ -45,14 +45,14 @@ go run ./cmd/reference
 SPINE_DEMO_ALLOW_INSECURE_BROKERS=true \
 SPINE_DEMO_KAFKA_BROKERS=localhost:9092 \
 SPINE_DEMO_RABBITMQ_URL=amqp://guest:guest@localhost:5672/ \
-go run ./cmd/reference
+go -C cmd/reference run .
 ```
 
 신뢰하는 리버스 프록시에서 TLS를 종료한다면 정확한 프록시 CIDR을 설정합니다.
 
 ```sh
 SPINE_DEMO_TRUSTED_PROXY_CIDRS=10.0.0.0/8,192.168.0.0/16 \
-go run ./cmd/reference
+go -C cmd/reference run .
 ```
 
 프록시는 클라이언트가 보낸 `Forwarded` 및 `X-Forwarded-Proto` 헤더를 제거하거나 덮어써야 합니다.

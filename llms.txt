@@ -4,7 +4,10 @@
 
 ## Read this first
 
-This guide was verified against checkout `d05b629`, the untagged `v0.5.2` development snapshot on `main`. Go `1.27.3` is recommended and verified; the module's existing Go compatibility baseline remains `1.25.5`. Reviewed snapshots below retain their original Go versions as historical evidence. The latest tag in this checkout is `v0.5.1`; do not mistake the runtime banner for a released `v0.5.2` tag.
+This guide describes the unreleased issue #9 development checkout. The public HTTP contract lives in the Spine module; the Echo integration
+is a separate platform module. They are connected locally with replace directives and v0.0.0 placeholders;
+these are not published installation versions. Go 1.27.3 is recommended; the compatibility baseline is 1.25.5.
+External demo snapshots below retain their original released APIs and pins.
 
 Use sources in this order:
 
@@ -15,17 +18,32 @@ Use sources in this order:
    separate evidence with the limits described below.
 5. README prose and generated Swagger files are supporting material; when they disagree with code, follow code.
 
-The external demos reviewed on 2026-07-30 all pin Spine `v0.5.1`. Their architecture is useful, but reconcile copied code with this checkout before using it. The public usage style remains compatible with `v0.5.2`; the newer checkout rejects malformed requests and invalid registrations earlier.
+The external demos reviewed on 2026-07-30 all pin Spine `v0.5.1`. Their architecture is useful, but reconcile copied code with this checkout before using it. This checkout changes HTTP app construction: choose the Echo integration explicitly using `platform.New()`.
 
-Do not import `github.com/NARUBROWN/spine/internal/...` from an application. Application code should use the root package, `core`, `interceptor/...`, and `pkg/...` only.
+Do not import `github.com/NARUBROWN/spine/internal/...` from an application. Application code should use the root package, `adapter`, `core`, `interceptor/...`, and `pkg/...` only.
 
-For an external module, pin the intended version or commit explicitly. To match this guide's current source snapshot, use:
+For the current checkout, use local module replacements as shown in `cmd/demo/go.mod`.
+Publication of the updated Spine kernel and Echo platform is pending. Do not recommend a go get command for a placeholder version.
+For published historical examples, keep their released Spine version when reproducing them exactly.
+See `docs/migration/http-adapter-modules.md` for the intentional constructor change.
 
-```sh
-go get github.com/NARUBROWN/spine@d05b629
-```
+## HTTP integration modules
 
-The linked demos intentionally pin the released `v0.5.1`; keep their pin when reproducing them exactly, and do not use a `v0.5.2`-only API without upgrading their module first.
+- `github.com/NARUBROWN/spine/adapter` (package adapter): public standard-library-only HTTP execution interfaces, versioned with Spine.
+- `github.com/NARUBROWN/spine`: kernel and public adapter contract, with no Echo or platform-module dependency.
+- `github.com/NARUBROWN/spine-echo-platform` (package platform): Echo implementation and starter, depending on Spine and Echo.
+
+Applications normally choose `platform.New()`. This is equivalent to `spine.New(platform.Option())`.
+The current CLI recognizes `spine.New(...)`, so cmd/demo uses the latter. Do not claim direct starter
+constructor analysis is supported. A custom implementation uses `spine.New(spine.WithHTTPAdapter(factory))`.
+`spine.New()` selects no HTTP implementation; enabling HTTP without a factory fails preflight validation.
+HTTP-less workers do not need an HTTP adapter.
+
+The contract contains transport metadata, binding, a writer, capabilities and server lifecycle methods.
+The kernel wraps the HTTP scope to add request store, routing results and EventBus. Native Echo store
+is separate; use standard request context to share values. Contract RequestError is converted to the
+kernel's httperr.HTTPError while preserving causes. Response staging remains in the kernel.
+ASGI informs the boundary and lifetime design. This does not provide Python ASGI compatibility.
 
 ## Choose the right reference first
 
@@ -139,8 +157,8 @@ spine check --root .
 ```
 
 The CLI, entrypoint, and HTTP/WS E2E share `cmd/demo/application.BuildApplication`. Keep static analysis,
-partial runtime probe, and real-network E2E evidence separate. Root `go test ./...` skips the nested demo
-module, so always run the explicit demo command as well. CI runs it on Linux and macOS. Keep all framework
+partial runtime probe, and real-network E2E evidence separate. Root `go test ./...` skips all nested modules. Run tests separately in
+../spine-echo-platform, test, cmd/demo, cmd/reference and examples/security-config. CI runs it on Linux and macOS. Keep all framework
 unit and integration tests in addition to this demo gate.
 
 ## Repository map
@@ -155,6 +173,11 @@ Use this map instead of searching the entire repository blindly:
 - `pkg/event/publish`: domain-event contract and request-scoped publishing.
 - `pkg/route`: route-level interceptor options.
 - `core/interceptor.go`, `core/context.go`: interceptor and context contracts.
+- `adapter`: public HTTP execution contract package within Spine; no separate module or repository.
+- [spine-echo-platform](https://github.com/NARUBROWN/spine-echo-platform): independent Echo implementation and starter repository, checked out beside Spine.
+- `internal/transport`: kernel HTTP scope bridge adding Spine store, routing state, EventBus and error conversion.
+- `internal/bootstrap`: application initialization and runtime coordination; it is not an adapter contract.
+- `internal/pipeline`: Spine request execution; adapters call an ExecuteFunc without importing this implementation.
 - `interceptor/cors`: built-in CORS interceptor.
 - `cmd/demo`: CLI-compatible minimal HTTP/WS application and the required real-network E2E fixture.
 - `cmd/reference`: the full reference application covering files, events, WebSocket, CORS, and secure configuration.
@@ -224,7 +247,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/NARUBROWN/spine"
+	"github.com/NARUBROWN/spine-echo-platform"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
@@ -252,7 +275,7 @@ func (c *HealthController) Get(id path.Int) (httpx.Response[Health], error) {
 }
 
 func main() {
-	app := spine.New()
+	app := platform.New()
 	app.Constructor(NewHealthController)
 	app.Route("GET", "/health/:id", (*HealthController).Get)
 
@@ -675,8 +698,11 @@ For Go changes, run:
 
 ```sh
 gofmt -w <changed-go-files>
-go test ./...
-go test -race ./...
+for module in . ../spine-echo-platform test cmd/demo cmd/reference examples/security-config; do
+  go -C "$module" test ./... -count=1
+  go -C "$module" test -race ./... -count=1
+done
+bash scripts/check-module-boundaries.sh
 go vet ./...
 ```
 

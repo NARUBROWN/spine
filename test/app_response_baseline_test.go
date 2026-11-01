@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/NARUBROWN/spine"
+	platform "github.com/NARUBROWN/spine-echo-platform"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httperr"
@@ -143,7 +143,7 @@ func TestAppIntegration_ResponseStagingBaseline(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			state := &responseBaselineState{serializeError: tc.serializeError, finalizerError: tc.finalizerError}
-			app := spine.New()
+			app := platform.New()
 			app.Constructor(func() *responseBaselineController { return &responseBaselineController{state: state} })
 			app.Route(http.MethodGet, "/reply", (*responseBaselineController).Reply)
 			app.Interceptor(&responseBaselineInterceptor{state: state})
@@ -237,7 +237,7 @@ func TestAppIntegration_ResponseStagingBaseline(t *testing.T) {
 }
 
 func TestAppIntegration_OutputFormatsBaseline(t *testing.T) {
-	app := spine.New()
+	app := platform.New()
 	app.Constructor(func() *responseBaselineController { return &responseBaselineController{} })
 	app.Route(http.MethodGet, "/binary", (*responseBaselineController).Binary)
 	app.Route(http.MethodGet, "/redirect", (*responseBaselineController).Redirect)
