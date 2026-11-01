@@ -52,6 +52,40 @@ Spine의 요청 store와 이벤트 버스는 커널이 소유합니다. native E
 
 루트의 go test ./...는 중첩 모듈을 포함하지 않습니다. 전체 검증은 루트, ../spine-echo-platform, test, cmd/demo, cmd/reference와 examples/security-config의 6개 모듈에서 실행합니다. CI도 두 저장소를 체크아웃하고 같은 모듈 목록을 검사합니다. cmd/demo의 캐시 없는 HTTP/WS E2E는 계속 필수입니다.
 
-## Prepare API의 의미
+## 리스너 없이 앱 준비하기
 
-Prepare는 리스너 없이 DI, 라우트와 파이프라인을 준비한 뒤 Handler와 자원 정리 수단을 제공하려는 후속 API입니다. 아직 구현돼 있지 않으며 플랫폼 모듈을 별도 저장소로 관리하기 위한 선행 조건은 아닙니다. 기존 이슈의 리스너 없는 앱 구성 요구사항에 해당합니다.
+이 개발 브랜치는 `spine.Prepare(ctx, app, options)`를 제공합니다. 기존 App 인터페이스는 유지하며, 선택적 ApplicationPreparer를 구현한 앱만 준비할 수 있습니다. Spine과 플랫폼의 기본 앱은 이 기능을 지원합니다.
+
+```go
+prepared, err := spine.Prepare(context.Background(), app, options)
+if err != nil {
+    t.Fatal(err)
+}
+t.Cleanup(func() {
+    ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+    defer cancel()
+    if err := prepared.Close(ctx); err != nil {
+        t.Error(err)
+    }
+})
+
+recorder := httptest.NewRecorder()
+prepared.Handler().ServeHTTP(recorder, httptest.NewRequest("GET", "/health", nil))
+```
+
+Prepare는 DI와 경로, HTTP/WS 및 필요한 consumer readiness를 준비합니다. listener를 열거나 OS 신호를 구독하지 않으며 consumer와 custom transport의 Start도 호출하지 않습니다. 설정한 publisher와 broker readiness, custom Init은 실행될 수 있으므로 네트워크를 사용하지 않는 API로 간주해서는 안 됩니다. 준비 실패 시 성공적으로 획득한 자원만 정리합니다. 정리 대상은 프레임워크가 소유하는 HTTP/WS, 이벤트 인프라와 성공적으로 Init한 custom transport입니다. 임의 DI 객체의 Close를 자동 호출하는 기능은 추가하지 않으며 해당 자원은 애플리케이션이 관리합니다.
+
+반환 결과의 수명과 소유권은 다음과 같습니다.
+
+- Handler는 같은 실행 진입점을 반환합니다. HTTP가 비활성화돼 있으면 nil입니다. WS 업그레이드에 필요한 raw writer 기능은 유지합니다.
+- 등록 목록과 boot 옵션은 준비 시 복사합니다. 이후 원본 앱의 등록 변경은 다음 Prepare에 반영됩니다. 생성자, 인터셉터 인스턴스와 사용자 제공 transport/dialer 자체는 복제하지 않습니다. 등록 변경과 Prepare를 동시에 실행하지 않습니다.
+- 준비 context는 초기화 중 취소에 사용합니다. 성공한 결과는 명시적으로 Close해야 합니다. HTTP 요청은 원래 request context를 유지합니다.
+- Close가 시작되면 Handler의 새 요청은 503을 받습니다. WS를 종료하고 HTTP 요청이 끝난 뒤 consumer, custom transport와 publisher를 정리합니다.
+- Close의 context는 완료 대기만 제한합니다. 시간이 초과돼도 자원 정리는 계속됩니다. 진행 중인 요청이 사용하는 자원은 유지하며 이후 Close 호출로 완료를 다시 기다릴 수 있습니다. 완료한 정리는 반복하지 않고 정리 오류를 보존합니다.
+- 외부 HTTP 서버의 listener, TLS와 timeout은 호출자가 관리합니다. Close는 외부 서버의 listener를 닫지 않습니다. 반드시 반환된 Handler로 요청을 연결해야 앱이 요청 수명을 추적할 수 있습니다.
+
+HTTP가 없는 앱도 Prepare와 Close를 사용할 수 있습니다. 이 경우 Handler는 nil이고 준비한 custom transport에는 Init과 Stop만 실행합니다. Run과 RunContext는 같은 준비 경로를 사용하며 준비 성공 뒤 consumer, custom transport와 마지막 HTTP listener를 시작합니다. 관리 실행의 OS 신호 구독은 준비 전에 수행합니다.
+
+nil context는 ErrInvalidContext, nil 앱과 nil 준비 결과는 ErrInvalidApplication, 기존 App 구현의 준비 미지원은 ErrPreparationUnsupported로 검사할 수 있습니다. 기존 실행은 RunContext(nil, options)의 background 동작을 유지합니다.
+
+위 API는 현재 개발 브랜치 소스의 기능입니다. 이전에 공개한 플랫폼의 고정 커널 버전을 사용할 때는 Prepare를 포함한 새 커널 버전 또는 현재 checkout으로 연결해야 합니다. CLI runtime probe의 HTTP 분석 범위가 확장되는 것은 아니며 기존 부분 probe 한계는 유지됩니다.

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"reflect"
@@ -372,4 +373,54 @@ func waitForHTTP(t *testing.T, url string, exited <-chan struct{}, processErr *e
 	}
 
 	t.Fatalf("E2E helper readiness timed out at %s", strings.TrimSpace(url))
+}
+
+// TestDemoE2E_PreparedHandler는 같은 demo 구성을 외부 HTTP 서버에 연결합니다.
+// 앱 Close가 WS와 실행 자원을 정리하고 외부 서버의 listener는 소유하지 않는지 확인합니다.
+func TestDemoE2E_PreparedHandlerHTTPWebSocketAndClose(t *testing.T) {
+	app, options, err := application.BuildApplication()
+	if err != nil {
+		t.Fatal(err)
+	}
+	options.Address = "prepare-must-not-listen"
+	prepared, err := spine.Prepare(context.Background(), app, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(prepared.Handler())
+	defer server.Close()
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := prepared.Close(ctx); err != nil {
+			t.Error(err)
+		}
+	}()
+	client := server.Client()
+	client.Timeout = 2 * time.Second
+	assertDemoHTTP(t, client, "GET", server.URL+"/health", "", "", 200, `{"status":"ok"}`)
+	assertDemoHTTP(t, client, "POST", server.URL+"/echo", "application/json", `{"message":"prepared","count":3}`, 200, `{"message":"prepared","count":3}`)
+	connection, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/ws/echo", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.Close()
+	if err := connection.WriteMessage(websocket.TextMessage, []byte("prepared-ws")); err != nil {
+		t.Fatal(err)
+	}
+	_ = connection.SetReadDeadline(time.Now().Add(3 * time.Second))
+	_, body, err := connection.ReadMessage()
+	if err != nil || string(body) != "prepared-ws" {
+		t.Fatalf("준비된 WS 응답 = %q, 오류 = %v", body, err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := prepared.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = connection.ReadMessage()
+	if !websocket.IsCloseError(err, websocket.CloseNormalClosure) {
+		t.Fatalf("앱 Close가 WS를 정상 종료해야 합니다: %v", err)
+	}
+	assertDemoHTTP(t, client, "GET", server.URL+"/health", "", "", 503, "")
 }

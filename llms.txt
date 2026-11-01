@@ -161,11 +161,36 @@ partial runtime probe, and real-network E2E evidence separate. Root `go test ./.
 ../spine-echo-platform, test, cmd/demo, cmd/reference and examples/security-config. CI runs it on Linux and macOS. Keep all framework
 unit and integration tests in addition to this demo gate.
 
+## Prepare an application without a listener
+
+`spine.Prepare(ctx, app, options)` returns a `spine.PreparedApplication` with `Handler()` and `Close(ctx)`.
+The existing App interface is unchanged; optional ApplicationPreparer provides this capability. The default
+Spine app supports it, while external App implementations can return ErrPreparationUnsupported.
+
+Preparation snapshots registration topology and boot option values, configures DI/HTTP/WS and checks consumer
+readiness. It does not listen, subscribe to OS signals, start consumers or call custom transport Start.
+Publisher initialization, broker readiness and custom Init may use external infrastructure. Preparation context
+cancellation is checked during initialization; after success the caller owns the result and must Close it.
+Requests retain their original request context. User-owned instances, dialers and transports are not cloned.
+Cleanup covers framework-owned transports and event infrastructure; it does not automatically invoke Close on arbitrary DI objects.
+
+Handler is stable and nil when HTTP is disabled. Close rejects new Handler requests with 503, shuts down WS
+and managed HTTP, waits for external Handler requests, then stops consumers/custom transports and publishers.
+Close starts one cleanup operation; its context bounds waiting only. Cleanup continues after a waiting timeout
+and subsequent calls can await completion. External HTTP servers retain ownership of their listeners, TLS and
+server timeouts; connect the returned Handler so request lifetimes are tracked. Do not mutate registrations
+concurrently with preparation. The listener-free API does not add a CLI HTTP runtime manifest or widen the partial probe.
+
+RunContext shares preparation and cleanup, subscribes to shutdown signals before initialization, and starts
+consumers/custom transports before exposing the final HTTP listener. The new API is part of the current development
+checkout; previously pinned public kernel snapshots do not include it. See docs/migration/http-adapter-modules.md.
+
 ## Repository map
 
 Use this map instead of searching the entire repository blindly:
 
 - `app.go`: public `spine.App` assembly API.
+- `application.go`: optional preparation API and listener-free Handler/Close ownership.
 - `pkg/boot`: HTTP, WebSocket, Kafka, RabbitMQ, lifecycle, and validation options.
 - `pkg/path`, `pkg/query`, `pkg/header`, `pkg/multipart`: supported HTTP handler inputs.
 - `pkg/httpx`, `pkg/httperr`: supported HTTP outputs and expected HTTP errors.
@@ -176,7 +201,7 @@ Use this map instead of searching the entire repository blindly:
 - `adapter`: public HTTP execution contract package within Spine; no separate module or repository.
 - [spine-echo-platform](https://github.com/NARUBROWN/spine-echo-platform): independent Echo implementation and starter repository, checked out beside Spine.
 - `internal/transport`: kernel HTTP scope bridge adding Spine store, routing state, EventBus and error conversion.
-- `internal/bootstrap`: application initialization and runtime coordination; it is not an adapter contract.
+- `internal/bootstrap`: shared preparation, managed execution and resource cleanup; no concrete HTTP platform import.
 - `internal/pipeline`: Spine request execution; adapters call an ExecuteFunc without importing this implementation.
 - `interceptor/cors`: built-in CORS interceptor.
 - `cmd/demo`: CLI-compatible minimal HTTP/WS application and the required real-network E2E fixture.

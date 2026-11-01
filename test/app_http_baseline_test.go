@@ -87,46 +87,23 @@ func (*httpBaselineController) Upload(form *httpBaselineForm, files spinemultipa
 	return httpx.Response[httpBaselineUpload]{Body: body}, nil
 }
 
-// 현재 공개 API에는 실행 진입점 구성만 하는 기능이 없어 마지막 전송 훅에서 핸들러를 받는다.
-// 리스너 없이 구성하는 API가 추가되면 호출부를 바꾸되 아래 요청의 관측 결과는 유지한다.
+// 기준 요청은 공개 Prepare API로 구성합니다. 리스너나 관리 실행 고루틴을 시작하지 않습니다.
 func newHTTPBaselineHandler(t *testing.T, app spine.App, options boot.HTTPOptions) http.Handler {
 	t.Helper()
-	ready := make(chan http.Handler, 1)
-	app.Transport(func(value any) {
-		if handler, ok := value.(http.Handler); ok {
-			ready <- handler
-		}
+	prepared, err := spine.Prepare(context.Background(), app, boot.Options{
+		ShutdownTimeout: 3 * time.Second, HTTP: &options,
 	})
-	runContext, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	var runErr error
-	go func() {
-		runErr = app.RunContext(runContext, boot.Options{
-			Address: "127.0.0.1:0", EnableGracefulShutdown: true,
-			ShutdownTimeout: 3 * time.Second, HTTP: &options,
-		})
-		close(done)
-	}()
-	t.Cleanup(func() {
-		cancel()
-		select {
-		case <-done:
-			if runErr != nil {
-				t.Errorf("기준 앱 종료 실패: %v", runErr)
-			}
-		case <-time.After(5 * time.Second):
-			t.Error("기준 앱 종료 시간 초과")
-		}
-	})
-	select {
-	case handler := <-ready:
-		return handler
-	case <-done:
-		t.Fatalf("기준 앱 구성 실패: %v", runErr)
-	case <-time.After(5 * time.Second):
-		t.Fatal("기준 앱 핸들러 준비 시간 초과")
+	if err != nil {
+		t.Fatalf("기준 앱 준비 실패: %v", err)
 	}
-	return nil
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := prepared.Close(ctx); err != nil {
+			t.Errorf("기준 앱 종료 실패: %v", err)
+		}
+	})
+	return prepared.Handler()
 }
 
 func setupHTTPBaselineApp() spine.App {

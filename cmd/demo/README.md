@@ -13,6 +13,7 @@
 HTTP 본문 제한은 1024바이트입니다. WS는 기존 기본 제한과 동일 출처 정책을 사용합니다.
 E2E는 WS 연결을 열어 둔 상태에서 SIGINT를 보내 정상 종료와 close frame까지 확인합니다.
 시작 중 native 훅 및 HTTP 없는 custom transport Init에 신호가 도착하는 경우도 검사합니다.
+Prepare E2E는 같은 앱을 외부 HTTP 서버에 연결해 실제 HTTP/WS 처리와 Close, WS close frame 및 종료 후 새 요청의 503을 검사합니다. 외부 서버 listener는 호출자가 계속 소유합니다.
 
 ## 실행
 
