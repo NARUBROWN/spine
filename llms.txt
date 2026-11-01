@@ -161,6 +161,11 @@ partial runtime probe, and real-network E2E evidence separate. Root `go test ./.
 ../spine-echo-platform, test, cmd/demo, cmd/reference and examples/security-config. CI runs it on Linux and macOS. Keep all framework
 unit and integration tests in addition to this demo gate.
 
+The platform's standalone vet/unit/race commands currently resolve its pinned published Spine dependency.
+The integration and demo modules use local replacements for the PR checkout. A per-invocation temporary
+workspace for the platform checks is still pending; keep module consistency and published-consumer checks
+on GOWORK=off. Do not describe all standalone platform tests as exercising an arbitrary PR kernel revision.
+
 ## Prepare an application without a listener
 
 `spine.Prepare(ctx, app, options)` returns a `spine.PreparedApplication` with `Handler()` and `Close(ctx)`.
@@ -182,8 +187,10 @@ server timeouts; connect the returned Handler so request lifetimes are tracked. 
 concurrently with preparation. The listener-free API does not add a CLI HTTP runtime manifest or widen the partial probe.
 
 RunContext shares preparation and cleanup, subscribes to shutdown signals before initialization, and starts
-consumers/custom transports before exposing the final HTTP listener. The new API is part of the current development
-checkout; previously pinned public kernel snapshots do not include it. See docs/migration/http-adapter-modules.md.
+consumers/custom transports before exposing the final HTTP listener. Prepare is included in the public Spine
+development snapshot v0.5.3-0.20261101161224-490135eda06f, which the Echo platform snapshot
+v0.0.0-20261101161437-2bbd8e7d0263 requires without a local replacement. These are development snapshots;
+formal release tags have not been published. See docs/migration/http-adapter-modules.md.
 
 ## Repository map
 
