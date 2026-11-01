@@ -3,8 +3,8 @@ module github.com/NARUBROWN/spine/test
 go 1.25.5
 
 require (
-	github.com/NARUBROWN/spine v0.5.3-0.20261101153206-39d90e4c871e
-	github.com/NARUBROWN/spine-echo-platform v0.0.0-20261101153258-a4a8f6fc184d
+	github.com/NARUBROWN/spine v0.5.3-0.20261101161224-490135eda06f
+	github.com/NARUBROWN/spine-echo-platform v0.0.0-20261101161437-2bbd8e7d0263
 	github.com/gorilla/websocket v1.5.3
 	github.com/labstack/echo/v4 v4.15.0
 )

@@ -38,7 +38,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: NARUBROWN/spine-echo-platform
-          ref: a4a8f6fc184df104f9ceb53467e24c6a70b1857d
+          ref: 2bbd8e7d0263526dae949ffcd950425f71a538ff
           path: spine-echo-platform
 
       - name: Set up Go
@@ -95,7 +95,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: NARUBROWN/spine-echo-platform
-          ref: a4a8f6fc184df104f9ceb53467e24c6a70b1857d
+          ref: 2bbd8e7d0263526dae949ffcd950425f71a538ff
           path: spine-echo-platform
 
       - name: Set up Go
@@ -135,7 +135,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: NARUBROWN/spine-echo-platform
-          ref: a4a8f6fc184df104f9ceb53467e24c6a70b1857d
+          ref: 2bbd8e7d0263526dae949ffcd950425f71a538ff
           path: spine-echo-platform
 
       - name: Set up Go
@@ -170,7 +170,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: NARUBROWN/spine-echo-platform
-          ref: a4a8f6fc184df104f9ceb53467e24c6a70b1857d
+          ref: 2bbd8e7d0263526dae949ffcd950425f71a538ff
           path: spine-echo-platform
 
       - name: Set up Go
@@ -214,7 +214,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: NARUBROWN/spine-echo-platform
-          ref: a4a8f6fc184df104f9ceb53467e24c6a70b1857d
+          ref: 2bbd8e7d0263526dae949ffcd950425f71a538ff
           path: spine-echo-platform
 
       - name: Set up Go

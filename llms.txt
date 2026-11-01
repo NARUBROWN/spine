@@ -737,3 +737,11 @@ Run relevant broker/database/WebSocket E2E separately. Translate POSIX environme
 $env:SPINE_DEMO_KAFKA_BROKER = "localhost:19092"
 go run ./stock-app
 ```
+
+## Published development snapshot verification
+
+After publishing a core/platform snapshot, run `bash scripts/check-published-demo.sh` from the Spine root.
+
+The script copies the real cmd/demo outside the checkout and removes local replacements and the direct Spine requirement. With go.work disabled and a fresh module cache, it downloads the pinned public platform and checks that its transitive dependency selects the expected Spine version. It then runs vet and the complete demo race tests, using the existing HTTP/WebSocket, SIGINT, and Prepare E2E tests. Temporary sources and the module cache are removed afterwards.
+
+Run on Unix for complete signal coverage. Report this published snapshot check separately from local source checks. It does not publish tags or verify production infrastructure.

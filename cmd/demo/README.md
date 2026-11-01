@@ -61,3 +61,15 @@ HTTP 구성은 `spine.New(platform.Option())`으로 Echo 통합 모듈을 명시
 프레임워크 자체의 전체 검사는 루트에서 `spine check --root .`로 수행합니다.
 
 전체 검증에서는 `../spine-echo-platform`, `test`, `cmd/reference`, `examples/security-config`의 테스트도 각각 실행하고 `bash scripts/check-module-boundaries.sh`로 의존 경계를 검사합니다.
+
+## 공개 모듈 소비자 검증
+
+공개 개발 스냅샷을 배포할 때는 저장소 루트에서 다음 명령도 실행합니다.
+
+```sh
+bash scripts/check-published-demo.sh
+```
+
+스크립트는 실제 demo를 임시 폴더에 복사하고 두 replace와 직접 선언한 Spine 의존성을 제거합니다. 플랫폼의 전이 의존성으로 필요한 Spine 버전을 선택하는지 확인합니다. go.work와 기존 모듈 캐시를 사용하지 않고 원래 go.mod에 고정한 공개 버전을 내려받아 모듈 정합성, vet와 전체 demo race 테스트를 검사합니다. 기존 HTTP/WS, SIGINT와 Prepare E2E를 그대로 사용합니다. 검사가 끝나면 임시 복사본과 모듈 캐시를 제거합니다.
+
+실행에는 Bash, Go와 공개 Go 모듈 다운로드를 위한 네트워크가 필요합니다. SIGINT E2E를 포함한 전체 검증은 Unix에서 실행합니다. 저장소의 go.mod와 replace는 변경하지 않습니다.

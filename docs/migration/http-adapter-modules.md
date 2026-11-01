@@ -40,7 +40,7 @@ app := spine.New(platform.Option())
 
 소스는 [Spine](https://github.com/NARUBROWN/spine)과 [Echo 플랫폼](https://github.com/NARUBROWN/spine-echo-platform)의 두 저장소에서 관리합니다. 플랫폼 소스는 Spine 내부에 포함하지 않습니다. 로컬에서는 두 저장소를 형제 폴더에 체크아웃하며, 각 예제는 자신의 go.mod에서 커널과 플랫폼을 replace합니다.
 
-플랫폼 go.mod는 Spine `v0.5.3-0.20261101153206-39d90e4c871e`을 참조하며 로컬 replace를 포함하지 않습니다. 예제는 플랫폼 `v0.0.0-20261101153258-a4a8f6fc184d`을 참조하고, 개발 중인 두 checkout을 검사하기 위한 replace를 유지합니다. CI의 플랫폼 checkout도 같은 커밋으로 고정합니다.
+플랫폼 go.mod는 Spine `v0.5.3-0.20261101161224-490135eda06f`을 참조하며 로컬 replace를 포함하지 않습니다. 예제는 플랫폼 `v0.0.0-20261101161437-2bbd8e7d0263`을 참조하고, 개발 중인 두 checkout을 검사하기 위한 replace를 유지합니다. CI의 플랫폼 checkout도 같은 커밋으로 고정합니다.
 
 의존 모듈의 replace는 소비자에게 전파되지 않습니다. 공개 소스의 Go 의사버전과 정식 릴리스 태그는 구분해야 합니다. 현재 변경은 커널 기능 브랜치와 플랫폼 main의 소스 스냅샷이며, 정식 버전 태그는 아직 발행하지 않았습니다.
 
@@ -88,4 +88,20 @@ HTTP가 없는 앱도 Prepare와 Close를 사용할 수 있습니다. 이 경우
 
 nil context는 ErrInvalidContext, nil 앱과 nil 준비 결과는 ErrInvalidApplication, 기존 App 구현의 준비 미지원은 ErrPreparationUnsupported로 검사할 수 있습니다. 기존 실행은 RunContext(nil, options)의 background 동작을 유지합니다.
 
-위 API는 현재 개발 브랜치 소스의 기능입니다. 이전에 공개한 플랫폼의 고정 커널 버전을 사용할 때는 Prepare를 포함한 새 커널 버전 또는 현재 checkout으로 연결해야 합니다. CLI runtime probe의 HTTP 분석 범위가 확장되는 것은 아니며 기존 부분 probe 한계는 유지됩니다.
+위 API는 현재 공개 개발 스냅샷에 포함됩니다. 설치할 때는 위에 고정한 버전이나 이를 포함하는 후속 버전을 사용하세요. CLI runtime probe의 HTTP 분석 범위가 확장되는 것은 아니며 기존 부분 probe 한계는 유지됩니다.
+
+## 공개 스냅샷 설치와 검증
+
+플랫폼을 설치하면 호환되는 Spine과 Echo도 의존성으로 가져옵니다. 개발 스냅샷을 재현할 때는 다음 고정 버전을 사용하세요.
+
+```sh
+go get github.com/NARUBROWN/spine-echo-platform@v0.0.0-20261101161437-2bbd8e7d0263
+```
+
+정식 릴리스가 나오기 전에는 기존 태그의 설치 방법과 구분합니다. 공개 모듈 소비자 검증은 저장소 루트에서 실행합니다.
+
+```sh
+bash scripts/check-published-demo.sh
+```
+
+이 검사는 실제 cmd/demo를 저장소 밖의 임시 모듈로 복사하고 replace와 직접 선언한 Spine 의존성을 제거합니다. 플랫폼의 전이 의존성으로 필요한 Spine 버전을 선택하는지 확인합니다. go.work와 기존 모듈 캐시 없이 고정한 공개 버전을 내려받아 모듈 정합성, vet와 demo 전체 race 테스트를 검사합니다. 기존 HTTP/WS, SIGINT와 Prepare E2E를 그대로 사용하며 임시 소스와 캐시는 검사 후 제거합니다. 전체 SIGINT 검증은 Unix에서 실행합니다. 로컬 소스 테스트와 공개 모듈 소비자 검증 결과는 별도로 기록합니다.
