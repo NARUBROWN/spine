@@ -16,6 +16,40 @@ It does not hide how a request is resolved and executed.
 - Method signature is the API contract
 - Semantic input types: `path.*`, `query.*`, `httperr.*`
 
+## Free enterprise adoption support
+
+[![Spine enterprise adoption support: free guidance, 24/7 inquiries, and maintainer replies as available](assets/enterprise-adoption/banner.png)](https://github.com/NARUBROWN/spine/issues/new?title=%5BAdoption%20support%5D)
+
+Bring the business architecture and development practices you know from Spring or NestJS to Go.
+Any company or development team evaluating or using Spine can request free support directly from the maintainer.
+There is no limit on the number of participating companies and no fixed support end date.
+
+- Assess whether Spine fits your service and review the responsibilities and dependencies of controllers, services, and repositories.
+- Review initial setup and relevant code to help with dependency injection (DI) and framework usage.
+- Reproduce errors and assess workarounds or fixes based on the cause.
+
+Submit inquiries 24/7. The maintainer responds when available, with no guaranteed response or recovery time.
+Support takes place asynchronously through text, code, and logs. Meetings can be arranged when further discussion is needed.
+
+Inquiries are prioritized by production impact and available workarounds.
+Within the same priority, arrival order and the impact on other users are also considered.
+
+| Inquiry type | Criteria |
+|---|---|
+| Urgent | A core production function is unavailable or a data integrity incident is in progress |
+| Adoption blocker | A build, startup, or core function error prevents adoption or development |
+| General | Usage or architecture questions, focused code reviews, or errors with a workaround |
+| Improvement | Suggestions for features, usability, documentation, or examples |
+
+Your team develops business features, operates the service, and pays for infrastructure and external services.
+Full project development, continuous operations, or ongoing development of features specific to your company require a separate scope discussion.
+
+**[Start an adoption or support inquiry](https://github.com/NARUBROWN/spine/issues/new?title=%5BAdoption%20support%5D)**
+
+Describe your service, current stack, intended adoption scope, and questions.
+For errors, include your Spine and Go versions, expected and actual behavior, and minimal reproduction steps.
+GitHub Issues are public. Share a sanitized summary or minimal reproduction without confidential information.
+
 ## Recommended environment
 
 - Recommended Go version: **1.27.3**
