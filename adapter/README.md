@@ -8,7 +8,7 @@ Factory는 기능을 선언하고 리스너 없이 새 어댑터를 구성합니
 
 scope와 writer는 요청 중에만 사용하며 별도 goroutine에서 동시 접근하거나 보관하지 않습니다. Spine의 요청 store, 라우팅 결과, EventBus와 응답 staging은 커널이 소유합니다. 요청 오류는 RequestError로 상태와 원인을 전달하고 커널이 공개 HTTP 오류로 변환합니다.
 
-ASGI의 앱과 서버 경계 및 수명 정의를 참고하지만 **Python ASGI 호환을 제공하지 않습니다.** 현재 계약은 이슈 #9의 미발행 개발 변경입니다.
+ASGI의 앱과 서버 경계 및 수명 정의를 참고하지만 **Python ASGI 호환을 제공하지 않습니다.** 현재 계약은 이슈 #9 개발 브랜치의 변경이며 정식 릴리스 전입니다.
 
 ```sh
 go test ./adapter -count=1

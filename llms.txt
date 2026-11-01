@@ -5,8 +5,8 @@
 ## Read this first
 
 This guide describes the unreleased issue #9 development checkout. The public HTTP contract lives in the Spine module; the Echo integration
-is a separate platform module. They are connected locally with replace directives and v0.0.0 placeholders;
-these are not published installation versions. Go 1.27.3 is recommended; the compatibility baseline is 1.25.5.
+is a separate platform module. The platform pins a published Spine commit using a Go pseudo-version.
+Local fixtures use replace directives to exercise the current checkouts; no stable release tag is issued by this work. Go 1.27.3 is recommended; the compatibility baseline is 1.25.5.
 External demo snapshots below retain their original released APIs and pins.
 
 Use sources in this order:
@@ -23,7 +23,7 @@ The external demos reviewed on 2026-07-30 all pin Spine `v0.5.1`. Their architec
 Do not import `github.com/NARUBROWN/spine/internal/...` from an application. Application code should use the root package, `adapter`, `core`, `interceptor/...`, and `pkg/...` only.
 
 For the current checkout, use local module replacements as shown in `cmd/demo/go.mod`.
-Publication of the updated Spine kernel and Echo platform is pending. Do not recommend a go get command for a placeholder version.
+Source snapshots of the updated kernel and Echo platform are published. Use the exact pseudo-versions in go.mod; stable tagged releases remain pending.
 For published historical examples, keep their released Spine version when reproducing them exactly.
 See `docs/migration/http-adapter-modules.md` for the intentional constructor change.
 
