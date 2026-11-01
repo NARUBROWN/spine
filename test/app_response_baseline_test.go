@@ -14,7 +14,7 @@ import (
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 type responseBaselineEvent struct {
@@ -154,9 +154,13 @@ func TestAppIntegration_ResponseStagingBaseline(t *testing.T) {
 					return
 				}
 				engine.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
-					return func(ctx echo.Context) error {
+					return func(ctx *echo.Context) error {
 						// 요청이 끝난 뒤 재사용되는 Echo Context 자체는 보관하지 않는다.
-						state.response = ctx.Response()
+						response, err := echo.UnwrapResponse(ctx.Response())
+						if err != nil {
+							return err
+						}
+						state.response = response
 						defer func() { state.response = nil }()
 						return next(ctx)
 					}

@@ -9,7 +9,7 @@ Echo 기반 앱은 `spine-echo-platform`을 설치하고 `platform.New()`로 생
 애플리케이션의 Go 모듈에서 다음 버전을 설치합니다.
 
 ```sh
-go get github.com/NARUBROWN/spine-echo-platform@v0.0.0-20261101161437-2bbd8e7d0263
+go get github.com/NARUBROWN/spine-echo-platform@v0.0.0-20261101230311-ded538a25193
 ```
 
 이 버전은 Prepare API를 포함한 Spine `v0.5.3-0.20261101161224-490135eda06f`에 의존합니다. 플랫폼을 설치하면 필요한 Spine과 Echo 버전도 선택됩니다. 별도 계약 모듈을 설치하거나 로컬 `replace`를 추가할 필요는 없습니다.
@@ -49,6 +49,8 @@ app := spine.New(platform.Option())
 계약 소스는 [Spine 저장소](https://github.com/NARUBROWN/spine)의 공개 `adapter` 패키지에 있고 커널과 함께 버전을 관리합니다. 별도 계약 저장소나 Go 모듈은 사용하지 않습니다. 계약 패키지는 표준 라이브러리만 참조하며, 커널은 Echo와 플랫폼 모듈을 import하지 않습니다.
 
 구현 소스는 별도 [Echo 플랫폼 저장소](https://github.com/NARUBROWN/spine-echo-platform)에서 관리합니다. Go 패키지 이름은 `platform`이고, native Labstack Echo의 패키지 이름은 `echo`입니다. 기존 서버 API를 Spine 계약에 맞게 연결하는 책임은 플랫폼에 있습니다.
+
+플랫폼은 Echo v5.4.4를 사용합니다. Spine의 공개 adapter 계약은 유지하며 native Echo 확장 코드는 아래 v5 API로 전환합니다. Go 1.25.5 최소 설정도 유지합니다.
 
 ASGI의 앱과 서버 분리, 요청과 연결의 수명 및 시작과 종료 책임을 참고합니다. **이번 작업은 Python ASGI와의 호환을 의미하지 않습니다.** 현재 HTTP 구현은 Echo 플랫폼이며, 자체 `net/http` 플랫폼 구현은 후속 작업입니다.
 
@@ -95,7 +97,20 @@ nil context는 `ErrInvalidContext`, nil 앱과 nil 준비 결과는 `ErrInvalidA
 
 바인딩과 응답 형식, 응답 staging, 인터셉터 순서, 제한값과 정상 종료 동작을 유지합니다. staging은 커널에 남고 실제 HTTP 출력은 플랫폼이 처리합니다. WebSocket 업그레이드는 공개 계약으로 연결하며 Gorilla 메시지 엔진과 연결 종료는 커널에 유지합니다.
 
-`app.Transport`는 계속 `*echo.Echo`를 전달합니다. native Echo 경로는 Spine의 HTTP 인터셉터, 본문 제한과 staging을 거치지 않습니다. native Echo store와 Spine 요청 store는 분리하므로 공유 값은 표준 request context로 전달합니다. DTO의 `param` 태그는 native 파라미터를, Spine path 인자는 커널 라우팅 결과를 사용하는 기존 차이도 유지합니다.
+`app.Transport`는 `github.com/labstack/echo/v5`의 `*echo.Echo`를 전달합니다. native Echo 경로는 Spine의 HTTP 인터셉터, 본문 제한과 staging을 거치지 않습니다. native Echo store와 Spine 요청 store는 분리하므로 공유 값은 표준 request context로 전달합니다. DTO의 `param` 태그는 native 파라미터를, Spine path 인자는 커널 라우팅 결과를 사용하는 기존 차이도 유지합니다.
+
+```go
+import "github.com/labstack/echo/v5"
+
+app.Transport(func(native any) {
+    e := native.(*echo.Echo)
+    e.GET("/native", func(ctx *echo.Context) error {
+        return ctx.String(200, "native")
+    })
+})
+```
+
+Echo v4에서 사용하던 handler와 middleware의 `echo.Context`는 `*echo.Context`로 바꿉니다. `HTTPErrorHandler`는 `func(ctx *echo.Context, err error)` 순서이고 logger는 `log/slog`입니다. 경로 인자는 `PathValues()`로 조회하며 `Response()`는 `http.ResponseWriter`를 반환합니다. 응답 상태를 읽을 때는 `echo.UnwrapResponse`를 사용하고, native 응답 wrapper는 `Unwrap() http.ResponseWriter`를 제공해야 합니다.
 
 ## 프레임워크 소스 개발과 검증
 

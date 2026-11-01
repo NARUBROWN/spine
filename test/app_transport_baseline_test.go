@@ -14,7 +14,7 @@ import (
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/gorilla/websocket"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 type transportBaselineCounter struct {
@@ -47,12 +47,12 @@ func TestAppIntegration_NativeRouteBaseline(t *testing.T) {
 			return
 		}
 		engine.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
-			return func(ctx echo.Context) error {
+			return func(ctx *echo.Context) error {
 				ctx.Response().Header().Set("X-Echo-Middleware", "applied")
 				return next(ctx)
 			}
 		})
-		engine.GET("/api/body", func(ctx echo.Context) error { return ctx.String(200, "first") })
+		engine.GET("/api/body", func(ctx *echo.Context) error { return ctx.String(200, "first") })
 	})
 	app.Transport(func(value any) {
 		hookOrder = append(hookOrder, "second")
@@ -61,8 +61,8 @@ func TestAppIntegration_NativeRouteBaseline(t *testing.T) {
 			t.Errorf("기존 전송 훅은 Echo 객체를 받아야 합니다: %T", value)
 			return
 		}
-		engine.GET("/api/body", func(ctx echo.Context) error { return ctx.String(200, "second") })
-		engine.POST("/native/body", func(ctx echo.Context) error {
+		engine.GET("/api/body", func(ctx *echo.Context) error { return ctx.String(200, "second") })
+		engine.POST("/native/body", func(ctx *echo.Context) error {
 			content, err := io.ReadAll(ctx.Request().Body)
 			if err != nil {
 				return err
@@ -124,7 +124,7 @@ func TestAppIntegration_WebSocketMountBaseline(t *testing.T) {
 			return
 		}
 		// 내장 WS 마운트 뒤에 실행되는 사용자 훅이 같은 GET 경로를 대체하는 현재 동작이다.
-		engine.GET("/ws/echo", func(ctx echo.Context) error { return ctx.String(200, "native-ws") })
+		engine.GET("/ws/echo", func(ctx *echo.Context) error { return ctx.String(200, "native-ws") })
 	})
 	handler := newHTTPBaselineHandler(t, app, boot.HTTPOptions{GlobalPrefix: "/api"})
 	server := httptest.NewServer(handler)
