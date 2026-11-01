@@ -1,0 +1,4 @@
+module = "github.com/NARUBROWN/spine/cmd/demo"
+entrypoint = "."
+composition = "./application"
+port = 8080

@@ -37,6 +37,9 @@ docs/migration/*
 !docs/security-configuration.md
 !docs/security-configuration.en.md
 
+# 로컬 개발 작업 기록과 설계 초안
+/docs/work/
+
 examples/*
 !examples/security-config/
 examples/security-config/*

@@ -31,7 +31,7 @@ The linked demos intentionally pin the released `v0.5.1`; keep their pin when re
 
 | Goal | Reference | Start with |
 |---|---|---|
-| Learn the current minimal runtime and secure defaults | This repository | `cmd/demo`, `examples/security-config`, `test/app_integration_test.go` |
+| Learn the current minimal runtime and secure defaults | This repository | `cmd/demo`, `cmd/reference`, `examples/security-config`, `test/app_integration_test.go` |
 | Scaffold a project, inspect execution contracts, or generate OpenAPI/AsyncAPI | [spine-cli](https://github.com/NARUBROWN/spine-cli/tree/a9fff677b385a59df65b0befcde6c410239a8c83) | `README.md`, `llms.txt`, `internal/cli/agent.go`, `internal/cli/contract.go` |
 | CRUD, Bun ORM, request transactions, and Swagger UI | [spine-user-demo](https://github.com/NARUBROWN/spine-user-demo/tree/b07d2bb35d6e0b499c6f6974e1d34f3a4fafffba) | `main.go`, `routes/user_routes.go`, `interceptor/tx_interceptor.go`, `repository/user_repository.go` |
 | Kafka request/event flow, idempotency, poison messages, and outbox boundaries | [spine-simple-msa-demo](https://github.com/NARUBROWN/spine-simple-msa-demo/tree/aa3f0fae8057ec0999fadaafc9295b7c7987afbb) | `order-app/main.go`, `stock-app/main.go`, `shared/events`, `scenarios/outbox` |
@@ -123,6 +123,26 @@ CLI can analyze and update the composition root. For the complete command protoc
 and current limitations, use the CLI repository's own
 [`llms.txt`](https://github.com/NARUBROWN/spine-cli/blob/a9fff677b385a59df65b0befcde6c410239a8c83/llms.txt).
 
+### Required demo verification for framework changes
+
+For this framework checkout, the CLI project root is `cmd/demo`, which contains its own `spine.toml` and
+Go module. Its `replace ../..` dependency uses the current framework source. Use this same minimal demo for
+E2E after every implementation step; keep `-count=1` so a cached result cannot replace a fresh run.
+
+```sh
+spine context --root cmd/demo --json
+spine contract check --root cmd/demo --warnings-as-errors --json
+spine verify --root cmd/demo --warnings-as-errors --json
+spine contract probe --root cmd/demo --json
+go -C cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=90s
+spine check --root .
+```
+
+The CLI, entrypoint, and HTTP/WS E2E share `cmd/demo/application.BuildApplication`. Keep static analysis,
+partial runtime probe, and real-network E2E evidence separate. Root `go test ./...` skips the nested demo
+module, so always run the explicit demo command as well. CI runs it on Linux and macOS. Keep all framework
+unit and integration tests in addition to this demo gate.
+
 ## Repository map
 
 Use this map instead of searching the entire repository blindly:
@@ -136,9 +156,10 @@ Use this map instead of searching the entire repository blindly:
 - `pkg/route`: route-level interceptor options.
 - `core/interceptor.go`, `core/context.go`: interceptor and context contracts.
 - `interceptor/cors`: built-in CORS interceptor.
-- `cmd/demo`: a local application covering HTTP, files, events, WebSocket, CORS, and secure configuration.
+- `cmd/demo`: CLI-compatible minimal HTTP/WS application and the required real-network E2E fixture.
+- `cmd/reference`: the full reference application covering files, events, WebSocket, CORS, and secure configuration.
 - `examples/security-config`: compact secure configuration example.
-- `test`: end-to-end HTTP and WebSocket usage.
+- `test`: HTTP and WebSocket integration tests; process and network E2E live in `cmd/demo`.
 - `docs/migration`: version-specific behavioral changes.
 - `docs/security-configuration.md`: production security expectations.
 

@@ -1,14 +1,16 @@
-package test
+package main
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -16,18 +18,17 @@ import (
 	"time"
 
 	"github.com/NARUBROWN/spine"
+	"github.com/NARUBROWN/spine/cmd/demo/application"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/pkg/boot"
-	"github.com/NARUBROWN/spine/pkg/httpx"
-	pkgws "github.com/NARUBROWN/spine/pkg/ws"
 	"github.com/gorilla/websocket"
 )
 
 const (
-	e2eHelperEnv        = "SPINE_E2E_HELPER"
-	e2eAddressEnv       = "SPINE_E2E_ADDRESS"
-	e2eSignalOnMountEnv = "SPINE_E2E_SIGNAL_ON_MOUNT"
-	e2eSignalOnInitEnv  = "SPINE_E2E_SIGNAL_ON_INIT"
+	e2eHelperEnv        = "SPINE_DEMO_E2E_HELPER"
+	e2eAddressEnv       = "SPINE_DEMO_ADDRESS"
+	e2eSignalOnMountEnv = "SPINE_DEMO_E2E_SIGNAL_ON_MOUNT"
+	e2eSignalOnInitEnv  = "SPINE_DEMO_E2E_SIGNAL_ON_INIT"
 )
 
 type e2eSignalOnInitTransport struct {
@@ -53,26 +54,9 @@ func (t *e2eSignalOnInitTransport) Stop(context.Context) error {
 	return nil
 }
 
-type e2eController struct{}
-
-func (c *e2eController) Health() httpx.Response[string] {
-	return httpx.Response[string]{Body: "ok"}
-}
-
-func (c *e2eController) User() httpx.Response[map[string]any] {
-	return httpx.Response[map[string]any]{
-		Body: map[string]any{"id": float64(43), "version": "0.4.3"},
-	}
-}
-
-func (c *e2eController) Echo(ctx context.Context, payload []byte) error {
-	return pkgws.Send(ctx, pkgws.TextMessage, payload)
-}
-
-// TestAppE2EHelperProcess는 TestAppE2E_HTTPWebSocketAndShutdown이 실행한 자식
-// 프로세스에서만 동작합니다. 서버를 별도 프로세스에 두어 테스트 실행기에는 신호를
-// 보내지 않으면서 App.Run의 리스너와 신호 기반의 정상 종료를 검증합니다.
-func TestAppE2EHelperProcess(t *testing.T) {
+// TestDemoE2EHelperProcess는 자식 프로세스에서 실제 demo의 run을 실행합니다.
+// 테스트 실행기에는 신호를 보내지 않고 HTTP/WS와 신호 기반 종료를 검사합니다.
+func TestDemoE2EHelperProcess(t *testing.T) {
 	if os.Getenv(e2eHelperEnv) != "1" {
 		return
 	}
@@ -97,41 +81,40 @@ func TestAppE2EHelperProcess(t *testing.T) {
 		t.Fatal("E2E helper address is empty")
 	}
 
-	app := spine.New()
-	app.Constructor(func() *e2eController { return &e2eController{} })
-	app.Route(http.MethodGet, "/health", (*e2eController).Health)
-	app.Route(http.MethodGet, "/users/43", (*e2eController).User)
-	if err := app.WebSocket().Register("/ws/echo", (*e2eController).Echo); err != nil {
-		t.Fatalf("register websocket route: %v", err)
-	}
 	if os.Getenv(e2eSignalOnMountEnv) == "1" {
+		app, options, err := application.BuildApplication()
+		if err != nil {
+			t.Fatal(err)
+		}
 		app.Transport(func(any) {
 			process, err := os.FindProcess(os.Getpid())
 			if err == nil {
 				_ = process.Signal(os.Interrupt)
 			}
 		})
+		if err := app.Validate(options); err != nil {
+			t.Fatal(err)
+		}
+		if err := app.Run(options); err != nil {
+			t.Fatalf("run startup signal helper: %v", err)
+		}
+		return
 	}
 
-	if err := app.Run(boot.Options{
-		Address:                address,
-		EnableGracefulShutdown: true,
-		ShutdownTimeout:        3 * time.Second,
-		HTTP:                   &boot.HTTPOptions{},
-	}); err != nil {
-		t.Fatalf("run E2E helper app: %v", err)
+	if err := run(); err != nil {
+		t.Fatalf("run demo: %v", err)
 	}
 }
 
-func TestAppE2E_HTTPWebSocketAndShutdown(t *testing.T) {
+func TestDemoE2E_HTTPWebSocketAndShutdown(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("graceful signal verification requires Unix process signals")
 	}
 
 	address := reserveTCPAddress(t)
-	var processOutput bytes.Buffer
-	cmd := exec.Command(os.Args[0], "-test.run=^TestAppE2EHelperProcess$")
-	cmd.Env = append(os.Environ(), e2eHelperEnv+"=1", e2eAddressEnv+"="+address)
+	var processOutput e2eOutput
+	cmd := exec.Command(os.Args[0], "-test.run=^TestDemoE2EHelperProcess$")
+	cmd.Env = demoE2EEnv(e2eHelperEnv+"=1", e2eAddressEnv+"="+address)
 	cmd.Stdout = &processOutput
 	cmd.Stderr = &processOutput
 	if err := cmd.Start(); err != nil {
@@ -161,21 +144,27 @@ func TestAppE2E_HTTPWebSocketAndShutdown(t *testing.T) {
 		Transport: http.DefaultTransport.(*http.Transport).Clone(),
 	}
 	defer client.CloseIdleConnections()
-	resp, err := client.Get(baseURL + "/users/43")
-	if err != nil {
-		t.Fatalf("GET /users/43: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("GET /users/43 status: got %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-
-	var body map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("decode /users/43 response: %v", err)
-	}
-	if body["id"] != float64(43) || body["version"] != "0.4.3" {
-		t.Fatalf("unexpected /users/43 response: %#v", body)
+	for _, tt := range []struct {
+		name        string
+		method      string
+		path        string
+		contentType string
+		body        string
+		status      int
+		wantJSON    string
+	}{
+		{name: "health", method: "GET", path: "/health", status: 200, wantJSON: `{"status":"ok"}`},
+		{name: "path_binding", method: "GET", path: "/users/43", status: 200, wantJSON: `{"id":43}`},
+		{name: "JSON_binding", method: "POST", path: "/echo", contentType: "application/json", body: `{"message":"E2E 확인","count":2}`, status: 200, wantJSON: `{"message":"E2E 확인","count":2}`},
+		{name: "malformed_JSON", method: "POST", path: "/echo", contentType: "application/json", body: `{`, status: 400},
+		{name: "unsupported_type", method: "POST", path: "/echo", contentType: "text/plain", body: "hello", status: 415},
+		{name: "missing_type", method: "POST", path: "/echo", body: `{"message":"hello"}`, status: 415},
+		{name: "body_limit", method: "POST", path: "/echo", contentType: "application/json", body: `{"message":"` + strings.Repeat("x", 1024) + `"}`, status: 413},
+		{name: "missing_route", method: "GET", path: "/missing", status: 404},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			assertDemoHTTP(t, client, tt.method, baseURL+tt.path, tt.contentType, tt.body, tt.status, tt.wantJSON)
+		})
 	}
 
 	wsURL := "ws://" + address + "/ws/echo"
@@ -183,13 +172,19 @@ func TestAppE2E_HTTPWebSocketAndShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial websocket: %v", err)
 	}
+	defer conn.Close()
+	if err := conn.SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.SetWriteDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	payload := []byte(`{"message":"real-network-e2e"}`)
 	if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
 		_ = conn.Close()
 		t.Fatalf("write websocket message: %v", err)
 	}
 	messageType, echoed, err := conn.ReadMessage()
-	_ = conn.Close()
 	if err != nil {
 		t.Fatalf("read websocket message: %v", err)
 	}
@@ -198,11 +193,16 @@ func TestAppE2E_HTTPWebSocketAndShutdown(t *testing.T) {
 	}
 
 	// 테스트 클라이언트가 준비한 미사용 연결까지 닫아 서버의 정상 종료를 방해하지 않게 합니다.
-	_ = resp.Body.Close()
 	client.CloseIdleConnections()
 
 	if err := cmd.Process.Signal(os.Interrupt); err != nil {
 		t.Fatalf("signal E2E helper process: %v", err)
+	}
+	if err := conn.SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := conn.ReadMessage(); !websocket.IsCloseError(err, websocket.CloseNormalClosure) {
+		t.Fatalf("열린 WS 연결이 서버 정상 종료로 닫혀야 합니다: %v", err)
 	}
 	select {
 	case <-exited:
@@ -215,7 +215,7 @@ func TestAppE2E_HTTPWebSocketAndShutdown(t *testing.T) {
 	}
 }
 
-func TestAppE2E_ShutdownSignalDuringStartup(t *testing.T) {
+func TestDemoE2E_ShutdownSignalDuringStartup(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("graceful signal verification requires Unix process signals")
 	}
@@ -224,10 +224,9 @@ func TestAppE2E_ShutdownSignalDuringStartup(t *testing.T) {
 	defer cancel()
 
 	address := reserveTCPAddress(t)
-	var processOutput bytes.Buffer
-	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestAppE2EHelperProcess$")
-	cmd.Env = append(
-		os.Environ(),
+	var processOutput e2eOutput
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestDemoE2EHelperProcess$")
+	cmd.Env = demoE2EEnv(
 		e2eHelperEnv+"=1",
 		e2eAddressEnv+"="+address,
 		e2eSignalOnMountEnv+"=1",
@@ -243,7 +242,7 @@ func TestAppE2E_ShutdownSignalDuringStartup(t *testing.T) {
 	}
 }
 
-func TestAppE2E_CustomTransportShutdownSignalDuringInit(t *testing.T) {
+func TestDemoE2E_CustomTransportShutdownSignalDuringInit(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("graceful signal verification requires Unix process signals")
 	}
@@ -251,9 +250,9 @@ func TestAppE2E_CustomTransportShutdownSignalDuringInit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var processOutput bytes.Buffer
-	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestAppE2EHelperProcess$")
-	cmd.Env = append(os.Environ(), e2eHelperEnv+"=1", e2eSignalOnInitEnv+"=1")
+	var processOutput e2eOutput
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestDemoE2EHelperProcess$")
+	cmd.Env = demoE2EEnv(e2eHelperEnv+"=1", e2eSignalOnInitEnv+"=1")
 	cmd.Stdout = &processOutput
 	cmd.Stderr = &processOutput
 
@@ -263,6 +262,73 @@ func TestAppE2E_CustomTransportShutdownSignalDuringInit(t *testing.T) {
 		}
 		t.Fatalf("custom transport startup signal did not shut down cleanly: %v\n%s", err, processOutput.String())
 	}
+}
+
+func assertDemoHTTP(t *testing.T, client *http.Client, method, url, contentType, body string, status int, wantJSON string) {
+	t.Helper()
+	request, err := http.NewRequest(method, url, strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contentType != "" {
+		request.Header.Set("Content-Type", contentType)
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, url, err)
+	}
+	defer response.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(response.Body, 4096))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != status {
+		t.Fatalf("상태 = %d, 기대값 = %d, 응답 = %s", response.StatusCode, status, data)
+	}
+	if wantJSON == "" {
+		return
+	}
+	if !strings.HasPrefix(response.Header.Get("Content-Type"), "application/json") {
+		t.Fatalf("JSON Content-Type이 아닙니다: %q", response.Header.Get("Content-Type"))
+	}
+	var got, want any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(wantJSON), &want); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("응답 = %s, 기대값 = %s", data, wantJSON)
+	}
+}
+
+// demoE2EEnv는 개발자 환경이 테스트 앱의 주소나 동작을 바꾸지 않도록 격리합니다.
+func demoE2EEnv(values ...string) []string {
+	var env []string
+	for _, value := range os.Environ() {
+		if !strings.HasPrefix(value, "SPINE_DEMO_") && !strings.HasPrefix(value, "SPINE_PORT=") {
+			env = append(env, value)
+		}
+	}
+	return append(env, values...)
+}
+
+type e2eOutput struct {
+	mu     sync.Mutex
+	buffer bytes.Buffer
+}
+
+func (o *e2eOutput) Write(data []byte) (int, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.buffer.Write(data)
+}
+
+func (o *e2eOutput) String() string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.buffer.String()
 }
 
 func reserveTCPAddress(t *testing.T) string {

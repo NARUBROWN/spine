@@ -1,0 +1,270 @@
+package test
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/NARUBROWN/spine"
+	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/NARUBROWN/spine/pkg/httpx"
+	spinemultipart "github.com/NARUBROWN/spine/pkg/multipart"
+	"github.com/NARUBROWN/spine/pkg/path"
+)
+
+type httpBaselineDTO struct {
+	Name  string `json:"name" xml:"name" query:"name" validate:"required"`
+	Count int    `json:"count" xml:"count" query:"count"`
+}
+
+type httpBaselineForm struct {
+	Name  string `json:"name" form:"name"`
+	Count int    `json:"count" form:"count"`
+}
+
+type httpBaselinePathDTO struct {
+	ID int `param:"id"`
+}
+
+type httpBaselineFile struct {
+	FieldName   string `json:"field_name"`
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type"`
+	Size        int64  `json:"size"`
+	Content     string `json:"content"`
+}
+
+type httpBaselineUpload struct {
+	Form  httpBaselineForm   `json:"form"`
+	Files []httpBaselineFile `json:"files"`
+}
+
+type httpBaselineController struct{}
+
+func (*httpBaselineController) Bind(dto *httpBaselineDTO) httpx.Response[httpBaselineDTO] {
+	return httpx.Response[httpBaselineDTO]{Body: *dto}
+}
+
+func (*httpBaselineController) Form(dto *httpBaselineForm) httpx.Response[httpBaselineForm] {
+	return httpx.Response[httpBaselineForm]{Body: *dto}
+}
+
+func (*httpBaselineController) Path(id path.Int, dto *httpBaselinePathDTO) httpx.Response[map[string]int] {
+	return httpx.Response[map[string]int]{Body: map[string]int{
+		"spine_id": int(id.Value),
+		"dto_id":   dto.ID,
+	}}
+}
+
+func (*httpBaselineController) Upload(form *httpBaselineForm, files spinemultipart.UploadedFiles) (httpx.Response[httpBaselineUpload], error) {
+	body := httpBaselineUpload{Form: *form}
+	for _, file := range files.Files {
+		reader, err := file.Open()
+		if err != nil {
+			return httpx.Response[httpBaselineUpload]{}, err
+		}
+		content, readErr := io.ReadAll(reader)
+		closeErr := reader.Close()
+		if readErr != nil {
+			return httpx.Response[httpBaselineUpload]{}, readErr
+		}
+		if closeErr != nil {
+			return httpx.Response[httpBaselineUpload]{}, closeErr
+		}
+		body.Files = append(body.Files, httpBaselineFile{
+			FieldName: file.FieldName, Filename: file.Filename, ContentType: file.ContentType,
+			Size: file.Size, Content: string(content),
+		})
+	}
+	return httpx.Response[httpBaselineUpload]{Body: body}, nil
+}
+
+// 현재 공개 API에는 실행 진입점 구성만 하는 기능이 없어 마지막 전송 훅에서 핸들러를 받는다.
+// 리스너 없이 구성하는 API가 추가되면 호출부를 바꾸되 아래 요청의 관측 결과는 유지한다.
+func newHTTPBaselineHandler(t *testing.T, app spine.App, options boot.HTTPOptions) http.Handler {
+	t.Helper()
+	ready := make(chan http.Handler, 1)
+	app.Transport(func(value any) {
+		if handler, ok := value.(http.Handler); ok {
+			ready <- handler
+		}
+	})
+	runContext, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	var runErr error
+	go func() {
+		runErr = app.RunContext(runContext, boot.Options{
+			Address: "127.0.0.1:0", EnableGracefulShutdown: true,
+			ShutdownTimeout: 3 * time.Second, HTTP: &options,
+		})
+		close(done)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+			if runErr != nil {
+				t.Errorf("기준 앱 종료 실패: %v", runErr)
+			}
+		case <-time.After(5 * time.Second):
+			t.Error("기준 앱 종료 시간 초과")
+		}
+	})
+	select {
+	case handler := <-ready:
+		return handler
+	case <-done:
+		t.Fatalf("기준 앱 구성 실패: %v", runErr)
+	case <-time.After(5 * time.Second):
+		t.Fatal("기준 앱 핸들러 준비 시간 초과")
+	}
+	return nil
+}
+
+func setupHTTPBaselineApp() spine.App {
+	app := spine.New()
+	app.Constructor(func() *httpBaselineController { return &httpBaselineController{} })
+	for _, method := range []string{http.MethodGet, http.MethodDelete, http.MethodPost} {
+		app.Route(method, "/body", (*httpBaselineController).Bind)
+	}
+	app.Route(http.MethodPost, "/form", (*httpBaselineController).Form)
+	app.Route(http.MethodPost, "/upload", (*httpBaselineController).Upload)
+	app.Route(http.MethodGet, "/items/:id", (*httpBaselineController).Path)
+	return app
+}
+
+func TestAppIntegration_HTTPBindingBaseline(t *testing.T) {
+	handler := newHTTPBaselineHandler(t, setupHTTPBaselineApp(), boot.HTTPOptions{})
+	cases := []struct {
+		name, method, target, contentType, body string
+		status                                  int
+		want                                    httpBaselineDTO
+		message                                 string
+	}{
+		{name: "json", method: "POST", target: "/body", contentType: "application/json; charset=utf-8", body: `{"name":"json","count":2}`, status: 200, want: httpBaselineDTO{Name: "json", Count: 2}},
+		{name: "xml", method: "POST", target: "/body", contentType: "application/xml", body: `<item><name>xml</name><count>3</count></item>`, status: 200, want: httpBaselineDTO{Name: "xml", Count: 3}},
+		{name: "text_xml", method: "POST", target: "/body", contentType: "text/xml", body: `<item><name>xml</name><count>4</count></item>`, status: 200, want: httpBaselineDTO{Name: "xml", Count: 4}},
+		{name: "get_query", method: "GET", target: "/body?name=query&count=5", status: 200, want: httpBaselineDTO{Name: "query", Count: 5}},
+		{name: "delete_query", method: "DELETE", target: "/body?name=query&count=6", status: 200, want: httpBaselineDTO{Name: "query", Count: 6}},
+		{name: "get_body_overrides_query", method: "GET", target: "/body?name=query&count=7", contentType: "application/json", body: `{"name":"body","count":8}`, status: 200, want: httpBaselineDTO{Name: "body", Count: 8}},
+		{name: "post_does_not_bind_query", method: "POST", target: "/body?name=query&count=9", status: 200},
+		{name: "post_body", method: "POST", target: "/body?name=query&count=9", contentType: "application/json", body: `{"name":"body","count":10}`, status: 200, want: httpBaselineDTO{Name: "body", Count: 10}},
+		{name: "required_tag_is_not_validation", method: "POST", target: "/body", contentType: "application/json", body: `{}`, status: 200},
+		{name: "unknown_json_field_is_ignored", method: "POST", target: "/body", contentType: "application/json", body: `{"name":"known","extra":true}`, status: 200, want: httpBaselineDTO{Name: "known"}},
+		{name: "malformed_json", method: "POST", target: "/body", contentType: "application/json", body: `{`, status: 400, message: "Bad Request"},
+		{name: "invalid_field_type", method: "POST", target: "/body", contentType: "application/json", body: `{"count":"invalid"}`, status: 400, message: "Bad Request"},
+		{name: "malformed_xml", method: "POST", target: "/body", contentType: "application/xml", body: `<item>`, status: 400, message: "Bad Request"},
+		{name: "unsupported_type", method: "POST", target: "/body", contentType: "text/plain", body: "payload", status: 415, message: "Unsupported Media Type"},
+		{name: "missing_content_type", method: "POST", target: "/body", body: `{}`, status: 415, message: "Unsupported Media Type"},
+		{name: "empty_body_skips_content_type", method: "POST", target: "/body", contentType: "text/plain", status: 200},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			request := httptest.NewRequest(tc.method, tc.target, strings.NewReader(tc.body))
+			if tc.contentType != "" {
+				request.Header.Set("Content-Type", tc.contentType)
+			}
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, request)
+			if recorder.Code != tc.status {
+				t.Fatalf("응답 상태 = %d, 기대값 = %d, 본문 = %s", recorder.Code, tc.status, recorder.Body.String())
+			}
+			if tc.message != "" {
+				var got struct{ Message string }
+				if err := json.Unmarshal(recorder.Body.Bytes(), &got); err != nil || got.Message != tc.message {
+					t.Fatalf("입력 오류 응답 = %s, 기대 메시지 = %q, 파싱 오류 = %v", recorder.Body.String(), tc.message, err)
+				}
+				return
+			}
+			var got httpBaselineDTO
+			if err := json.Unmarshal(recorder.Body.Bytes(), &got); err != nil || got != tc.want {
+				t.Fatalf("바인딩 결과 = %+v, 기대값 = %+v, 파싱 오류 = %v", got, tc.want, err)
+			}
+		})
+	}
+}
+
+func TestAppIntegration_FormBindingBaseline(t *testing.T) {
+	handler := newHTTPBaselineHandler(t, setupHTTPBaselineApp(), boot.HTTPOptions{})
+	request := httptest.NewRequest(http.MethodPost, "/form?name=query&count=99", strings.NewReader("name=form&count=7"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	var got httpBaselineForm
+	want := httpBaselineForm{Name: "form", Count: 7}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &got); recorder.Code != 200 || err != nil || got != want {
+		t.Fatalf("폼 본문이 쿼리보다 우선해야 합니다: 상태=%d 결과=%+v 기대값=%+v 오류=%v", recorder.Code, got, want, err)
+	}
+}
+
+func TestAppIntegration_MultipartBindingBaseline(t *testing.T) {
+	handler := newHTTPBaselineHandler(t, setupHTTPBaselineApp(), boot.HTTPOptions{})
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for key, value := range map[string]string{"name": "multipart", "count": "2"} {
+		if err := writer.WriteField(key, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wantFiles := []httpBaselineFile{
+		{FieldName: "files", Filename: "first.txt", ContentType: "application/octet-stream", Size: 5, Content: "first"},
+		{FieldName: "files", Filename: "second.txt", ContentType: "application/octet-stream", Size: 6, Content: "second"},
+	}
+	for _, file := range wantFiles {
+		part, err := writer.CreateFormFile(file.FieldName, file.Filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.WriteString(part, file.Content); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/upload", &body)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	t.Cleanup(func() {
+		if request.MultipartForm != nil {
+			if err := request.MultipartForm.RemoveAll(); err != nil {
+				t.Errorf("멀티파트 임시 파일 정리 실패: %v", err)
+			}
+		}
+	})
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	var got httpBaselineUpload
+	if err := json.Unmarshal(recorder.Body.Bytes(), &got); recorder.Code != 200 || err != nil {
+		t.Fatalf("멀티파트 응답: 상태=%d 본문=%s 오류=%v", recorder.Code, recorder.Body.String(), err)
+	}
+	if got.Form != (httpBaselineForm{Name: "multipart", Count: 2}) || len(got.Files) != len(wantFiles) {
+		t.Fatalf("폼과 파일을 함께 해석해야 합니다: %+v", got)
+	}
+	for index, want := range wantFiles {
+		if got.Files[index] != want {
+			t.Errorf("파일 %d: 결과=%+v 기대값=%+v", index, got.Files[index], want)
+		}
+	}
+}
+
+func TestAppIntegration_PathBindingBaseline(t *testing.T) {
+	handler := newHTTPBaselineHandler(t, setupHTTPBaselineApp(), boot.HTTPOptions{})
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/items/43", nil))
+	var got map[string]int
+	if err := json.Unmarshal(recorder.Body.Bytes(), &got); recorder.Code != 200 || err != nil {
+		t.Fatalf("경로 응답: 상태=%d 본문=%s 오류=%v", recorder.Code, recorder.Body.String(), err)
+	}
+	// DTO param 바인딩을 지원하도록 바꾸는 작업은 이 리팩터링과 분리한다.
+	dtoID, hasDTOID := got["dto_id"]
+	if got["spine_id"] != 43 || !hasDTOID || dtoID != 0 {
+		t.Fatalf("Spine 경로 인자와 DTO param의 현재 동작을 보존해야 합니다: %+v", got)
+	}
+}
