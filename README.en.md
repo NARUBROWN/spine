@@ -16,9 +16,9 @@ It does not hide how a request is resolved and executed.
 - Method signature is the API contract
 - Semantic input types: `path.*`, `query.*`, `httperr.*`
 
-## Requirements
+## Recommended environment
 
-- Go **1.27.3 or later**. Go 1.27.x validation uses 1.27.3.
+- Recommended Go version: **1.27.3**
 
 ## Links
 
@@ -36,7 +36,7 @@ It does not hide how a request is resolved and executed.
 and inspects HTTP, DI, interceptor, consumer, and WebSocket execution contracts from source code. It also
 supports contract snapshots and diffs, plus OpenAPI and AsyncAPI exports.
 
-Install the short `spine` command with Go 1.27.3 or later.
+Go 1.27.3 is recommended. Install the short `spine` command as follows.
 
 ```sh
 go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.1.4

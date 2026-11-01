@@ -16,9 +16,9 @@
 - 方法签名即 API 契约
 - 使用 `path.*`、`query.*`、`httperr.*` 语义类型
 
-## 环境要求
+## 推荐环境
 
-- Go **1.27.3 或更高版本**。Go 1.27.x 验证使用 1.27.3。
+- 推荐 Go 版本：**1.27.3**
 
 ## 链接
 
@@ -36,7 +36,7 @@
 并从源代码检查 HTTP、DI、拦截器、消费者和 WebSocket 的执行契约。它还支持契约快照与差异比较，
 以及导出 OpenAPI 和 AsyncAPI 文档。
 
-使用 Go 1.27.3 或更高版本安装简短的 `spine` 命令。
+推荐使用 Go 1.27.3。使用以下命令安装简短的 `spine` 命令。
 
 ```sh
 go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.1.4

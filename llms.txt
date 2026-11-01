@@ -4,7 +4,7 @@
 
 ## Read this first
 
-This guide was verified against checkout `d05b629`, the untagged `v0.5.2` development snapshot on `main`. The current development checkout requires Go `1.27.3` or later. Reviewed snapshots below retain their original Go versions as historical evidence. The latest tag in this checkout is `v0.5.1`; do not mistake the runtime banner for a released `v0.5.2` tag.
+This guide was verified against checkout `d05b629`, the untagged `v0.5.2` development snapshot on `main`. Go `1.27.3` is recommended and verified; the module's existing Go compatibility baseline remains `1.25.5`. Reviewed snapshots below retain their original Go versions as historical evidence. The latest tag in this checkout is `v0.5.1`; do not mistake the runtime banner for a released `v0.5.2` tag.
 
 Use sources in this order:
 
