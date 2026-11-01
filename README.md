@@ -16,6 +16,10 @@
 - 메서드 시그니처가 API 계약입니다
 - `path.*`, `query.*`, `httperr.*` 의미 타입을 사용합니다
 
+## 요구사항
+
+- Go **1.27.3 이상**. Go 1.27.x 검증 기준은 1.27.3입니다.
+
 ## 링크
 
 - 공식 사이트: https://spine.na2ru2.me/ko/
@@ -32,7 +36,7 @@
 소스 코드에서 HTTP·DI·interceptor·consumer·WebSocket 실행 계약을 검사하는 Go CLI입니다.
 계약 snapshot/diff와 OpenAPI·AsyncAPI 내보내기도 지원합니다.
 
-Go 1.25.5 이상에서 짧은 `spine` 명령으로 설치할 수 있습니다.
+Go 1.27.3 이상에서 짧은 `spine` 명령으로 설치할 수 있습니다.
 
 ```sh
 go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.1.4

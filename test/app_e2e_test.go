@@ -156,7 +156,11 @@ func TestAppE2E_HTTPWebSocketAndShutdown(t *testing.T) {
 	baseURL := "http://" + address
 	waitForHTTP(t, baseURL+"/health", exited, &processErr, &processOutput)
 
-	client := &http.Client{Timeout: 2 * time.Second}
+	client := &http.Client{
+		Timeout:   2 * time.Second,
+		Transport: http.DefaultTransport.(*http.Transport).Clone(),
+	}
+	defer client.CloseIdleConnections()
 	resp, err := client.Get(baseURL + "/users/43")
 	if err != nil {
 		t.Fatalf("GET /users/43: %v", err)
@@ -192,6 +196,10 @@ func TestAppE2E_HTTPWebSocketAndShutdown(t *testing.T) {
 	if messageType != websocket.TextMessage || string(echoed) != string(payload) {
 		t.Fatalf("unexpected websocket echo: type=%d payload=%q", messageType, echoed)
 	}
+
+	// 테스트 클라이언트가 준비한 미사용 연결까지 닫아 서버의 정상 종료를 방해하지 않게 합니다.
+	_ = resp.Body.Close()
+	client.CloseIdleConnections()
 
 	if err := cmd.Process.Signal(os.Interrupt); err != nil {
 		t.Fatalf("signal E2E helper process: %v", err)
@@ -274,7 +282,11 @@ func reserveTCPAddress(t *testing.T) string {
 func waitForHTTP(t *testing.T, url string, exited <-chan struct{}, processErr *error, output fmt.Stringer) {
 	t.Helper()
 
-	client := &http.Client{Timeout: 250 * time.Millisecond}
+	client := &http.Client{
+		Timeout:   250 * time.Millisecond,
+		Transport: http.DefaultTransport.(*http.Transport).Clone(),
+	}
+	defer client.CloseIdleConnections()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		select {

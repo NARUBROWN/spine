@@ -16,6 +16,10 @@
 - 方法簽章即為 API 契約
 - 使用 `path.*`、`query.*`、`httperr.*` 語意型別
 
+## 環境需求
+
+- Go **1.27.3 或更新版本**。Go 1.27.x 驗證使用 1.27.3。
+
 ## 連結
 
 - 官方網站：https://spine.na2ru2.me/zh-Hant/
@@ -32,7 +36,7 @@
 並從原始碼檢查 HTTP、DI、攔截器、消費者及 WebSocket 的執行契約。它也支援契約快照與差異比較，
 以及匯出 OpenAPI 和 AsyncAPI 文件。
 
-使用 Go 1.25.5 或更新版本安裝簡短的 `spine` 命令。
+使用 Go 1.27.3 或更新版本安裝簡短的 `spine` 命令。
 
 ```sh
 go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.1.4

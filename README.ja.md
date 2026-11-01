@@ -16,6 +16,10 @@
 - メソッドシグネチャがAPIの契約です
 - `path.*`、`query.*`、`httperr.*`のセマンティック型を使用します
 
+## 必要環境
+
+- Go **1.27.3以降**。Go 1.27.xの検証には1.27.3を使用します。
+
 ## リンク
 
 - 公式サイト: https://spine.na2ru2.me/ja/
@@ -32,7 +36,7 @@
 ソースコードからHTTP・DI・インターセプター・コンシューマー・WebSocketの実行契約を検査するGo CLIです。
 契約のスナップショット／差分比較や、OpenAPI・AsyncAPIのエクスポートにも対応しています。
 
-Go 1.25.5以降で、短い`spine`コマンドをインストールできます。
+Go 1.27.3以降で、短い`spine`コマンドをインストールできます。
 
 ```sh
 go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.1.4
