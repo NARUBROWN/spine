@@ -1,15 +1,31 @@
 # Echo 플랫폼으로 전환하기
 
-Echo 기반 앱은 `spine-echo-platform`을 설치하고 `platform.New()`로 생성합니다. 플랫폼이 Spine과 Echo를 함께 가져오며, HTTP 실행 계약은 Spine 모듈의 공개 `adapter` 패키지에서 관리합니다.
+Spine `v0.6.0`부터 새 프로젝트의 공식 시작 경로는 Spine CLI의 `spine new`입니다. CLI가 Echo 플랫폼 연결과 의존성을 구성합니다. 이 문서는 기존 앱의 전환과 직접 플랫폼을 연결하는 방법을 설명합니다.
 
-이 문서는 Spine `v0.6.0`과 Echo 플랫폼 `v0.1.0`의 HTTP 계약 `spine.http-adapter/v2`를 기준으로 합니다. 사용자는 플랫폼 모듈을 설치하면 됩니다. 플랫폼은 Spine을 공개 의존성으로 가져오며 로컬 replace를 포함하지 않습니다. 저장소의 개발용 예제와 CI는 각 go.mod와 고정 SHA에 지정한 버전을 별도로 검사합니다.
+Spine `v0.6.0`과 Echo 플랫폼 `v0.1.0`의 HTTP 계약 `spine.http-adapter/v2`를 기준으로 합니다. HTTP 실행 계약은 Spine 모듈의 공개 `adapter` 패키지에서 관리하며, 플랫폼은 Spine과 Echo를 공개 의존성으로 가져옵니다. 플랫폼의 go.mod에는 로컬 replace가 없습니다.
 
-## 플랫폼 선택과 앱 생성
+## 새 프로젝트 생성
 
-형제 폴더에 두 저장소를 체크아웃합니다. 아래 demo 검증은 예제 go.mod의 로컬 replace로 두 소스를 선택하므로 go.work를 만들지 않습니다.
+[Spine CLI `v0.4.0`](https://github.com/NARUBROWN/spine-cli/releases/tag/v0.4.0)을 설치합니다. `new`는 Spine `v0.6.0`, Echo 플랫폼 `v0.1.0`과 Echo `v5.4.4`를 함께 구성합니다.
 
 ```sh
-GOWORK=off go -C spine/cmd/demo test -race ./... -count=1
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.0
+spine version
+spine new todo-api --module github.com/acme/todo-api
+cd todo-api
+spine dev
+```
+
+다른 터미널에서 `curl http://localhost:8080/health`로 `200 OK`와 `{"status":"ok"}` 응답을 확인합니다. 생성된 `go.mod`에는 Spine `v0.6.0`과 Echo 플랫폼 `v0.1.0`이 있어야 합니다.
+
+기본 `new`는 플랫폼 연결, 의존성 설치, 정적 계약 검사와 빌드를 완료한 뒤 프로젝트를 생성합니다. 애플리케이션 초기화, 테스트나 리스너는 실행하지 않습니다. 파일만 생성하는 `--skip-install`을 사용했을 때만 생성 후 `go mod tidy`를 별도로 실행합니다.
+
+## 기존 앱의 플랫폼 연결
+
+기존 Go 모듈에 수동으로 연결할 때는 플랫폼을 의존성으로 추가합니다.
+
+```sh
+go get github.com/NARUBROWN/spine-echo-platform@v0.1.0
 ```
 
 앱 생성 코드를 다음과 같이 바꿉니다. 기존 생성자, 컨트롤러와 라우트 등록은 이어서 사용합니다.
@@ -33,7 +49,7 @@ app := spine.New(platform.Option())
 
 `spine.New()`는 HTTP 구현을 선택하지 않는 커널 생성자입니다. HTTP를 활성화하면서 factory를 지정하지 않으면 Validate, Prepare와 Run에서 `adapter.ErrInvalidAdapter`로 실패합니다. HTTP 없는 워커는 `spine.New()`를 사용합니다. 다른 구현을 연결할 때는 `spine.WithHTTPAdapter(factory)`로 주입합니다.
 
-현재 demo와 CI에 고정한 CLI는 `spine.New(platform.Option())` 구성을 사용합니다. CLI main에는 `platform.New()` 인식과 Echo 플랫폼 생성 템플릿이 반영돼 있습니다. 다만 기본 recipe는 아직 v1 공개 버전을 사용하므로, v2 버전 고정과 `WithEcho(...)` 인자를 받는 생성식 분석은 CLI 후속 작업입니다.
+이 저장소의 demo는 `spine.New(platform.Option())`로 factory를 명시적으로 조립합니다. CLI `v0.4.0`은 이 구성과 `platform.New()`를 모두 인식합니다. CI도 CLI `v0.4.0`과 플랫폼 `v0.1.0`으로 검사합니다. 생성 템플릿과 분석 범위는 [CLI 문서](https://github.com/NARUBROWN/spine-cli#readme)를 따릅니다.
 
 ## App의 생성과 호출 구조
 

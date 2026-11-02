@@ -1,9 +1,8 @@
 <p align="center">
-  <a href="README.md">한국어</a> Spine `v0.6.0` 提供公开的 HTTP 执行契约，并将 Echo 实现拆分为独立的 `spine-echo-platform` 模块。HTTP 应用使用 `platform.New()` 创建；`spine.New()` 不选择 HTTP 实现。请参阅[迁移指南](docs/migration/http-adapter-modules.md)和[最小示例](cmd/demo/README.md)。
+  <a href="README.md">한국어</a> | <a href="README.en.md">English</a> | <a href="README.ja.md">日本語</a> | 简体中文 | <a href="README.zh-Hant.md">繁體中文</a>
 </p>
 
-> 尚未发布的 issue #9 开发分支在 Spine 内管理公开 HTTP 契约，并将 Echo 集成作为独立平台模块提供。HTTP 应用使用 `platform.New()`；内核的 `spine.New()` 不会自动选择 HTTP 实现。请参阅[迁移指南](docs/migration/http-adapter-modules.md)和[本地示例](cmd/demo/README.md)。
-
+> 从 Spine `v0.6.0` 开始，使用 [Spine CLI 的 `new`](https://github.com/NARUBROWN/spine-cli#빠른-시작) 创建新项目。CLI 会配置 Echo 平台和依赖。现有应用请参阅[迁移指南](docs/migration/http-adapter-modules.md)。
 
 # 🦴 Spine
 <p align="center">
@@ -67,65 +66,49 @@ GitHub Issues 为公开内容。请分享已去除机密信息的摘要或最小
 
 ---
 
-## 使用 Echo 平台运行应用
+## 使用 Spine CLI 开始
 
-选择平台模块，然后调用 Spine App 的 Run。
+从 Spine `v0.6.0` 开始，官方项目创建方式是 `spine new`。请按照 [Spine CLI 安装指南](https://github.com/NARUBROWN/spine-cli#권장-환경과-설치)安装 `spine` 命令，并确认支持的版本。
 
-```sh
-go get github.com/NARUBROWN/spine-echo-platform@v0.1.0
-```
+CLI `v0.4.0` 的 `new` 会一起配置 Spine `v0.6.0`、Echo 平台 `v0.1.0` 和 Echo `v5.4.4`。
 
-```go
-package main
-
-import (
-    "log"
-
-    platform "github.com/NARUBROWN/spine-echo-platform"
-    "github.com/NARUBROWN/spine/pkg/boot"
-)
-
-func main() {
-    app := platform.New()
-    if err := app.Run(boot.Options{Address: ":8080", HTTP: &boot.HTTPOptions{}}); err != nil {
-        log.Fatal(err)
-    }
-}
-```
-
-## Spine CLI
-
-[Spine CLI](https://github.com/NARUBROWN/spine-cli) 是一个 Go CLI，用于生成 Spine 项目和组件，
-并从源代码检查 HTTP、DI、拦截器、消费者和 WebSocket 的执行契约。它还支持契约快照与差异比较，
-以及导出 OpenAPI 和 AsyncAPI 文档。
-
-推荐使用 Go 1.27.3。使用以下命令安装简短的 `spine` 命令。
+创建项目并启动开发服务器。
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.1.4
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.0
 spine version
+spine new todo-api --module github.com/acme/todo-api
+cd todo-api
+spine dev
 ```
 
-创建新项目或检查现有项目的契约。
+在另一个终端中检查默认的 health endpoint。它应返回 `200 OK` 和 `{"status":"ok"}`。
 
 ```sh
-spine new todo-api --module github.com/acme/todo-api
-spine context --root ./todo-api --json
-spine contract check --root ./todo-api --warnings-as-errors --json
-spine verify --root ./todo-api --warnings-as-errors --json
+curl http://localhost:8080/health
 ```
 
-生成器默认不会覆盖现有文件。应用更改前，请检查 dry-run 的差异和 `base_hash`，
-然后将同一个哈希值传给 `--if-match`。
+默认情况下，`new` 完成 Echo 平台配置、依赖安装、静态契约检查和构建后才创建项目。使用 `spine dev` 启动服务器。如果使用 `--skip-install` 仅生成文件，请随后运行 `go mod tidy`。
+
+在项目目录中运行契约与本地检查。
+
+```sh
+spine context --root . --json
+spine contract check --root . --warnings-as-errors --json
+spine verify --root . --warnings-as-errors --json
+```
+
+`spine verify` 检查静态契约、代码格式、`go vet` 和 Go 测试。数据库连接、消息代理和部署环境的行为需要单独验证。
+
+生成器默认不会覆盖现有文件。先检查 dry-run 的更改和 `base_hash`，再将同一个值传给 `--if-match`。
 
 ```sh
 spine g resource order --root . --dry-run --json
 spine g resource order --root . --if-match <base_hash> --json
 ```
 
-Spine CLI `v0.1.4` 会将新生成项目的 Spine 版本固定为 `v0.5.1`。与本仓库的其他版本或开发快照
-配合使用时，请检查生成的 `go.mod` 和契约检查结果。完整命令和准确的分析边界请参阅
-[Spine CLI 文档](https://github.com/NARUBROWN/spine-cli#readme)。
+CLI 分析 HTTP、DI、拦截器、消费者和 WebSocket 注册，支持契约快照比较及 OpenAPI/AsyncAPI 导出。手动平台集成和 App API 请参阅[迁移指南](docs/migration/http-adapter-modules.md)，完整命令与分析范围请参阅 [CLI 文档](https://github.com/NARUBROWN/spine-cli#readme)。
+
 
 ---
 

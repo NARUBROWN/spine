@@ -1,9 +1,8 @@
 <p align="center">
-  <a href="README.md">한국어</a> Spine `v0.6.0` provides a public HTTP execution contract and a separate `spine-echo-platform` module. Create HTTP apps with `platform.New()`; `spine.New()` selects no HTTP implementation. See the [migration guide](docs/migration/http-adapter-modules.md) and [minimal demo](cmd/demo/README.md).
+  <a href="README.md">한국어</a> | English | <a href="README.ja.md">日本語</a> | <a href="README.zh-Hans.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a>
 </p>
 
-> The unreleased issue #9 development branch keeps the public HTTP contract in Spine and distributes the Echo integration as a separate platform module. Create HTTP apps with `platform.New()`; kernel `spine.New()` selects no HTTP implementation. See the [migration guide](docs/migration/http-adapter-modules.md) and [local demo](cmd/demo/README.md).
-
+> From Spine `v0.6.0`, start new projects with [Spine CLI `new`](https://github.com/NARUBROWN/spine-cli#빠른-시작). The CLI configures the Echo platform and dependencies. For existing apps, see the [migration guide](docs/migration/http-adapter-modules.md).
 
 # 🦴 Spine
 <p align="center">
@@ -67,66 +66,49 @@ GitHub Issues are public. Share a sanitized summary or minimal reproduction with
 
 ---
 
-## Run an app with the Echo platform
+## Get started with Spine CLI
 
-Select the platform module and call Run on the Spine App.
+From Spine `v0.6.0`, `spine new` is the official way to create a project. Follow the [Spine CLI installation guide](https://github.com/NARUBROWN/spine-cli#권장-환경과-설치) to install the `spine` command and check its supported versions.
 
-```sh
-go get github.com/NARUBROWN/spine-echo-platform@v0.1.0
-```
+CLI `v0.4.0` configures Spine `v0.6.0`, Echo platform `v0.1.0`, and Echo `v5.4.4` together through `new`.
 
-```go
-package main
-
-import (
-    "log"
-
-    platform "github.com/NARUBROWN/spine-echo-platform"
-    "github.com/NARUBROWN/spine/pkg/boot"
-)
-
-func main() {
-    app := platform.New()
-    if err := app.Run(boot.Options{Address: ":8080", HTTP: &boot.HTTPOptions{}}); err != nil {
-        log.Fatal(err)
-    }
-}
-```
-
-## Spine CLI
-
-[Spine CLI](https://github.com/NARUBROWN/spine-cli) is a Go CLI that generates Spine projects and components
-and inspects HTTP, DI, interceptor, consumer, and WebSocket execution contracts from source code. It also
-supports contract snapshots and diffs, plus OpenAPI and AsyncAPI exports.
-
-Go 1.27.3 is recommended. Install the short `spine` command as follows.
+Create a project and start its development server.
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.1.4
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.0
 spine version
+spine new todo-api --module github.com/acme/todo-api
+cd todo-api
+spine dev
 ```
 
-Create a project or inspect the contract of an existing one.
+In another terminal, check the default health endpoint. It returns `200 OK` and `{"status":"ok"}`.
 
 ```sh
-spine new todo-api --module github.com/acme/todo-api
-spine context --root ./todo-api --json
-spine contract check --root ./todo-api --warnings-as-errors --json
-spine verify --root ./todo-api --warnings-as-errors --json
+curl http://localhost:8080/health
 ```
 
-The generator does not overwrite existing files by default. Before applying a change, review the dry-run diff
-and `base_hash`, then pass that same hash to `--if-match`.
+By default, `new` configures the Echo platform, installs dependencies, checks the static contract, and builds the app before creating the project. Start the server with `spine dev`. If you use `--skip-install` to generate files only, run `go mod tidy` afterward.
+
+Run contract and local checks from the project directory.
+
+```sh
+spine context --root . --json
+spine contract check --root . --warnings-as-errors --json
+spine verify --root . --warnings-as-errors --json
+```
+
+`spine verify` checks the static contract, formatting, `go vet`, and Go tests. Validate database connections, message brokers, and deployed behavior separately.
+
+Generators refuse to overwrite existing files by default. Review the dry-run changes and `base_hash`, then pass the same hash to `--if-match`.
 
 ```sh
 spine g resource order --root . --dry-run --json
 spine g resource order --root . --if-match <base_hash> --json
 ```
 
-Spine CLI `v0.1.4` pins newly generated projects to Spine `v0.5.1`. When using it with another version or a
-development snapshot of this repository, check the generated `go.mod` and the contract results. See the
-[Spine CLI documentation](https://github.com/NARUBROWN/spine-cli#readme) for the complete command set and
-precise analysis boundaries.
+The CLI analyzes HTTP, DI, interceptor, consumer, and WebSocket registrations, compares contract snapshots, and exports OpenAPI/AsyncAPI. See the [migration guide](docs/migration/http-adapter-modules.md) for manual platform integration and App APIs, and the [CLI documentation](https://github.com/NARUBROWN/spine-cli#readme) for commands and analysis boundaries.
+
 
 ---
 

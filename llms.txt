@@ -4,9 +4,10 @@
 
 ## Read this first
 
-This guide describes the unreleased issue #9 development checkout. The public HTTP contract lives in the Spine module; the Echo integration
-is a separate platform module. The platform pins a published Spine commit using a Go pseudo-version.
-Local fixtures use replace directives to exercise the current checkouts; no stable release tag is issued by this work. Go 1.27.3 is recommended; the compatibility baseline is 1.25.5.
+This guide describes Spine v0.6.0 and Echo platform v0.1.0. From v0.6.0, the official way to create a new
+project is Spine CLI `new`; the CLI configures the platform and dependencies. The public HTTP contract lives
+in the Spine module, and the Echo integration is a separate platform module.
+Local fixtures use replace directives to exercise the current checkouts. Go 1.27.3 is recommended; the compatibility baseline is 1.25.5.
 External demo snapshots below retain their original released APIs and pins.
 
 Use sources in this order:
@@ -22,8 +23,8 @@ The external demos reviewed on 2026-07-30 all pin Spine `v0.5.1`. Their architec
 
 Do not import `github.com/NARUBROWN/spine/internal/...` from an application. Application code should use the root package, `adapter`, `core`, `interceptor/...`, and `pkg/...` only.
 
-For the current checkout, use local module replacements as shown in `cmd/demo/go.mod`.
-Source snapshots of the updated kernel and Echo platform are published. Use the exact pseudo-versions in go.mod; stable tagged releases remain pending.
+For source development, use local module replacements as shown in `cmd/demo/go.mod`.
+For new applications, use a CLI recipe supporting Spine v0.6.0 and Echo platform v0.1.0, with no local replacements.
 For published historical examples, keep their released Spine version when reproducing them exactly.
 See `docs/migration/http-adapter-modules.md` for the intentional constructor change.
 
@@ -33,7 +34,7 @@ See `docs/migration/http-adapter-modules.md` for the intentional constructor cha
 - `github.com/NARUBROWN/spine`: kernel and public adapter contract, with no Echo or platform-module dependency.
 - `github.com/NARUBROWN/spine-echo-platform` (package platform): Echo v5.4.4 implementation and starter, depending on Spine and Echo.
 
-Spine v0.6.0 and Echo platform v0.1.0 use `spine.http-adapter/v2`: native hooks belong to typed platform.WithEcho options, JSON writers accept json.RawMessage, and framework routing/writer state uses typed fields. App.Transport and Config.NativeHooks are removed. Custom ExecutionContext implementations must provide SetRoute(params map[string]string, pathKeys []string); HTTP response access uses core.HTTPResponseContext. User Set/Get storage remains separate. Both modules pin matching public v2 development snapshots. Module consumers use the published dependencies without local replacements; the repository fixtures retain sibling-checkout replacements for source development.
+Spine v0.6.0 and Echo platform v0.1.0 use `spine.http-adapter/v2`: native hooks belong to typed platform.WithEcho options, JSON writers accept json.RawMessage, and framework routing/writer state uses typed fields. App.Transport and Config.NativeHooks are removed. Custom ExecutionContext implementations must provide SetRoute(params map[string]string, pathKeys []string); HTTP response access uses core.HTTPResponseContext. User Set/Get storage remains separate. Platform v0.1.0 depends on released Spine v0.6.0. Module consumers use the published dependencies without local replacements; the repository fixtures retain sibling-checkout replacements for source development.
 
 Native Echo extensions import `github.com/labstack/echo/v5`. Handlers and middleware take `*echo.Context`,
 the error handler takes `(ctx *echo.Context, err error)`, and logging uses `log/slog`. Path values use
@@ -41,10 +42,11 @@ the error handler takes `(ctx *echo.Context, err error)`, and logging uses `log/
 provide `Unwrap() http.ResponseWriter` on native middleware wrappers. Controller registration is unchanged;
 the v2 adapter and preparation API changes are described in the migration guide.
 
-Applications normally choose `platform.New()`. This is equivalent to `spine.New(platform.Option())`.
-The CLI revision pinned in this repository recognizes `spine.New(...)`, so cmd/demo uses the latter.
-CLI main also recognizes platform.New() and generates Echo-platform projects, but its default recipe still
-pins v1 snapshots. Updating the recipe and analyzing typed WithEcho arguments for v2 are CLI follow-up work.
+New projects start with `spine new`; generated applications use `platform.New()`.
+This is equivalent to `spine.New(platform.Option())` when wiring an existing application manually.
+The cmd/demo fixture composes the factory explicitly with `spine.New(platform.Option())`. CLI v0.4.0 recognizes both this form and `platform.New()`.
+CLI v0.4.0 supports the v2 recipe: Spine v0.6.0, Echo platform v0.1.0, and Echo v5.4.4.
+Install that CLI version and use `spine new` to configure these dependencies together.
 A custom implementation uses `spine.New(spine.WithHTTPAdapter(factory))`.
 `spine.New()` selects no HTTP implementation; enabling HTTP without a factory fails preflight validation.
 HTTP-less workers do not need an HTTP adapter.
@@ -60,7 +62,7 @@ ASGI informs the boundary and lifetime design. This does not provide Python ASGI
 | Goal | Reference | Start with |
 |---|---|---|
 | Learn the current minimal runtime and secure defaults | This repository | `cmd/demo`, `cmd/reference`, `examples/security-config`, `test/app_integration_test.go` |
-| Scaffold a project, inspect execution contracts, or generate OpenAPI/AsyncAPI | [spine-cli](https://github.com/NARUBROWN/spine-cli/tree/a9fff677b385a59df65b0befcde6c410239a8c83) | `README.md`, `llms.txt`, `internal/cli/agent.go`, `internal/cli/contract.go` |
+| Create a project through the official path, inspect execution contracts, or generate OpenAPI/AsyncAPI | [spine-cli](https://github.com/NARUBROWN/spine-cli) | `README.md`, `llms.txt`, `internal/cli/agent.go`, `internal/cli/contract.go` |
 | CRUD, Bun ORM, request transactions, and Swagger UI | [spine-user-demo](https://github.com/NARUBROWN/spine-user-demo/tree/b07d2bb35d6e0b499c6f6974e1d34f3a4fafffba) | `main.go`, `routes/user_routes.go`, `interceptor/tx_interceptor.go`, `repository/user_repository.go` |
 | Kafka request/event flow, idempotency, poison messages, and outbox boundaries | [spine-simple-msa-demo](https://github.com/NARUBROWN/spine-simple-msa-demo/tree/aa3f0fae8057ec0999fadaafc9295b7c7987afbb) | `order-app/main.go`, `stock-app/main.go`, `shared/events`, `scenarios/outbox` |
 | Authenticated WebSocket chat, rooms, and runtime limits | [spine-simple-chat-demo](https://github.com/NARUBROWN/spine-simple-chat-demo/tree/b1fe598329eb79828eb4c84903c7fa3847d35914) | `main.go`, `interceptor/auth_interceptor.go`, `controller/chat_controller.go`, `e2e/websocket_e2e_test.go` |
@@ -69,27 +71,28 @@ ASGI informs the boundary and lifetime design. This does not provide Python ASGI
 
 ## Spine CLI
 
-The separate [NARUBROWN/spine-cli](https://github.com/NARUBROWN/spine-cli) repository was reviewed at
-commit `a9fff677b385a59df65b0befcde6c410239a8c83` on 2026-08-03. Release `v0.1.4` requires Go 1.25.5.
-Installing the module root creates `spine-cli`; installing `cmd/spine` creates the shorter `spine` command:
+From Spine v0.6.0, direct new users to [Spine CLI](https://github.com/NARUBROWN/spine-cli) and `spine new`.
+CLI v0.4.0 at commit `bf2ac43503cd37e2da327746bbe4a07d7c0e9ed9` was checked on 2026-11-02.
+Its `new` recipe selects Spine v0.6.0, Echo platform v0.1.0, and Echo v5.4.4.
+Install the `cmd/spine` entry point to get the `spine` command; installing the module root creates
+`spine-cli` instead. Install the CLI, then create and run a project:
 
 ```sh
-go install github.com/NARUBROWN/spine-cli@v0.1.4
-spine-cli version
-
-# Or install the short command used in the examples below.
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.1.4
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.0
 spine version
+spine new todo-api --module github.com/acme/todo-api
+cd todo-api
+spine dev
 ```
 
-Both version commands print `spine-cli 0.1.4`. Projects created by this release pin Spine `v0.5.1`; they do
-not automatically use this checkout's untagged `v0.5.2` development source. When applying CLI output to
-another Spine version, inspect the generated `go.mod`, run the contract checks, and reconcile API changes
-against that exact Spine source.
+In another terminal, `curl http://localhost:8080/health` should return 200 and `{"status":"ok"}`.
+By default, `new` configures the Echo platform, installs dependencies, checks the static contract, and
+builds the application before creating the project. It does not initialize the application, run tests, or
+open a listener. Use `spine dev` to start it. Only `--skip-install` requires a separate `go mod tidy` afterward.
 
 ### What the CLI covers
 
-- `new` creates a project with `BuildApplication`, `app.Validate`, `GET /health`, and `spine.toml`.
+- `new` installs and builds a project with `BuildApplication`, `app.Validate`, `GET /health`, and `spine.toml`; `--skip-install` creates files only.
 - `generate`/`g` creates resources, vertical slices, controllers, services, repositories, consumers, and
   WebSockets and normally registers them in the composition root.
 - `inspect` and `explain` report a static-source contract for HTTP, DI, interceptors, consumers, WebSockets,
@@ -100,7 +103,7 @@ against that exact Spine source.
 
 The generators intentionally do not design domain aggregates, ORM mappings, production persistence,
 transactions/outbox, broker retry/DLQ semantics, or WebSocket security/capacity policy. Kafka, RabbitMQ, and
-Bun-specific generators are not implemented in `v0.1.4`. A generated consumer or WebSocket handler returns an
+Bun-specific generators are not implemented in the reviewed CLI `v0.4.0`. A generated consumer or WebSocket handler returns an
 explicit `not implemented` error until application logic replaces it; contract validation should fail until
 then. The vertical slice's memory storage is development-only.
 
@@ -149,7 +152,7 @@ checking its type, owner, and age.
 Prefer direct and unconditional registrations in `BuildApplication() (spine.App, boot.Options, error)` so the
 CLI can analyze and update the composition root. For the complete command protocol, exit semantics, schemas,
 and current limitations, use the CLI repository's own
-[`llms.txt`](https://github.com/NARUBROWN/spine-cli/blob/a9fff677b385a59df65b0befcde6c410239a8c83/llms.txt).
+[`llms.txt`](https://github.com/NARUBROWN/spine-cli/blob/main/llms.txt).
 
 ### Required demo verification for framework changes
 

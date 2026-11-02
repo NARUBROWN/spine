@@ -1,9 +1,8 @@
 <p align="center">
-  <a href="README.md">한국어</a> Spine `v0.6.0` は公開 HTTP 実行契約を提供し、Echo 実装を独立した `spine-echo-platform` モジュールに分離します。HTTP アプリは `platform.New()` で生成します。`spine.New()` は HTTP 実装を選択しません。[移行ガイド](docs/migration/http-adapter-modules.md)と[最小サンプル](cmd/demo/README.md)を参照してください。
+  <a href="README.md">한국어</a> | <a href="README.en.md">English</a> | 日本語 | <a href="README.zh-Hans.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a>
 </p>
 
-> 未リリースの issue #9 開発ブランチでは、公開 HTTP 契約を Spine 内で管理し、Echo 統合を独立したプラットフォームモジュールとして提供します。HTTP アプリには `platform.New()` を使用し、カーネルの `spine.New()` は HTTP 実装を自動選択しません。[移行ガイド](docs/migration/http-adapter-modules.md)と[ローカル例](cmd/demo/README.md)を参照してください。
-
+> Spine `v0.6.0` 以降、新しいプロジェクトは [Spine CLI の `new`](https://github.com/NARUBROWN/spine-cli#빠른-시작) で作成します。CLI が Echo プラットフォームと依存関係を設定します。既存アプリは[移行ガイド](docs/migration/http-adapter-modules.md)を参照してください。
 
 # 🦴 Spine
 <p align="center">
@@ -67,66 +66,49 @@ GitHub Issuesは公開されます。機密情報を除いた概要や最小限�
 
 ---
 
-## Echo プラットフォームでアプリを実行
+## Spine CLI で始める
 
-プラットフォームモジュールを選択し、Spine App の Run を呼び出します。
+Spine `v0.6.0` 以降、公式のプロジェクト作成方法は `spine new` です。[Spine CLI のインストールガイド](https://github.com/NARUBROWN/spine-cli#권장-환경과-설치)に従って `spine` コマンドをインストールし、対応バージョンを確認してください。
 
-```sh
-go get github.com/NARUBROWN/spine-echo-platform@v0.1.0
-```
+CLI `v0.4.0` の `new` は Spine `v0.6.0`、Echo プラットフォーム `v0.1.0`、Echo `v5.4.4` をまとめて設定します。
 
-```go
-package main
-
-import (
-    "log"
-
-    platform "github.com/NARUBROWN/spine-echo-platform"
-    "github.com/NARUBROWN/spine/pkg/boot"
-)
-
-func main() {
-    app := platform.New()
-    if err := app.Run(boot.Options{Address: ":8080", HTTP: &boot.HTTPOptions{}}); err != nil {
-        log.Fatal(err)
-    }
-}
-```
-
-## Spine CLI
-
-[Spine CLI](https://github.com/NARUBROWN/spine-cli)は、Spineのプロジェクトやコンポーネントを生成し、
-ソースコードからHTTP・DI・インターセプター・コンシューマー・WebSocketの実行契約を検査するGo CLIです。
-契約のスナップショット／差分比較や、OpenAPI・AsyncAPIのエクスポートにも対応しています。
-
-Go 1.27.3の使用を推奨します。短い`spine`コマンドは次のようにインストールします。
+プロジェクトを作成し、開発サーバーを起動します。
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.1.4
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.0
 spine version
+spine new todo-api --module github.com/acme/todo-api
+cd todo-api
+spine dev
 ```
 
-新しいプロジェクトを作成するか、既存プロジェクトの契約を検査します。
+別のターミナルで標準の health endpoint を確認します。`200 OK` と `{"status":"ok"}` が返ります。
 
 ```sh
-spine new todo-api --module github.com/acme/todo-api
-spine context --root ./todo-api --json
-spine contract check --root ./todo-api --warnings-as-errors --json
-spine verify --root ./todo-api --warnings-as-errors --json
+curl http://localhost:8080/health
 ```
 
-ジェネレーターは、デフォルトでは既存ファイルを上書きしません。変更を適用する前にdry-runの差分と
-`base_hash`を確認し、同じハッシュを`--if-match`に渡してください。
+`new` は標準で Echo プラットフォームの設定、依存関係のインストール、静的契約の検査とビルドを完了してからプロジェクトを作成します。サーバーは `spine dev` で起動します。`--skip-install` でファイルだけを生成した場合は、その後に `go mod tidy` を実行してください。
+
+プロジェクトのディレクトリで契約とローカル検査を実行します。
+
+```sh
+spine context --root . --json
+spine contract check --root . --warnings-as-errors --json
+spine verify --root . --warnings-as-errors --json
+```
+
+`spine verify` は静的契約、コード書式、`go vet` と Go テストを検査します。データベース、メッセージブローカー、デプロイ環境の動作は別途検証してください。
+
+ジェネレーターは標準で既存ファイルを上書きしません。dry-run の変更内容と `base_hash` を確認し、同じ値を `--if-match` に渡してください。
 
 ```sh
 spine g resource order --root . --dry-run --json
 spine g resource order --root . --if-match <base_hash> --json
 ```
 
-Spine CLI `v0.1.4`が新規プロジェクトに指定するSpineのバージョンは`v0.5.1`です。このリポジトリの
-別バージョンや開発スナップショットと併用する場合は、生成された`go.mod`と契約検査結果を確認してください。
-すべてのコマンドと正確な解析範囲については、
-[Spine CLIドキュメント](https://github.com/NARUBROWN/spine-cli#readme)を参照してください。
+CLI は HTTP、DI、インターセプター、コンシューマー、WebSocket の登録を解析し、契約スナップショットの比較と OpenAPI/AsyncAPI の出力を提供します。手動のプラットフォーム接続と App API は[移行ガイド](docs/migration/http-adapter-modules.md)、全コマンドと解析範囲は [CLI ドキュメント](https://github.com/NARUBROWN/spine-cli#readme)を参照してください。
+
 
 ---
 
