@@ -60,12 +60,12 @@ GitHub Issues는 공개되므로 비밀정보를 제외한 요약이나 최소 �
 
 Spine `v0.6.0`부터 공식 프로젝트 생성 경로는 `spine new`입니다. [Spine CLI 설치 안내](https://github.com/NARUBROWN/spine-cli#권장-환경과-설치)에서 `spine` 명령을 설치한 뒤 지원 버전을 확인하세요.
 
-CLI `v0.4.0`의 `new`는 Spine `v0.6.0`, Echo 플랫폼 `v0.1.0`과 Echo `v5.4.4`를 함께 구성합니다.
+`new`는 설치한 CLI에 포함된 검증 레시피를 따라 Spine, Echo 플랫폼과 Echo의 호환 버전 조합을 구성합니다. 선택된 버전은 생성된 `go.mod`에서 확인합니다.
 
 프로젝트를 생성하고 개발 서버를 실행합니다.
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.0
+go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
 spine version
 spine new todo-api --module github.com/acme/todo-api
 cd todo-api

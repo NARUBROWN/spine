@@ -70,12 +70,12 @@ GitHub Issues 为公开内容。请分享已去除机密信息的摘要或最小
 
 从 Spine `v0.6.0` 开始，官方项目创建方式是 `spine new`。请按照 [Spine CLI 安装指南](https://github.com/NARUBROWN/spine-cli#권장-환경과-설치)安装 `spine` 命令，并确认支持的版本。
 
-CLI `v0.4.0` 的 `new` 会一起配置 Spine `v0.6.0`、Echo 平台 `v0.1.0` 和 Echo `v5.4.4`。
+`new` 根据已安装 CLI 内置的验证配方，配置兼容的 Spine、Echo 平台和 Echo 版本组合。请在生成的 `go.mod` 中查看所选版本。
 
 创建项目并启动开发服务器。
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.0
+go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
 spine version
 spine new todo-api --module github.com/acme/todo-api
 cd todo-api

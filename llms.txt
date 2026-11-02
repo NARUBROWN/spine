@@ -24,7 +24,7 @@ The external demos reviewed on 2026-07-30 all pin Spine `v0.5.1`. Their architec
 Do not import `github.com/NARUBROWN/spine/internal/...` from an application. Application code should use the root package, `adapter`, `core`, `interceptor/...`, and `pkg/...` only.
 
 For source development, use local module replacements as shown in `cmd/demo/go.mod`.
-For new applications, use a CLI recipe supporting Spine v0.6.0 and Echo platform v0.1.0, with no local replacements.
+For new applications, install the CLI with @latest and use its bundled recipe, with no local replacements. Read the generated go.mod for the selected versions; the runtime API reference below uses the v0.6.0/v0.1.0 baseline.
 For published historical examples, keep their released Spine version when reproducing them exactly.
 See `docs/migration/http-adapter-modules.md` for the intentional constructor change.
 
@@ -44,9 +44,9 @@ the v2 adapter and preparation API changes are described in the migration guide.
 
 New projects start with `spine new`; generated applications use `platform.New()`.
 This is equivalent to `spine.New(platform.Option())` when wiring an existing application manually.
-The cmd/demo fixture composes the factory explicitly with `spine.New(platform.Option())`. CLI v0.4.0 recognizes both this form and `platform.New()`.
-CLI v0.4.0 supports the v2 recipe: Spine v0.6.0, Echo platform v0.1.0, and Echo v5.4.4.
-Install that CLI version and use `spine new` to configure these dependencies together.
+The cmd/demo fixture composes the factory explicitly with `spine.New(platform.Option())`. The CLI recognizes both this form and `platform.New()`.
+The installed CLI selects a compatible Spine, Echo platform, and Echo combination through its bundled recipe.
+Use `spine new` and inspect the generated go.mod instead of assuming a fixed version combination.
 A custom implementation uses `spine.New(spine.WithHTTPAdapter(factory))`.
 `spine.New()` selects no HTTP implementation; enabling HTTP without a factory fails preflight validation.
 HTTP-less workers do not need an HTTP adapter.
@@ -72,13 +72,13 @@ ASGI informs the boundary and lifetime design. This does not provide Python ASGI
 ## Spine CLI
 
 From Spine v0.6.0, direct new users to [Spine CLI](https://github.com/NARUBROWN/spine-cli) and `spine new`.
-CLI v0.4.0 at commit `bf2ac43503cd37e2da327746bbe4a07d7c0e9ed9` was checked on 2026-11-02.
-Its `new` recipe selects Spine v0.6.0, Echo platform v0.1.0, and Echo v5.4.4.
+Install the latest released CLI for general use. The verification baseline recorded on 2026-11-02 is CLI v0.4.0
+at commit `bf2ac43503cd37e2da327746bbe4a07d7c0e9ed9`, selecting Spine v0.6.0, Echo platform v0.1.0, and Echo v5.4.4.
 Install the `cmd/spine` entry point to get the `spine` command; installing the module root creates
 `spine-cli` instead. Install the CLI, then create and run a project:
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.0
+go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
 spine version
 spine new todo-api --module github.com/acme/todo-api
 cd todo-api

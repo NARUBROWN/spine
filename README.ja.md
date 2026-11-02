@@ -70,12 +70,12 @@ GitHub Issuesは公開されます。機密情報を除いた概要や最小限�
 
 Spine `v0.6.0` 以降、公式のプロジェクト作成方法は `spine new` です。[Spine CLI のインストールガイド](https://github.com/NARUBROWN/spine-cli#권장-환경과-설치)に従って `spine` コマンドをインストールし、対応バージョンを確認してください。
 
-CLI `v0.4.0` の `new` は Spine `v0.6.0`、Echo プラットフォーム `v0.1.0`、Echo `v5.4.4` をまとめて設定します。
+`new` はインストールした CLI に含まれる検証済みレシピに従い、互換性のある Spine、Echo プラットフォーム、Echo のバージョンを設定します。選択されたバージョンは生成された `go.mod` で確認してください。
 
 プロジェクトを作成し、開発サーバーを起動します。
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.0
+go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
 spine version
 spine new todo-api --module github.com/acme/todo-api
 cd todo-api
