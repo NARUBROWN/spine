@@ -68,18 +68,18 @@ GitHub Issues 为公开内容。请分享已去除机密信息的摘要或最小
 
 ## 使用 Spine CLI 开始
 
-从 Spine `v0.6.0` 开始，官方项目创建方式是 `spine-cli new`。请按照 [Spine CLI 安装指南](https://github.com/NARUBROWN/spine-cli#권장-환경과-설치)安装 `spine-cli` 命令，并确认支持的版本。
+从 Spine `v0.6.0` 开始，官方项目创建方式是 `spine new`。请按照 [Spine CLI 安装指南](https://github.com/NARUBROWN/spine-cli#권장-환경과-설치)安装 `spine` 命令，并确认支持的版本。
 
 `new` 根据已安装 CLI 内置的验证配方，配置兼容的 Spine、Echo 平台和 Echo 版本组合。请在生成的 `go.mod` 中查看所选版本。
 
 创建项目并启动开发服务器。
 
 ```sh
-go install github.com/NARUBROWN/spine-cli@latest
-spine-cli version
-spine-cli new todo-api --module github.com/acme/todo-api
+go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
+spine version
+spine new todo-api --module github.com/acme/todo-api
 cd todo-api
-spine-cli dev
+spine dev
 ```
 
 在另一个终端中检查默认的 health endpoint。它应返回 `200 OK` 和 `{"status":"ok"}`。
@@ -88,23 +88,23 @@ spine-cli dev
 curl http://localhost:8080/health
 ```
 
-默认情况下，`new` 完成 Echo 平台配置、依赖安装、静态契约检查和构建后才创建项目。使用 `spine-cli dev` 启动服务器。如果使用 `--skip-install` 仅生成文件，请随后运行 `go mod tidy`。
+默认情况下，`new` 完成 Echo 平台配置、依赖安装、静态契约检查和构建后才创建项目。使用 `spine dev` 启动服务器。如果使用 `--skip-install` 仅生成文件，请随后运行 `go mod tidy`。
 
 在项目目录中运行契约与本地检查。
 
 ```sh
-spine-cli context --root . --json
-spine-cli contract check --root . --warnings-as-errors --json
-spine-cli verify --root . --warnings-as-errors --json
+spine context --root . --json
+spine contract check --root . --warnings-as-errors --json
+spine verify --root . --warnings-as-errors --json
 ```
 
-`spine-cli verify` 检查静态契约、代码格式、`go vet` 和 Go 测试。数据库连接、消息代理和部署环境的行为需要单独验证。
+`spine verify` 检查静态契约、代码格式、`go vet` 和 Go 测试。数据库连接、消息代理和部署环境的行为需要单独验证。
 
 生成器默认不会覆盖现有文件。先检查 dry-run 的更改和 `base_hash`，再将同一个值传给 `--if-match`。
 
 ```sh
-spine-cli g resource order --root . --dry-run --json
-spine-cli g resource order --root . --if-match <base_hash> --json
+spine g resource order --root . --dry-run --json
+spine g resource order --root . --if-match <base_hash> --json
 ```
 
 CLI 分析 HTTP、DI、拦截器、消费者和 WebSocket 注册，支持契约快照比较及 OpenAPI/AsyncAPI 导出。手动平台集成和 App API 请参阅[迁移指南](docs/migration/http-adapter-modules.md)，完整命令与分析范围请参阅 [CLI 文档](https://github.com/NARUBROWN/spine-cli#readme)。
