@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="README.md">한국어</a> | <a href="README.en.md">English</a> | <a href="README.ja.md">日本語</a> | 简体中文 | <a href="README.zh-Hant.md">繁體中文</a>
+  <a href="README.md">한국어</a> Spine `v0.6.0` 提供公开的 HTTP 执行契约，并将 Echo 实现拆分为独立的 `spine-echo-platform` 模块。HTTP 应用使用 `platform.New()` 创建；`spine.New()` 不选择 HTTP 实现。请参阅[迁移指南](docs/migration/http-adapter-modules.md)和[最小示例](cmd/demo/README.md)。
 </p>
 
 > 尚未发布的 issue #9 开发分支在 Spine 内管理公开 HTTP 契约，并将 Echo 集成作为独立平台模块提供。HTTP 应用使用 `platform.New()`；内核的 `spine.New()` 不会自动选择 HTTP 实现。请参阅[迁移指南](docs/migration/http-adapter-modules.md)和[本地示例](cmd/demo/README.md)。
@@ -32,6 +32,32 @@
 - 简单的 WebSocket 聊天示例项目：https://github.com/NARUBROWN/spine-simple-chat-demo
 
 ---
+
+## 使用 Echo 平台运行应用
+
+选择平台模块，然后调用 Spine App 的 Run。
+
+```sh
+go get github.com/NARUBROWN/spine-echo-platform@v0.1.0
+```
+
+```go
+package main
+
+import (
+    "log"
+
+    platform "github.com/NARUBROWN/spine-echo-platform"
+    "github.com/NARUBROWN/spine/pkg/boot"
+)
+
+func main() {
+    app := platform.New()
+    if err := app.Run(boot.Options{Address: ":8080", HTTP: &boot.HTTPOptions{}}); err != nil {
+        log.Fatal(err)
+    }
+}
+```
 
 ## Spine CLI
 

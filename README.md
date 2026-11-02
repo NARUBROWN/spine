@@ -1,5 +1,5 @@
 <p align="center">
-  한국어 | <a href="README.en.md">English</a> | <a href="README.ja.md">日本語</a> | <a href="README.zh-Hans.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a>
+  한국어 | <a href="README.en.md">English</a> Spine `v0.6.0`은 공개 HTTP 실행 계약을 제공하고 Echo 구현을 별도 `spine-echo-platform` 모듈로 분리합니다. HTTP 앱은 `platform.New()`로 생성하며, `spine.New()`는 HTTP 구현을 선택하지 않습니다. [전환 안내](docs/migration/http-adapter-modules.md)와 [최소 예제](cmd/demo/README.md)를 참고하세요.
 </p>
 
 > 이슈 #9의 개발 브랜치에서는 공개 실행 계약은 Spine에서 관리하고 Echo 통합은 별도 플랫폼 모듈로 분리합니다. HTTP 앱은 `platform.New()`로 생성하며, 커널의 `spine.New()`는 HTTP 구현을 자동 선택하지 않습니다. 아직 공개 릴리스 전이며 [전환 안내](docs/migration/http-adapter-modules.md)와 [로컬 예제](cmd/demo/README.md)를 참고하세요.
@@ -22,6 +22,32 @@
 ## 권장 환경
 
 - 권장 Go 버전: **1.27.3**
+
+## Echo 플랫폼으로 앱 실행
+
+HTTP 앱은 플랫폼 모듈을 선택하고 Spine App의 Run을 호출합니다.
+
+```sh
+go get github.com/NARUBROWN/spine-echo-platform@v0.1.0
+```
+
+```go
+package main
+
+import (
+    "log"
+
+    platform "github.com/NARUBROWN/spine-echo-platform"
+    "github.com/NARUBROWN/spine/pkg/boot"
+)
+
+func main() {
+    app := platform.New()
+    if err := app.Run(boot.Options{Address: ":8080", HTTP: &boot.HTTPOptions{}}); err != nil {
+        log.Fatal(err)
+    }
+}
+```
 
 ## Spine CLI
 

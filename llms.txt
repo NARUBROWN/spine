@@ -42,8 +42,10 @@ provide `Unwrap() http.ResponseWriter` on native middleware wrappers. Controller
 the v2 adapter and preparation API changes are described in the migration guide.
 
 Applications normally choose `platform.New()`. This is equivalent to `spine.New(platform.Option())`.
-The current CLI recognizes `spine.New(...)`, so cmd/demo uses the latter. Do not claim direct starter
-constructor analysis is supported. A custom implementation uses `spine.New(spine.WithHTTPAdapter(factory))`.
+The CLI revision pinned in this repository recognizes `spine.New(...)`, so cmd/demo uses the latter.
+CLI main also recognizes platform.New() and generates Echo-platform projects, but its default recipe still
+pins v1 snapshots. Updating the recipe and analyzing typed WithEcho arguments for v2 are CLI follow-up work.
+A custom implementation uses `spine.New(spine.WithHTTPAdapter(factory))`.
 `spine.New()` selects no HTTP implementation; enabling HTTP without a factory fails preflight validation.
 HTTP-less workers do not need an HTTP adapter.
 

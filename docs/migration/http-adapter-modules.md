@@ -33,7 +33,26 @@ app := spine.New(platform.Option())
 
 `spine.New()`는 HTTP 구현을 선택하지 않는 커널 생성자입니다. HTTP를 활성화하면서 factory를 지정하지 않으면 Validate, Prepare와 Run에서 `adapter.ErrInvalidAdapter`로 실패합니다. HTTP 없는 워커는 `spine.New()`를 사용합니다. 다른 구현을 연결할 때는 `spine.WithHTTPAdapter(factory)`로 주입합니다.
 
-현재 CLI로 분석할 앱은 `spine.New(platform.Option())` 형태를 사용합니다. CLI가 `spine.New(...)`를 composition 시작점으로 찾기 때문입니다. `platform.New()`의 직접 분석과 기존 CLI 생성 템플릿의 플랫폼 선택 반영은 후속 작업입니다.
+현재 demo와 CI에 고정한 CLI는 `spine.New(platform.Option())` 구성을 사용합니다. CLI main에는 `platform.New()` 인식과 Echo 플랫폼 생성 템플릿이 반영돼 있습니다. 다만 기본 recipe는 아직 v1 공개 버전을 사용하므로, v2 버전 고정과 `WithEcho(...)` 인자를 받는 생성식 분석은 CLI 후속 작업입니다.
+
+## App의 생성과 호출 구조
+
+`platform.New(options...)`는 `spine.New(platform.Option(options...))`를 호출하고, Option은 Echo factory를 `spine.WithHTTPAdapter`로 주입합니다. 두 생성자 모두 같은 Spine App을 반환합니다. 생성 단계에서는 listener를 열지 않습니다.
+
+```mermaid
+flowchart TD
+    Platform["platform.New / Option / NewFactory"] --> Factory["Echo factory 주입"]
+    Factory --> App["Spine App"]
+    App --> Validate["Validate: 설정 검사"]
+    App --> Run["Run / RunContext"]
+    App --> Prepare["Prepare"]
+    Run --> Init["DI·라우팅·HTTP/WS 공통 준비"]
+    Prepare --> Init
+    Init --> Managed["Run: consumer·transport Start → listener → adapter.Serve"]
+    Init --> External["Prepare: Handler·Close 반환"]
+```
+
+일반 HTTP 요청은 Echo → 플랫폼 입력 뷰 → 커널 HTTPContext → Spine Pipeline 순서로 실행합니다. 컨트롤러 반환값과 오류는 커널에서 응답을 준비하고, BeforeResponse 이후 플랫폼 writer로 출력합니다. Run의 HTTP 종료는 어댑터가 처리하고, Prepare의 외부 서버 요청은 준비 결과가 수명을 추적합니다. WS 연결과 앱 자원 정리는 커널이 관리합니다.
 
 ## 계약과 구현의 책임
 
