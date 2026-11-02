@@ -33,7 +33,7 @@ See `docs/migration/http-adapter-modules.md` for the intentional constructor cha
 - `github.com/NARUBROWN/spine`: kernel and public adapter contract, with no Echo or platform-module dependency.
 - `github.com/NARUBROWN/spine-echo-platform` (package platform): Echo v5.4.4 implementation and starter, depending on Spine and Echo.
 
-The working tree uses `spine.http-adapter/v2`: native hooks belong to typed platform.WithEcho options, JSON writers accept json.RawMessage, and framework routing/writer state uses typed fields. App.Transport and Config.NativeHooks are removed. Custom ExecutionContext implementations must provide SetRoute(params map[string]string, pathKeys []string); HTTP response access uses core.HTTPResponseContext. User Set/Get storage remains separate. Both modules pin matching public v2 development snapshots. Module consumers use the published dependencies without local replacements; the repository fixtures retain sibling-checkout replacements for source development.
+Spine v0.6.0 and Echo platform v0.1.0 use `spine.http-adapter/v2`: native hooks belong to typed platform.WithEcho options, JSON writers accept json.RawMessage, and framework routing/writer state uses typed fields. App.Transport and Config.NativeHooks are removed. Custom ExecutionContext implementations must provide SetRoute(params map[string]string, pathKeys []string); HTTP response access uses core.HTTPResponseContext. User Set/Get storage remains separate. Both modules pin matching public v2 development snapshots. Module consumers use the published dependencies without local replacements; the repository fixtures retain sibling-checkout replacements for source development.
 
 Native Echo extensions import `github.com/labstack/echo/v5`. Handlers and middleware take `*echo.Context`,
 the error handler takes `(ctx *echo.Context, err error)`, and logging uses `log/slog`. Path values use
@@ -197,10 +197,10 @@ server timeouts; connect the returned Handler so request lifetimes are tracked. 
 concurrently with preparation. The listener-free API does not add a CLI HTTP runtime manifest or widen the partial probe.
 
 RunContext shares preparation and cleanup, subscribes to shutdown signals before initialization, and starts
-consumers/custom transports before exposing the final HTTP listener. App.Prepare is included in the public Spine
-snapshot v0.5.3-0.20261102012946-eed61dc88259, which the Echo platform snapshot
-v0.0.0-20261102013128-0a80ce357ba5 requires without a local replacement. These are development snapshots;
-formal release tags have not been published. See docs/migration/http-adapter-modules.md.
+consumers/custom transports before exposing the final HTTP listener. Spine v0.6.0 exposes App.Prepare directly,
+and Echo platform v0.1.0 depends on Spine v0.6.0 without local replacements. Install the platform module
+for an Echo application. Repository fixture and CI pins are recorded in their go.mod files and checkout SHAs.
+See docs/migration/http-adapter-modules.md for the release migration.
 
 ## Repository map
 

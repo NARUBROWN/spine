@@ -2,7 +2,7 @@
 
 Echo 기반 앱은 `spine-echo-platform`을 설치하고 `platform.New()`로 생성합니다. 플랫폼이 Spine과 Echo를 함께 가져오며, HTTP 실행 계약은 Spine 모듈의 공개 `adapter` 패키지에서 관리합니다.
 
-이 문서는 HTTP 계약 `spine.http-adapter/v2`를 기준으로 합니다. 공개 개발 스냅샷은 플랫폼 `v0.0.0-20261102013128-0a80ce357ba5`과 Spine `v0.5.3-0.20261102012946-eed61dc88259`입니다. 플랫폼은 해당 공개 Spine 버전을 의존성으로 사용하며 로컬 replace를 포함하지 않습니다. 정식 릴리스 태그는 아직 발행하지 않았습니다.
+이 문서는 Spine `v0.6.0`과 Echo 플랫폼 `v0.1.0`의 HTTP 계약 `spine.http-adapter/v2`를 기준으로 합니다. 사용자는 플랫폼 모듈을 설치하면 됩니다. 플랫폼은 Spine을 공개 의존성으로 가져오며 로컬 replace를 포함하지 않습니다. 저장소의 개발용 예제와 CI는 각 go.mod와 고정 SHA에 지정한 버전을 별도로 검사합니다.
 
 ## 플랫폼 선택과 앱 생성
 
@@ -169,7 +169,7 @@ go -C cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=90s
 
 CLI 정적 분석, 부분 runtime probe와 실제 E2E는 별도 검증 결과입니다. Prepare 추가가 CLI probe의 HTTP 실행 분석 범위를 확장하는 것은 아닙니다.
 
-플랫폼의 Spine 버전과 예제·CI의 플랫폼 버전은 위 v2 공개 스냅샷으로 고정했습니다. 공개 버전의 설치와 실행은 아래 명령으로 따로 검사합니다.
+공개 버전의 설치와 실행은 예제 go.mod에 지정한 core·플랫폼 버전으로 따로 검사합니다. 정식 릴리스 소비자는 Spine v0.6.0과 플랫폼 v0.1.0을 사용합니다.
 
 ```sh
 bash scripts/check-published-demo.sh
@@ -185,4 +185,4 @@ CI의 플랫폼 단독 vet/unit/race는 `RUNNER_TEMP` 아래의 임시 Go worksp
 
 모듈 정합성과 공개 소비자 검사는 `GOWORK=off`를 유지합니다. 공개 플랫폼의 go.mod에 로컬 `replace`를 넣지 않고도 PR 커널과의 호환성 검사 및 공개 의존 버전 검사를 각각 수행합니다.
 
-PR 리뷰 승인과 main 병합, 정식 릴리스 태그 발행도 남아 있습니다.
+릴리스 변경 내용은 [Spine v0.6.0](https://github.com/NARUBROWN/spine/releases/tag/v0.6.0)과 [Echo 플랫폼 v0.1.0](https://github.com/NARUBROWN/spine-echo-platform/releases/tag/v0.1.0)에서 확인합니다.
