@@ -70,12 +70,12 @@ GitHub Issues are public. Share a sanitized summary or minimal reproduction with
 
 From Spine `v0.6.0`, `spine new` is the official way to create a project. Follow the [Spine CLI installation guide](https://github.com/NARUBROWN/spine-cli#권장-환경과-설치) to install the `spine` command and check its supported versions.
 
-CLI `v0.4.0` configures Spine `v0.6.0`, Echo platform `v0.1.0`, and Echo `v5.4.4` together through `new`.
+`new` selects compatible Spine, Echo platform, and Echo versions using the verified recipe bundled with the installed CLI. Check the generated `go.mod` for the selected versions.
 
 Create a project and start its development server.
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.0
+go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
 spine version
 spine new todo-api --module github.com/acme/todo-api
 cd todo-api
