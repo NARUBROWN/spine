@@ -82,13 +82,15 @@ cd todo-api
 spine dev
 ```
 
+更新 CLI 本身時，請重新執行相同的 `go install` 指令。`spine update` 更新專案的 Spine 與 Echo 平台相依套件，不會更新 CLI 執行檔。
+
 在另一個終端機中檢查預設的 health endpoint。它應回傳 `200 OK` 和 `{"status":"ok"}`。
 
 ```sh
 curl http://localhost:8080/health
 ```
 
-預設情況下，`new` 完成 Echo 平台設定、相依套件安裝、靜態契約檢查與建置後才建立專案。使用 `spine dev` 啟動伺服器。如果使用 `--skip-install` 僅產生檔案，請接著執行 `go mod tidy`。
+預設情況下，`new` 完成 Echo 平台設定、相依套件安裝、靜態契約檢查與建置後才建立專案。使用 `spine dev` 啟動伺服器。如果使用 `--skip-install` 僅產生檔案，請接著執行 `go mod tidy` 和 `go mod download all`。若靜態檢查回報 `MODULE_GRAPH_UNAVAILABLE`，也應先使用這兩個命令準備完整的模組中繼資料，再重新檢查。
 
 在專案目錄中執行契約與本機檢查。
 
