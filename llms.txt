@@ -21,7 +21,7 @@ Use sources in this order:
 
 The external demos reviewed on 2026-07-30 all pin Spine `v0.5.1`. Their architecture is useful, but reconcile copied code with this checkout before using it. This checkout changes HTTP app construction: choose the Echo integration explicitly using `platform.New()`.
 
-Do not import `github.com/NARUBROWN/spine/internal/...` from an application. Application code should use the root package, `adapter`, `core`, `interceptor/...`, and `pkg/...` only.
+Do not import `github.com/NARUBROWN/spine/internal/...` from an application. Application code should use the root package, `adapter/http`, `adapter/event`, `core`, `interceptor/...`, and `pkg/...` only. The old `adapter` package remains an HTTP compatibility facade.
 
 For source development, use local module replacements as shown in `cmd/demo/go.mod`.
 For new applications, install the CLI with @latest and use its bundled recipe, with no local replacements. Read the generated go.mod for the selected versions; the runtime API reference below uses the v0.6.0/v0.1.0 baseline.
@@ -30,7 +30,7 @@ See `docs/migration/http-adapter-modules.md` for the intentional constructor cha
 
 ## HTTP integration modules
 
-- `github.com/NARUBROWN/spine/adapter` (package adapter): public standard-library-only HTTP execution interfaces, versioned with Spine.
+- `github.com/NARUBROWN/spine/adapter/http` (package httpadapter): canonical public standard-library-only HTTP execution interfaces, versioned with Spine. The old `spine/adapter` path re-exports the same types, version and errors for released consumers.
 - `github.com/NARUBROWN/spine`: kernel and public adapter contract, with no Echo or platform-module dependency.
 - `github.com/NARUBROWN/spine-echo-platform` (package platform): Echo v5.4.4 implementation and starter, depending on Spine and Echo.
 
@@ -56,6 +56,32 @@ The kernel wraps the HTTP scope to add request store, routing results and EventB
 is separate; use standard request context to share values. Contract RequestError is converted to the
 kernel's httperr.HTTPError while preserving causes. Response staging remains in the kernel.
 ASGI informs the boundary and lifetime design. This does not provide Python ASGI compatibility.
+
+## Event adapter contract
+
+`github.com/NARUBROWN/spine/adapter/event` (package eventadapter) defines the initial `spine.event-adapter/v1` contract using only
+the standard library. It is versioned with Spine. This checkout adds declarations and factory validation;
+App, bootstrap and the built-in Kafka/RabbitMQ implementations are not wired to it yet. Existing applications
+continue to configure boot.Options.Kafka and boot.Options.RabbitMQ. Do not infer an App registration API or
+changed dispatch, retry or acknowledgment behavior from the new package.
+
+The contract exposes Message (serialized bytes and metadata), Subscription, Delivery, Reader, Publisher and
+Factory. ValidateFactory checks typed nil, the exact version and Consume/Publish roles without creating
+resources. Factories own native configuration. NewReader establishes readiness without invoking handlers;
+successful construction transfers ownership and failed construction cleans up partial resources.
+
+The kernel binds dispatch to Subscription.Topic; producer-controlled Message.EventName must not select a
+different handler. A Reader has one unsettled delivery at a time. The kernel calls Ack after successful
+execution and post-processing, or Nack after failure. Settlement errors require closing the Reader before
+reconnecting, including ErrReaderInvalidated for Kafka-style failed-offset protection. Close is idempotent
+and its context bounds waiting only. Publishing is synchronous and concurrency-safe; input bytes are read-only.
+These are requirements for future implementations, not evidence of broker delivery, atomicity or exactly-once.
+See adapter/event/README.md for payload lifetimes, cancellation, shutdown and error semantics.
+
+The `adapter/http` and `adapter/event` packages classify public contracts by transport. Concrete integrations
+use `spine-XXX-platform` module names: spine-echo-platform, spine-kafka-platform and spine-rabbitmq-platform.
+A platform implements a Spine contract and owns native settings and resource lifetimes. This term covers
+both HTTP execution and broker readers/publishers; it does not require identical constructors across transports.
 
 ## Choose the right reference first
 

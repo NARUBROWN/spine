@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NARUBROWN/spine/adapter"
+	adapter "github.com/NARUBROWN/spine/adapter/http"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/pkg/boot"
 )

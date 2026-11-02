@@ -1,19 +1,28 @@
-# HTTP 어댑터 실행 계약
+# 어댑터 계약
 
-`github.com/NARUBROWN/spine/adapter`는 Spine 커널과 플랫폼 구현이 공유하는 공개 패키지입니다. Spine 모듈에 포함되며 버전도 Spine과 함께 관리합니다. 별도 계약 모듈이나 저장소는 사용하지 않습니다.
+Spine의 공개 계약은 전송 종류별 패키지로 나눕니다. 계약은 표준 라이브러리만 사용하고 구체 구현은 `spine-XXX-platform` 모듈이 소유합니다.
 
-계약 패키지는 표준 라이브러리만 import합니다. Spine의 내부 파이프라인, 요청 store, 이벤트 버스와 구체 HTTP 프레임워크에 의존하지 않습니다. 외부 플랫폼 모듈은 이 공개 패키지를 import하여 Factory와 HTTPAdapter를 구현할 수 있습니다.
+| 계약 | 패키지 | 구현 모듈 |
+| --- | --- | --- |
+| HTTP | [`adapter/http`](http/README.md), package `httpadapter` | `spine-echo-platform` |
+| 이벤트 | [`adapter/event`](event/README.md), package `eventadapter` | `spine-kafka-platform`, `spine-rabbitmq-platform` |
 
-Factory는 기능을 선언하고 리스너 없이 새 어댑터를 구성합니다. HTTPContext는 요청 입력과 실제 ResponseWriter를 제공하며, ExecuteFunc는 요청마다 커널을 한 번 동기 실행합니다. Handler는 외부 HTTP 서버에 연결할 수 있고 Serve와 Shutdown은 관리 서버 실행에 사용합니다.
+`platform`은 Spine 계약을 특정 기술로 구현하고 native 설정과 자원 수명을 관리하는 통합 모듈을 뜻합니다. HTTP 플랫폼은 HTTP 실행을, 브로커 플랫폼은 Reader와 Publisher를 제공합니다.
 
-현재 계약 버전은 `spine.http-adapter/v2`입니다. `ResponseWriter.WriteJSON`은 core에서 직렬화한 `json.RawMessage`만 받습니다. DTO의 동적 타입이 필요한 `HTTPContext.Bind(any)`가 공개 HTTP 계약에 남는 유일한 `any`입니다.
+## 기존 HTTP 경로의 호환성
 
-native Echo 설정은 플랫폼의 `WithEcho(func(*echo.Echo))` 옵션이 소유합니다. 공통 Config와 Capabilities에는 native hook을 넣지 않습니다. v1 구현은 버전 검사에서 거부하므로 커널과 플랫폼을 함께 전환해야 합니다.
+`github.com/NARUBROWN/spine/adapter`는 기존 HTTP 소비자를 위한 호환 패키지로 남습니다. 공개 타입은 `adapter/http`의 타입 별칭이고 계약 버전, 오류와 `ValidateFactory`도 같은 구현을 사용합니다. 기존 Echo 플랫폼과 앱은 import 경로를 바꾸지 않고 계속 사용할 수 있습니다.
 
-scope와 writer는 요청 중에만 사용하며 별도 goroutine에서 동시 접근하거나 보관하지 않습니다. Spine의 요청 store, 라우팅 결과, EventBus와 응답 staging은 커널이 소유합니다. 요청 오류는 RequestError로 상태와 원인을 전달하고 커널이 공개 HTTP 오류로 변환합니다.
+새 HTTP 구현은 다음 경로를 사용합니다.
 
-ASGI의 앱과 서버 경계 및 수명 정의를 참고하지만 **Python ASGI 호환을 제공하지 않습니다.** Spine v0.6.0과 Echo 플랫폼 v0.1.0에서 이 계약을 사용합니다.
-
-```sh
-go test ./adapter -count=1
+```go
+import httpadapter "github.com/NARUBROWN/spine/adapter/http"
 ```
+
+이벤트 구현은 다음 경로를 사용합니다.
+
+```go
+import eventadapter "github.com/NARUBROWN/spine/adapter/event"
+```
+
+이 패키지 재배치는 HTTP 계약 `spine.http-adapter/v2`의 메서드나 버전을 바꾸지 않습니다. 이벤트 계약은 `spine.event-adapter/v1`입니다. 이벤트 factory를 App에 등록하는 실행 연결은 별도 단계이며 기존 `boot.Options.Kafka`와 `boot.Options.RabbitMQ`의 동작은 유지됩니다.

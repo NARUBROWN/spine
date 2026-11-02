@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/NARUBROWN/spine/adapter"
+	adapter "github.com/NARUBROWN/spine/adapter/http"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	"github.com/NARUBROWN/spine/internal/ws"

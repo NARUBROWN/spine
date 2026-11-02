@@ -1,6 +1,6 @@
-// Package adapter는 Spine 커널과 플랫폼 구현이 공유하는 공개 HTTP 실행 계약입니다.
+// Package httpadapter는 Spine 커널과 플랫폼 구현이 공유하는 공개 HTTP 실행 계약입니다.
 // 표준 라이브러리만 사용하며 커널 구현, Echo와 도메인 이벤트 타입을 참조하지 않습니다.
-package adapter
+package httpadapter
 
 import (
 	"context"

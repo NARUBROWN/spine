@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NARUBROWN/spine/adapter"
+	adapter "github.com/NARUBROWN/spine/adapter/http"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
