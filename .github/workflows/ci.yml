@@ -208,7 +208,7 @@ jobs:
         run: go mod download
 
       - name: Download demo dependencies
-        run: go -C cmd/demo mod download
+        run: go -C cmd/demo mod download all
 
       - name: Install pinned Spine CLI
         run: go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.0
