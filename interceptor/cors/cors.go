@@ -89,14 +89,11 @@ func (i *CORSInterceptor) PreHandle(
 	}
 
 	// ResponseWriter 가져오기
-	rwAny, ok := ctx.Get("spine.response_writer")
-	if !ok {
+	response, ok := ctx.(core.HTTPResponseContext)
+	if !ok || response.ResponseWriter() == nil {
 		return nil
 	}
-	rw, ok := rwAny.(core.ResponseWriter)
-	if !ok {
-		return nil
-	}
+	rw := response.ResponseWriter()
 
 	origin := ctx.Header("Origin")
 	if origin != "" && i.isAllowedOrigin(origin) {

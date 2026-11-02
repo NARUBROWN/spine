@@ -31,3 +31,5 @@ func TestNewControllerContext_ReadsFromExecutionContext(t *testing.T) {
 		t.Fatalf("controller context는 execution context를 그대로 읽어야 합니다: %v %v", got, ok)
 	}
 }
+
+func (c *testExecutionContext) SetRoute(params map[string]string, pathKeys []string) {}

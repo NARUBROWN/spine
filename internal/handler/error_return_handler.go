@@ -17,14 +17,9 @@ func (h *ErrorReturnHandler) Supports(returnType reflect.Type) bool {
 }
 
 func (h *ErrorReturnHandler) Handle(value any, ctx core.ExecutionContext) error {
-	rwAny, ok := ctx.Get("spine.response_writer")
-	if !ok {
-		return fmt.Errorf("ResponseWriter not found in ExecutionContext")
-	}
-
-	rw, ok := rwAny.(core.ResponseWriter)
-	if !ok {
-		return fmt.Errorf("invalid ResponseWriter type")
+	rw, writerErr := responseWriter(ctx)
+	if writerErr != nil {
+		return writerErr
 	}
 
 	err, ok := value.(error)
@@ -42,7 +37,5 @@ func (h *ErrorReturnHandler) Handle(value any, ctx core.ExecutionContext) error 
 		message = httpErr.Message
 	}
 
-	return rw.WriteJSON(status, map[string]any{
-		"message": message,
-	})
+	return rw.WriteJSON(status, ErrorJSON(message))
 }

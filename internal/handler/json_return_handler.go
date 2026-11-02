@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -65,14 +66,9 @@ func (h *JSONReturnHandler) Handle(value any, ctx core.ExecutionContext) error {
 
 	options := optionsField.Interface().(httpx.ResponseOptions)
 
-	rwAny, ok := ctx.Get("spine.response_writer")
-	if !ok {
-		return fmt.Errorf("ResponseWriter not found in ExecutionContext")
-	}
-
-	rw, ok := rwAny.(core.ResponseWriter)
-	if !ok {
-		return fmt.Errorf("invalid ResponseWriter type")
+	rw, writerErr := responseWriter(ctx)
+	if writerErr != nil {
+		return writerErr
 	}
 
 	serializedCookies, err := serializeCookiesValidated(options.Cookies)
@@ -93,5 +89,13 @@ func (h *JSONReturnHandler) Handle(value any, ctx core.ExecutionContext) error {
 		status = http.StatusOK
 	}
 
-	return rw.WriteJSON(status, body)
+	// 동적 반환값은 HTTP 출력 계약으로 넘기기 전에 직렬화합니다.
+	if err := ValidateStatus(status); err != nil {
+		return err
+	}
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("serialize JSON response: %w", err)
+	}
+	return rw.WriteJSON(status, encoded)
 }

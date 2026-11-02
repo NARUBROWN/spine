@@ -125,3 +125,7 @@ func TestDTOResolver(t *testing.T) {
 		t.Fatal("잘못된 JSON이면 에러여야 합니다")
 	}
 }
+
+func (c *testWSContext) SetRoute(params map[string]string, pathKeys []string) {}
+
+func (c *nonWSContext) SetRoute(params map[string]string, pathKeys []string) {}

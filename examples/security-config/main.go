@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	spine "github.com/NARUBROWN/spine"
+	platform "github.com/NARUBROWN/spine-echo-platform"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/interceptor/cors"
 	"github.com/NARUBROWN/spine/pkg/boot"
@@ -80,7 +80,7 @@ func main() {
 		log.Fatal("RABBITMQ_URL must contain an amqps:// connection URL")
 	}
 
-	app := spine.New()
+	app := platform.New()
 	app.InterceptorFor(boot.InterceptorAll, &auditInterceptor{})
 
 	corsInterceptor, err := cors.NewValidated(cors.Config{

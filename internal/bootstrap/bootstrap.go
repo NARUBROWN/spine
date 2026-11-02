@@ -1,29 +1,18 @@
 package bootstrap
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"log"
-	"net/http"
-	"os"
-	"os/signal"
 	"reflect"
 	"strings"
-	"sync"
-	"syscall"
 	"time"
 
+	"github.com/NARUBROWN/spine/adapter"
 	"github.com/NARUBROWN/spine/core"
-	httpEngine "github.com/NARUBROWN/spine/internal/adapter/echo"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	eventResolver "github.com/NARUBROWN/spine/internal/event/consumer/resolver"
 	"github.com/NARUBROWN/spine/internal/event/hook"
-	"github.com/NARUBROWN/spine/internal/event/infra/kafka"
-	"github.com/NARUBROWN/spine/internal/event/infra/rabbitmq"
-	eventPublish "github.com/NARUBROWN/spine/internal/event/publish"
-	"github.com/NARUBROWN/spine/internal/handler"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/internal/resolver"
@@ -31,7 +20,6 @@ import (
 	"github.com/NARUBROWN/spine/internal/ws"
 	wsResolver "github.com/NARUBROWN/spine/internal/ws/resolver"
 	"github.com/NARUBROWN/spine/pkg/boot"
-	"github.com/labstack/echo/v4"
 )
 
 type Config struct {
@@ -40,7 +28,6 @@ type Config struct {
 	Routes                 []spineRouter.RouteSpec
 	Interceptors           []core.Interceptor
 	ScopedInterceptors     []InterceptorBinding
-	TransportHooks         []func(any)
 	CustomTransports       []core.CustomTransport
 	EnableGracefulShutdown bool
 	ShutdownTimeout        time.Duration
@@ -48,6 +35,7 @@ type Config struct {
 	RabbitMQ               *boot.RabbitMqOptions
 	ConsumerRegistry       *consumer.Registry
 	HTTP                   *boot.HTTPOptions
+	HTTPAdapterFactory     adapter.Factory
 	WebSocketRegistry      *ws.Registry
 }
 
@@ -76,567 +64,6 @@ type containerFacade struct {
 
 func (f *containerFacade) Resolve(t reflect.Type) (any, error) {
 	return f.container.Resolve(t)
-}
-
-func Run(config Config) error {
-	return RunContext(context.Background(), config)
-}
-
-func RunContext(ctx context.Context, config Config) error {
-	if err := Validate(config); err != nil {
-		return err
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	runCtx, cancelRun := context.WithCancel(ctx)
-	defer cancelRun()
-
-	// 어떤 전송 방식도 초기화하거나 노출하기 전에 종료 신호를 구독합니다.
-	// 정상 종료를 지원하는 HTTP 런타임과 HTTP가 없는 컨슈머/사용자 정의 런타임이 같은 채널을
-	// 사용하므로 시작 중 신호도 잃지 않고 모든 반환 경로에서 구독을 해제합니다.
-	var shutdownSignals chan os.Signal
-	var shutdownRequested <-chan struct{}
-	if requiresShutdownSignal(config) {
-		shutdownSignals = make(chan os.Signal, 1)
-		signal.Notify(shutdownSignals, syscall.SIGINT, syscall.SIGTERM)
-		defer signal.Stop(shutdownSignals)
-		requested := make(chan struct{})
-		shutdownRequested = requested
-		go func() {
-			select {
-			case <-shutdownSignals:
-				cancelRun()
-				close(requested)
-			case <-runCtx.Done():
-				close(requested)
-			}
-		}()
-	}
-
-	printBanner()
-
-	log.Println("[Bootstrap] Initializing container")
-	// 컨테이너 생성
-	container := container.New()
-
-	log.Printf("[Bootstrap] Registering constructors (%d)", len(config.Constructors))
-	// 생성자 등록(HTTP/컨슈머 공통)
-	for _, constructor := range config.Constructors {
-		log.Printf("[Bootstrap] Registering constructor: %T", constructor)
-		if err := container.RegisterConstructor(constructor); err != nil {
-			return err
-		}
-	}
-
-	// 이벤트 발행기 모음(Kafka/RabbitMQ 등의 설정에 따라 채워짐)
-	var eventPublishers []eventPublish.EventPublisher
-
-	// Kafka 쓰기 설정이 있으면 퍼블리셔 구성
-	if config.Kafka != nil && config.Kafka.Write != nil {
-		log.Println("[Bootstrap] Configuring Kafka publisher")
-
-		kafkaPublisher, err := kafka.NewKafkaPublisher(&boot.KafkaOptions{
-			Brokers:                config.Kafka.Brokers,
-			TLS:                    config.Kafka.TLS,
-			Dialer:                 config.Kafka.Dialer,
-			Transport:              config.Kafka.Transport,
-			AllowInsecureTransport: config.Kafka.AllowInsecureTransport,
-			ConsumerRetry:          config.Kafka.ConsumerRetry,
-			Write: &boot.KafkaWriteOptions{
-				TopicPrefix: config.Kafka.Write.TopicPrefix,
-			},
-		})
-		if err != nil {
-			return fmt.Errorf("[Bootstrap] failed to initialize Kafka publisher: %w", err)
-		}
-		eventPublishers = append(eventPublishers, kafkaPublisher)
-		defer func() {
-			if err := kafkaPublisher.Close(); err != nil {
-				log.Printf("[Bootstrap] failed to close Kafka publisher: %v", err)
-			}
-		}()
-	}
-
-	// RabbitMQ 쓰기 설정이 있으면 퍼블리셔 구성
-	if config.RabbitMQ != nil && config.RabbitMQ.Write != nil {
-		log.Println("[Bootstrap] Configuring RabbitMQ publisher")
-
-		rabbitmqWriter, err := rabbitmq.NewRabbitMqWriter(boot.RabbitMqOptions{
-			URL:                    config.RabbitMQ.URL,
-			AllowInsecureTransport: config.RabbitMQ.AllowInsecureTransport,
-			ConsumerRetry:          config.RabbitMQ.ConsumerRetry,
-			PublisherRetry:         config.RabbitMQ.PublisherRetry,
-			Write: &boot.RabbitMqWriteOptions{
-				Exchange: config.RabbitMQ.Write.Exchange,
-			},
-		})
-		if err != nil {
-			return fmt.Errorf("[Bootstrap] failed to initialize RabbitMQ writer: %w", err)
-		}
-		eventPublishers = append(eventPublishers, rabbitmqWriter)
-		defer func() {
-			if err := rabbitmqWriter.Close(); err != nil {
-				log.Printf("[Bootstrap] failed to close RabbitMQ writer: %v", err)
-			}
-		}()
-	}
-
-	// 실행 후 훅에서 사용할 공통 디스패처(퍼블리셔가 없으면 nil 유지)
-	var dispatchHook *hook.EventDispatchHook
-	if len(eventPublishers) > 0 {
-		dispatcher, err := eventPublish.NewDefaultEventDispatcher(eventPublishers...)
-		if err != nil {
-			return fmt.Errorf("[Bootstrap] failed to initialize event dispatcher: %w", err)
-		}
-		dispatchHook = &hook.EventDispatchHook{
-			Dispatcher: dispatcher,
-		}
-	}
-
-	var server *httpEngine.Server
-	var httpErrCh chan error
-	var consumerErrCh chan error
-	var customTransportErrCh chan error
-	var wsRuntime *ws.Runtime
-	var shutdownHTTPServer func(context.Context) error
-	var consumerRuntimes []*consumer.Runtime
-	var initializedCustomTransports []core.CustomTransport
-	shutdownTimeout := config.ShutdownTimeout
-	if shutdownTimeout == 0 {
-		shutdownTimeout = 10 * time.Second
-	}
-
-	stopCustomTransportOnce := sync.Once{}
-	stopCustomTransports := func(ctx context.Context) {
-		stopCustomTransportOnce.Do(func() {
-			for i := len(initializedCustomTransports) - 1; i >= 0; i-- {
-				transport := initializedCustomTransports[i]
-				if err := transport.Stop(ctx); err != nil {
-					log.Printf("[Bootstrap] failed to stop custom transport: %v", err)
-				}
-			}
-		})
-	}
-
-	cleanupOnce := sync.Once{}
-	var cleanupErr error
-	cleanup := func() error {
-		cleanupOnce.Do(func() {
-			// 먼저 ingress를 닫아 종료 중 새 HTTP/WS 작업이 시작되지 않게 합니다.
-			if wsRuntime != nil {
-				wsRuntime.Stop()
-			}
-			if shutdownHTTPServer != nil {
-				ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-				if err := shutdownHTTPServer(ctx); err != nil {
-					cleanupErr = errors.Join(cleanupErr, err)
-					log.Printf("[Bootstrap] failed to shut down HTTP server: %v", err)
-				}
-				cancel()
-			}
-
-			// Consumer Stop은 모든 worker/ACK/NACK/reader 종료가 끝날 때까지 대기하는 계약입니다.
-			for i := len(consumerRuntimes) - 1; i >= 0; i-- {
-				consumerRuntimes[i].Stop()
-			}
-
-			ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-			stopCustomTransports(ctx)
-			cancel()
-		})
-		return cleanupErr
-	}
-	defer cleanup()
-
-	if len(config.CustomTransports) > 0 {
-		log.Printf("[Bootstrap] Initializing custom transports (%d)", len(config.CustomTransports))
-		facade := &containerFacade{container: container}
-
-		for i, transport := range config.CustomTransports {
-			if transport == nil {
-				return fmt.Errorf("[Bootstrap] custom transport[%d] is nil", i)
-			}
-			if err := transport.Init(facade); err != nil {
-				return fmt.Errorf("[Bootstrap] custom transport initialization failed: %w", err)
-			}
-			initializedCustomTransports = append(initializedCustomTransports, transport)
-		}
-
-		customTransportErrCh = make(chan error, len(config.CustomTransports))
-	}
-
-	if config.HTTP != nil {
-		prefix := config.HTTP.GlobalPrefix
-		if prefix != "" {
-			if !strings.HasPrefix(prefix, "/") {
-				return fmt.Errorf("HTTP global prefix must start with '/'")
-			}
-			if strings.Contains(prefix, ":") {
-				return fmt.Errorf("path parameters are not allowed in the HTTP global prefix")
-			}
-			if strings.Contains(prefix, "*") {
-				return fmt.Errorf("wildcards are not allowed in the HTTP global prefix")
-			}
-			prefix = strings.TrimSuffix(prefix, "/")
-			log.Printf("[Bootstrap] Applied HTTP global prefix: %s", prefix)
-		}
-
-		log.Printf("[Bootstrap] Configuring HTTP routes (%d routes)", len(config.Routes))
-		// 라우터 생성 및 라우트 등록
-		router := spineRouter.NewRouter()
-
-		registeredPathsByMethod := make(map[string][]string)
-
-		loggedRouteInterceptors := make(map[reflect.Type]bool)
-
-		for _, route := range config.Routes {
-			meta, err := spineRouter.NewHandlerMeta(route.Handler)
-			if err != nil {
-				return err
-			}
-
-			resolved := make([]core.Interceptor, len(route.Interceptors))
-			for i, interceptor := range route.Interceptors {
-				interceptorType := reflect.TypeOf(interceptor)
-				if interceptorType == nil {
-					return fmt.Errorf("[Bootstrap] route interceptor[%d] is nil", i)
-				}
-				value := reflect.ValueOf(interceptor)
-
-				// 같은 타입의 인터셉터 로깅은 한 번만 남긴다.
-				logged := loggedRouteInterceptors[interceptorType]
-
-				if interceptorType.Kind() == reflect.Pointer && value.IsNil() {
-					if !logged {
-						log.Printf("[Bootstrap] Created route interceptor %s from the container", interceptorType.Elem().Name())
-						loggedRouteInterceptors[interceptorType] = true
-					}
-
-					inst, err := container.Resolve(interceptorType)
-					if err != nil {
-						return fmt.Errorf("[Bootstrap] failed to create route interceptor: %w", err)
-					}
-					resolved[i] = inst.(core.Interceptor)
-				} else {
-					if !logged {
-						log.Printf("[Bootstrap] Using route interceptor instance: %T", interceptor)
-						loggedRouteInterceptors[interceptorType] = true
-					}
-					resolved[i] = interceptor
-				}
-			}
-
-			meta.Interceptors = resolved
-			fullPath, err := joinPath(prefix, route.Path)
-			if err != nil {
-				return err
-			}
-			log.Printf("[Bootstrap] Registered HTTP route: (%s) %s", route.Method, fullPath)
-
-			if err := assertNoAmbiguousRoute(route.Method, fullPath, registeredPathsByMethod[route.Method]); err != nil {
-				return err
-			}
-			registeredPathsByMethod[route.Method] = append(registeredPathsByMethod[route.Method], fullPath)
-
-			router.Register(route.Method, fullPath, meta)
-		}
-
-		log.Println("[Bootstrap] Warming up controller dependencies")
-		// 미리 초기화할 컴포넌트
-		if err := container.WarmUp(router.ControllerTypes()); err != nil {
-			return fmt.Errorf("[Bootstrap] HTTP controller warm-up failed: %w", err)
-		}
-
-		log.Println("[Bootstrap] Building execution pipeline")
-		httpInvoker := invoker.NewInvoker(container)
-		httpPipeline := pipeline.NewPipeline(router, httpInvoker)
-
-		// HTTP 실행 후 훅: 도메인 이벤트 발행(퍼블리셔가 있는 경우에만)
-		if dispatchHook != nil {
-			httpPipeline.AddPostExecutionHook(dispatchHook)
-		}
-
-		log.Println("[Bootstrap] Registering argument resolvers")
-		httpPipeline.AddArgumentResolver(
-			// 표준 컨텍스트 리졸버
-			&resolver.StdContextResolver{},
-
-			// Spine 컨트롤러 컨텍스트 뷰
-			&resolver.ControllerContextResolver{},
-
-			// 헤더 리졸버
-			&resolver.HeaderResolver{},
-
-			// 경로 리졸버들
-			&resolver.PathIntResolver{},
-			&resolver.PathStringResolver{},
-			&resolver.PathBooleanResolver{},
-
-			// 쿼리의 의미 타입 리졸버들
-			&resolver.PaginationResolver{},
-			&resolver.QueryValuesResolver{},
-
-			// 요청 본문 리졸버
-			&resolver.DTOResolver{},
-
-			// 폼 DTO(멀티파트/폼)
-			&resolver.FormDTOResolver{},
-
-			// 멀티파트 파일
-			&resolver.UploadedFilesResolver{},
-		)
-
-		log.Println("[Bootstrap] Registering return value handlers")
-		httpPipeline.AddReturnValueHandler(
-			&handler.RedirectReturnValueHandler{},
-			&handler.BinaryReturnHandler{},
-			&handler.StringReturnHandler{},
-			&handler.JSONReturnHandler{},
-			&handler.ErrorReturnHandler{},
-		)
-
-		log.Println("[Bootstrap] Registering interceptors")
-
-		resolvedHTTPInterceptors, resolvedWSInterceptors, err := resolveGlobalInterceptors(container, config)
-		if err != nil {
-			return err
-		}
-		for _, interceptor := range resolvedHTTPInterceptors {
-			httpPipeline.AddInterceptor(interceptor)
-		}
-
-		log.Println("[Bootstrap] Mounting HTTP adapter")
-
-		// WebSocket 런타임 구성
-		if config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0 {
-			wsRegistrations := config.WebSocketRegistry.Registrations()
-			log.Println("[Bootstrap] Configuring WebSocket runtime")
-			log.Printf("[Bootstrap] Configuring WebSocket routes (%d routes)", len(wsRegistrations))
-
-			// WS 전용 인자 리졸버 등록
-			wsPipeline := buildWSPipeline(container, config.WebSocketRegistry, dispatchHook, resolvedWSInterceptors)
-
-			wsRuntime = ws.NewRuntime(
-				config.WebSocketRegistry,
-				wsPipeline,
-				config.HTTP.WebSocket,
-				webSocketHandshakeInterceptors(resolvedWSInterceptors)...,
-			)
-
-			// Echo 전송 훅으로 마운트
-			wsMountHook := func(e any) {
-				echoInstance, ok := e.(*echo.Echo)
-				if !ok {
-					return
-				}
-				for _, reg := range wsRegistrations {
-					log.Printf("[Bootstrap] Registered WebSocket route: %s", reg.Path)
-					echoInstance.GET(reg.Path, func(c echo.Context) error {
-						wsRuntime.HandleConn(c.Response().Writer, c.Request(), reg)
-						return nil
-					})
-				}
-			}
-			config.TransportHooks = append([]func(any){wsMountHook}, config.TransportHooks...)
-		}
-
-		// Echo 어댑터
-		server = httpEngine.NewServer(httpPipeline, config.Address, config.TransportHooks, *config.HTTP)
-		server.Mount()
-
-		httpErrCh = make(chan error, 1)
-		shutdownHTTPServerOnce := sync.Once{}
-		var shutdownHTTPServerErr error
-		shutdownHTTPServer = func(ctx context.Context) error {
-			shutdownHTTPServerOnce.Do(func() {
-				shutdownHTTPServerErr = server.Shutdown(ctx)
-			})
-			return shutdownHTTPServerErr
-		}
-	}
-
-	// 컨슈머 컨트롤러 미리 초기화
-	if config.ConsumerRegistry != nil {
-		log.Println("[Bootstrap] Warming up consumer controller dependencies")
-		consumerRegistrations := config.ConsumerRegistry.Registrations()
-		log.Printf("[Bootstrap] Configuring consumer routes (%d routes)", len(consumerRegistrations))
-		var consumerTypes []reflect.Type
-		for _, reg := range consumerRegistrations {
-			log.Printf("[Bootstrap] Registered consumer route: %s", reg.Topic)
-			consumerTypes = append(consumerTypes, reg.Meta.ControllerType)
-		}
-		if err := container.WarmUp(consumerTypes); err != nil {
-			return fmt.Errorf("[Bootstrap] consumer controller warm-up failed: %w", err)
-		}
-	}
-
-	// Kafka 읽기 설정이 있으면 읽기 작업을 부트 절차에 포함
-	consumerStarted := false
-
-	if config.Kafka != nil && config.Kafka.Read != nil && config.ConsumerRegistry != nil && len(config.ConsumerRegistry.Registrations()) > 0 {
-		log.Println("[Bootstrap] Configuring Kafka consumer")
-		if consumerErrCh == nil {
-			consumerErrCh = make(chan error, 1)
-		}
-
-		factory := kafka.NewRunnerFactory(boot.KafkaOptions{
-			Brokers:                config.Kafka.Brokers,
-			TLS:                    config.Kafka.TLS,
-			Dialer:                 config.Kafka.Dialer,
-			Transport:              config.Kafka.Transport,
-			AllowInsecureTransport: config.Kafka.AllowInsecureTransport,
-			ConsumerRetry:          config.Kafka.ConsumerRetry,
-			Read: &boot.KafkaReadOptions{
-				GroupID: config.Kafka.Read.GroupID,
-			},
-		})
-
-		consumerPipeline := buildConsumerPipeline(container, config.ConsumerRegistry, dispatchHook)
-
-		runtime := consumer.NewRuntime(
-			config.ConsumerRegistry,
-			factory,
-			consumerPipeline,
-		)
-
-		if err := runtime.ValidateWithRetry(runCtx); err != nil {
-			if errors.Is(err, context.Canceled) {
-				return cleanup()
-			}
-			return fmt.Errorf("[Bootstrap] Kafka consumer validation failed: %w", err)
-		}
-
-		forwardConsumerErrors("Kafka", runtime, consumerErrCh)
-		consumerRuntimes = append(consumerRuntimes, runtime)
-		consumerStarted = true
-	}
-
-	// RabbitMQ 읽기 설정이 존재하면, 컨슈머 구성
-	if config.RabbitMQ != nil && config.RabbitMQ.Read != nil && config.ConsumerRegistry != nil && len(config.ConsumerRegistry.Registrations()) > 0 {
-		log.Println("[Bootstrap] Configuring RabbitMQ consumer")
-		failurePolicy := config.RabbitMQ.Read.EffectiveFailurePolicy()
-		log.Printf("[Bootstrap] RabbitMQ consumer failure policy: %s", failurePolicy)
-		if config.RabbitMQ.Read.DeadLetter != nil {
-			log.Printf("[Bootstrap] RabbitMQ dead-letter exchange: %s", config.RabbitMQ.Read.DeadLetter.Exchange)
-		} else if failurePolicy == boot.RabbitMqFailureReject {
-			log.Println("[Bootstrap] Warning: rejected RabbitMQ messages may be discarded because no dead-letter exchange is configured")
-		}
-		if consumerErrCh == nil {
-			consumerErrCh = make(chan error, 1)
-		}
-
-		factory := rabbitmq.NewRunnerFactory(boot.RabbitMqOptions{
-			URL:                    config.RabbitMQ.URL,
-			AllowInsecureTransport: config.RabbitMQ.AllowInsecureTransport,
-			ConsumerRetry:          config.RabbitMQ.ConsumerRetry,
-			Read: &boot.RabbitMqReadOptions{
-				Exchange:       config.RabbitMQ.Read.Exchange,
-				PrefetchCount:  config.RabbitMQ.Read.PrefetchCount,
-				FailurePolicy:  config.RabbitMQ.Read.FailurePolicy,
-				DeadLetter:     config.RabbitMQ.Read.DeadLetter,
-				RequeueOnError: config.RabbitMQ.Read.RequeueOnError,
-			},
-		})
-
-		consumerPipeline := buildConsumerPipeline(container, config.ConsumerRegistry, dispatchHook)
-
-		runtime := consumer.NewRuntime(
-			config.ConsumerRegistry,
-			factory,
-			consumerPipeline,
-		)
-
-		if err := runtime.ValidateWithRetry(runCtx); err != nil {
-			if errors.Is(err, context.Canceled) {
-				return cleanup()
-			}
-			return fmt.Errorf("[Bootstrap] RabbitMQ consumer validation failed: %w", err)
-		}
-
-		forwardConsumerErrors("RabbitMQ", runtime, consumerErrCh)
-		consumerRuntimes = append(consumerRuntimes, runtime)
-		consumerStarted = true
-	}
-
-	// expose 단계: 모든 DI warm-up과 broker runtime validation이 성공한 뒤에만
-	// 장기 실행 runtime과 마지막으로 HTTP listener를 시작합니다.
-	if runCtx.Err() != nil {
-		return cleanup()
-	}
-	for _, runtime := range consumerRuntimes {
-		go runtime.Start(runCtx)
-	}
-	for _, transport := range initializedCustomTransports {
-		transport := transport
-		go func() {
-			if err := transport.Start(); err != nil {
-				customTransportErrCh <- err
-			}
-		}()
-	}
-	if server != nil {
-		log.Printf("[Bootstrap] Server listening on: %s", config.Address)
-		go func() {
-			if err := server.Start(); err != nil && err != http.ErrServerClosed {
-				httpErrCh <- err
-			}
-		}()
-	}
-
-	if config.HTTP != nil {
-		// 정상 종료 기능 비활성화: 서버가 종료될 때까지 대기
-		if !config.EnableGracefulShutdown {
-			select {
-			case err := <-httpErrCh:
-				if err != nil {
-					return err
-				}
-				return nil
-			case err := <-consumerErrCh:
-				return err
-			case err := <-customTransportErrCh:
-				return err
-			case <-runCtx.Done():
-				return cleanup()
-			}
-		}
-
-		select {
-		case err := <-httpErrCh:
-			if err != nil {
-				return err
-			}
-		case err := <-consumerErrCh:
-			return err
-		case err := <-customTransportErrCh:
-			return err
-		case <-shutdownRequested:
-		}
-
-		log.Println("[Bootstrap] Shutdown signal received. Starting graceful shutdown...")
-		if err := cleanup(); err != nil {
-			return fmt.Errorf("[Bootstrap] forced server shutdown: %v", err)
-		}
-
-		log.Println("[Bootstrap] Shutdown completed successfully")
-	}
-
-	// HTTP가 비활성화된 상태에서 이벤트 컨슈머만 실행 중이면 종료 신호를 기다린다.
-	if config.HTTP == nil && (consumerStarted || customTransportErrCh != nil) {
-		select {
-		case <-shutdownRequested:
-			log.Println("[Bootstrap] Shutdown signal received. Stopping runtimes...")
-		case err := <-consumerErrCh:
-			return err
-		case err := <-customTransportErrCh:
-			return err
-		}
-
-		_ = cleanup()
-	}
-
-	return nil
 }
 
 func requiresShutdownSignal(config Config) bool {
@@ -716,7 +143,40 @@ func Validate(config Config) error {
 			issues = append(issues, boot.ConfigIssue{Path: path + ".Scope", Code: "INTERCEPTOR_SCOPE_INVALID", Message: "Interceptor transport scope is invalid.", Hint: "Use boot.InterceptorHTTP, boot.InterceptorWebSocket, or boot.InterceptorAll."})
 		}
 	}
-	return boot.ValidationError(issues...)
+	if err := boot.ValidationError(issues...); err != nil {
+		return err
+	}
+	if config.HTTP != nil {
+		return adapter.ValidateFactory(config.HTTPAdapterFactory, adapter.Requirements{
+			WebSocketUpgrade: config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0,
+		})
+	}
+	return nil
+}
+
+func serverOptions(options boot.HTTPOptions) adapter.ServerOptions {
+	return adapter.ServerOptions{
+		DisableRecover:    options.DisableRecover,
+		ReadHeaderTimeout: options.ReadHeaderTimeout,
+		ReadTimeout:       options.ReadTimeout,
+		WriteTimeout:      options.WriteTimeout,
+		IdleTimeout:       options.IdleTimeout,
+		MaxHeaderBytes:    options.MaxHeaderBytes,
+		MaxBodyBytes:      options.MaxBodyBytes,
+	}
+}
+
+func isNilHTTPValue(value any) bool {
+	if value == nil {
+		return true
+	}
+	v := reflect.ValueOf(value)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return v.IsNil()
+	default:
+		return false
+	}
 }
 
 func resolveGlobalInterceptors(ctr *container.Container, config Config) ([]core.Interceptor, []core.Interceptor, error) {
@@ -902,7 +362,7 @@ func waitConsumerError(errors <-chan error, done <-chan struct{}) error {
 }
 
 const (
-	spineVersion = "v0.5.2"
+	spineVersion = "v0.6.0"
 	spineBanner  = `
 ________       _____             
 __  ___/__________(_)___________ 

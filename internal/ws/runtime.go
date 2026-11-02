@@ -41,7 +41,6 @@ type normalizedWebSocketOptions struct {
 }
 
 type Runtime struct {
-	registry *Registry
 	pipeline *pipeline.Pipeline
 	options  normalizedWebSocketOptions
 	stopOnce sync.Once
@@ -86,10 +85,7 @@ func (c *trackedConn) writeControl(messageType int, data []byte, timeout time.Du
 	return c.conn.WriteControl(messageType, data, deadline)
 }
 
-func NewRuntime(registry *Registry, pipeline *pipeline.Pipeline, opts boot.WebSocketOptions, handshakeInterceptors ...core.WebSocketHandshakeInterceptor) *Runtime {
-	if registry == nil {
-		panic("ws: registry cannot be nil")
-	}
+func NewRuntime(pipeline *pipeline.Pipeline, opts boot.WebSocketOptions, handshakeInterceptors ...core.WebSocketHandshakeInterceptor) *Runtime {
 	if pipeline == nil {
 		panic("ws: pipeline cannot be nil")
 	}
@@ -97,7 +93,6 @@ func NewRuntime(registry *Registry, pipeline *pipeline.Pipeline, opts boot.WebSo
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Runtime{
-		registry:              registry,
 		pipeline:              pipeline,
 		options:               normalizeWebSocketOptions(opts),
 		ctx:                   ctx,
@@ -159,18 +154,6 @@ func (r *Runtime) upgrader() websocket.Upgrader {
 		CheckOrigin: func(req *http.Request) bool {
 			return isAllowedWebSocketOriginWithTrustedProxies(req, r.options.AllowedOrigins, r.options.TrustedProxies)
 		},
-	}
-}
-
-// Mount는 각 WebSocket 경로를 http.ServeMux에 등록합니다.
-func (r *Runtime) Mount(mux *http.ServeMux) {
-	for _, reg := range r.registry.Registrations() {
-		reg := reg
-		log.Printf("[WS] Registered path: %s", reg.Path)
-
-		mux.HandleFunc(reg.Path, func(w http.ResponseWriter, req *http.Request) {
-			r.HandleConn(w, req, reg)
-		})
 	}
 }
 
@@ -435,10 +418,6 @@ func (r *Runtime) untrackConn(connID string) {
 			r.connectionSlots--
 		}
 	}
-}
-
-func isAllowedWebSocketOrigin(req *http.Request, allowedOrigins []string) bool {
-	return isAllowedWebSocketOriginWithTrustedProxies(req, allowedOrigins, nil)
 }
 
 func isAllowedWebSocketOriginWithTrustedProxies(req *http.Request, allowedOrigins []string, trustedProxies []*net.IPNet) bool {

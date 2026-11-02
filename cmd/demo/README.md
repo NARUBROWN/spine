@@ -1,57 +1,75 @@
-# Spine v0.5 참고 애플리케이션
+# CLI 계약과 E2E를 공유하는 최소 예제
 
-`cmd/demo`는 v0.5의 안전한 기본 설정 계약을 보여 줍니다.
+`cmd/demo`는 브로커 없이 실행하는 HTTP/WS 예제입니다. CLI와 서버, E2E는 `application.BuildApplication()`을 함께 사용합니다.
+파일 업로드와 브로커 설정을 포함한 기존 예제는 [cmd/reference](../reference/README.md)에 보관합니다.
 
-- `Run` 전에 네트워크 연결 없이 수행하는 `App.Validate` 사전 검증
-- 명시적 출처를 사용하는 자격 증명 포함 CORS 검증
-- HTTP에만 적용되는 CORS 인터셉터 범위
-- 제한된 HTTP 및 WebSocket 기본값과 코드에 문서화된 선택적 조정 방법
-- Kafka TLS 1.2 이상 자동 적용과 안전하지 않은 로컬 연결의 명시적 허용
-- RabbitMQ 메시지 거부 기본값과 선택적 데드 레터 교환기
-- 제한된 컨슈머 재연결 기본값과 코드에 문서화된 선택적 조정 방법
+| 경로 | 확인할 동작 |
+|---|---|
+| `GET /health` | `{"status":"ok"}`와 준비 상태 |
+| `GET /users/:id` | 숫자 경로 인자 바인딩 |
+| `POST /echo` | JSON DTO 바인딩과 응답, 400/413/415 입력 오류 |
+| `GET /ws/echo` | 실제 WS 업그레이드와 메시지 echo |
 
-이 애플리케이션은 브로커 없이 HTTP/WebSocket 서비스로 실행됩니다.
+HTTP 본문 제한은 1024바이트입니다. WS는 기존 기본 제한과 동일 출처 정책을 사용합니다.
+E2E는 WS 연결을 열어 둔 상태에서 SIGINT를 보내 정상 종료와 close frame까지 확인합니다.
+시작 중 native 훅 및 HTTP 없는 custom transport Init에 신호가 도착하는 경우도 검사합니다.
+Prepare E2E는 같은 앱을 외부 HTTP 서버에 연결해 실제 HTTP/WS 처리와 Close, WS close frame 및 종료 후 새 요청의 503을 검사합니다. 외부 서버 listener는 호출자가 계속 소유합니다.
 
-```sh
-go run ./cmd/demo
-```
+## 실행
 
-기본 브라우저 출처는 `http://localhost:5173`입니다. 필요한 경우 다음과 같이 변경합니다.
-
-```sh
-SPINE_DEMO_ALLOWED_ORIGIN=https://app.example.com go run ./cmd/demo
-```
-
-운영 환경용 Kafka 연결에는 TLS가 자동으로 적용됩니다.
+저장소 루트에서 실행합니다.
 
 ```sh
-SPINE_DEMO_KAFKA_BROKERS=kafka-a.example:9093,kafka-b.example:9093 \
-go run ./cmd/demo
+spine run --root cmd/demo
 ```
 
-운영 환경의 RabbitMQ에는 `amqps://` URL을 사용해야 합니다. 자격 증명은 소스 관리에 포함하지 마십시오.
+Go로 직접 실행할 수도 있습니다.
 
 ```sh
-SPINE_DEMO_RABBITMQ_URL="$RABBITMQ_URL" \
-SPINE_DEMO_RABBITMQ_DLX=events.dlx \
-SPINE_DEMO_RABBITMQ_DLX_ROUTING_KEY=events.failed \
-go run ./cmd/demo
+go -C cmd/demo run .
 ```
 
-평문 브로커 연결은 로컬 개발 환경에서 명시적으로 허용해야 합니다.
+기본 주소는 `127.0.0.1:8080`입니다. CLI의 `SPINE_PORT`를 지원하며 `SPINE_DEMO_ADDRESS`가 있으면 그 주소를 우선합니다.
 
 ```sh
-SPINE_DEMO_ALLOW_INSECURE_BROKERS=true \
-SPINE_DEMO_KAFKA_BROKERS=localhost:9092 \
-SPINE_DEMO_RABBITMQ_URL=amqp://guest:guest@localhost:5672/ \
-go run ./cmd/demo
+SPINE_DEMO_ADDRESS=127.0.0.1:9000 spine run --root cmd/demo
 ```
 
-신뢰하는 리버스 프록시에서 TLS를 종료한다면 정확한 프록시 CIDR을 설정합니다.
+## 변경 후 필수 검증
+
+프레임워크 구현 단위가 끝날 때마다 아래 검사를 수행합니다. E2E에는 `-count=1`을 유지하여 이전 성공 결과를 재사용하지 않습니다.
 
 ```sh
-SPINE_DEMO_TRUSTED_PROXY_CIDRS=10.0.0.0/8,192.168.0.0/16 \
-go run ./cmd/demo
+spine context --root cmd/demo --json
+spine contract check --root cmd/demo --warnings-as-errors --json
+spine verify --root cmd/demo --warnings-as-errors --json
+spine contract probe --root cmd/demo --json
+go -C cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=90s
 ```
 
-프록시는 클라이언트가 보낸 `Forwarded` 및 `X-Forwarded-Proto` 헤더를 제거하거나 덮어써야 합니다.
+CLI 정적 계약 검사, 부분 runtime probe와 실제 네트워크 E2E 결과를 구분해서 기록합니다.
+SIGINT 검사는 Unix에서 실행하며 Windows에서는 해당 E2E를 생략합니다.
+
+## 통합 모듈과 CLI
+
+HTTP 구성은 `spine.New(platform.Option())`으로 Echo 통합 모듈을 명시적으로 선택합니다.
+이는 `platform.New()`와 같은 설정이며, 현재 CLI가 `spine.New(...)`를 시작점으로 찾는 규칙을 지킵니다.
+커널의 `spine.New()`만 호출하면 HTTP 구현이 선택되지 않습니다.
+
+예제는 독립 Go 모듈입니다. `go.mod`의 replace로 공개 계약을 포함한 현재 커널과 별도 Echo 플랫폼 모듈을 함께 사용합니다. 의존 버전은 공개 커밋의 Go 의사버전으로 고정하며 replace로 현재 소스를 검사합니다. 정식 버전 태그는 아직 발행하지 않았습니다.
+저장소 루트의 `go test ./...`는 이 중첩 모듈을 검사하지 않으므로 위 E2E 명령을 별도로 실행해야 합니다.
+프레임워크 자체의 전체 검사는 루트에서 `spine check --root .`로 수행합니다.
+
+전체 검증에서는 `../spine-echo-platform`, `test`, `cmd/reference`, `examples/security-config`의 테스트도 각각 실행하고 `bash scripts/check-module-boundaries.sh`로 의존 경계를 검사합니다.
+
+## 공개 모듈 소비자 검증
+
+공개 개발 스냅샷을 배포할 때는 저장소 루트에서 다음 명령도 실행합니다.
+
+```sh
+bash scripts/check-published-demo.sh
+```
+
+스크립트는 실제 demo를 임시 폴더에 복사하고 두 replace와 직접 선언한 Spine 의존성을 제거합니다. 플랫폼의 전이 의존성으로 필요한 Spine 버전을 선택하는지 확인합니다. go.work와 기존 모듈 캐시를 사용하지 않고 원래 go.mod에 고정한 공개 버전을 내려받아 모듈 정합성, vet와 전체 demo race 테스트를 검사합니다. 기존 HTTP/WS, SIGINT와 Prepare E2E를 그대로 사용합니다. 검사가 끝나면 임시 복사본과 모듈 캐시를 제거합니다.
+
+실행에는 Bash, Go와 공개 Go 모듈 다운로드를 위한 네트워크가 필요합니다. SIGINT E2E를 포함한 전체 검증은 Unix에서 실행합니다. 저장소의 go.mod와 replace는 변경하지 않습니다.

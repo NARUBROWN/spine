@@ -5,19 +5,16 @@ import (
 	"github.com/NARUBROWN/spine/internal/event/publish"
 )
 
+// PostExecutionHook은 컨트롤러와 응답 준비가 성공한 뒤에만 실행됩니다.
 type PostExecutionHook interface {
-	AfterExecution(ctx core.ExecutionContext, result []any, err error) error
+	AfterExecution(ctx core.ExecutionContext) error
 }
 
 type EventDispatchHook struct {
 	Dispatcher publish.EventDispatcher
 }
 
-func (h *EventDispatchHook) AfterExecution(ctx core.ExecutionContext, results []any, err error) error {
-	if err != nil {
-		return nil
-	}
-
+func (h *EventDispatchHook) AfterExecution(ctx core.ExecutionContext) error {
 	events := ctx.EventBus().Drain()
 	if len(events) == 0 {
 		return nil

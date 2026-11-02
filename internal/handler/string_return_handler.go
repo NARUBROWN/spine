@@ -52,14 +52,9 @@ func (h *StringReturnHandler) Handle(value any, ctx core.ExecutionContext) error
 		return fmt.Errorf("StringReturnHandler: value is not httpx.Response[string] or *httpx.Response[string]: %T", value)
 	}
 
-	rwAny, ok := ctx.Get("spine.response_writer")
-	if !ok {
-		return fmt.Errorf("ResponseWriter not found in ExecutionContext")
-	}
-
-	rw, ok := rwAny.(core.ResponseWriter)
-	if !ok {
-		return fmt.Errorf("invalid ResponseWriter type")
+	rw, writerErr := responseWriter(ctx)
+	if writerErr != nil {
+		return writerErr
 	}
 
 	serializedCookies, err := serializeCookiesValidated(resp.Options.Cookies)

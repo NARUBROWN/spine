@@ -2,8 +2,10 @@ package ws
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"sync"
 
 	"github.com/NARUBROWN/spine/core"
@@ -27,6 +29,8 @@ type WSExecutionContext struct {
 	messageType int
 	payload     []byte
 	eventBus    publish.EventBus
+	params      map[string]string
+	pathKeys    []string
 	store       map[string]any
 	request     *webSocketRequestSnapshot
 }
@@ -203,16 +207,17 @@ func (w *WSExecutionContext) Method() string {
 func (w *WSExecutionContext) Params() map[string]string {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	if raw, ok := w.store["spine.params"]; ok {
-		if params, ok := raw.(map[string]string); ok {
-			copyMap := make(map[string]string, len(params))
-			for k, v := range params {
-				copyMap[k] = v
-			}
-			return copyMap
-		}
+	if w.params == nil {
+		return map[string]string{}
 	}
-	return map[string]string{}
+	return maps.Clone(w.params)
+}
+
+func (w *WSExecutionContext) SetRoute(params map[string]string, pathKeys []string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.params = maps.Clone(params)
+	w.pathKeys = slices.Clone(pathKeys)
 }
 
 func (w *WSExecutionContext) Path() string {
@@ -222,12 +227,10 @@ func (w *WSExecutionContext) Path() string {
 func (w *WSExecutionContext) PathKeys() []string {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	if raw, ok := w.store["spine.pathKeys"]; ok {
-		if keys, ok := raw.([]string); ok {
-			return append([]string(nil), keys...)
-		}
+	if w.pathKeys == nil {
+		return []string{}
 	}
-	return []string{}
+	return slices.Clone(w.pathKeys)
 }
 
 func (w *WSExecutionContext) Payload() []byte {

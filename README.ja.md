@@ -1,6 +1,9 @@
 <p align="center">
-  <a href="README.md">한국어</a> | <a href="README.en.md">English</a> | 日本語 | <a href="README.zh-Hans.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a>
+  <a href="README.md">한국어</a> Spine `v0.6.0` は公開 HTTP 実行契約を提供し、Echo 実装を独立した `spine-echo-platform` モジュールに分離します。HTTP アプリは `platform.New()` で生成します。`spine.New()` は HTTP 実装を選択しません。[移行ガイド](docs/migration/http-adapter-modules.md)と[最小サンプル](cmd/demo/README.md)を参照してください。
 </p>
+
+> 未リリースの issue #9 開発ブランチでは、公開 HTTP 契約を Spine 内で管理し、Echo 統合を独立したプラットフォームモジュールとして提供します。HTTP アプリには `platform.New()` を使用し、カーネルの `spine.New()` は HTTP 実装を自動選択しません。[移行ガイド](docs/migration/http-adapter-modules.md)と[ローカル例](cmd/demo/README.md)を参照してください。
+
 
 # 🦴 Spine
 <p align="center">
@@ -63,6 +66,32 @@ GitHub Issuesは公開されます。機密情報を除いた概要や最小限�
 - シンプルなWebSocketチャットのサンプルプロジェクト: https://github.com/NARUBROWN/spine-simple-chat-demo
 
 ---
+
+## Echo プラットフォームでアプリを実行
+
+プラットフォームモジュールを選択し、Spine App の Run を呼び出します。
+
+```sh
+go get github.com/NARUBROWN/spine-echo-platform@v0.1.0
+```
+
+```go
+package main
+
+import (
+    "log"
+
+    platform "github.com/NARUBROWN/spine-echo-platform"
+    "github.com/NARUBROWN/spine/pkg/boot"
+)
+
+func main() {
+    app := platform.New()
+    if err := app.Run(boot.Options{Address: ":8080", HTTP: &boot.HTTPOptions{}}); err != nil {
+        log.Fatal(err)
+    }
+}
+```
 
 ## Spine CLI
 

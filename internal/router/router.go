@@ -96,8 +96,7 @@ func (r *DefaultRouter) Route(ctx core.ExecutionContext) (core.HandlerMeta, erro
 	}
 
 	if params != nil {
-		ctx.Set("spine.params", params)
-		ctx.Set("spine.pathKeys", append([]string(nil), node.meta.PathKeys...))
+		ctx.SetRoute(params, append([]string(nil), node.meta.PathKeys...))
 	}
 
 	return *node.meta, nil
@@ -135,40 +134,6 @@ func cloneParams(params map[string]string, capacity int) map[string]string {
 		cloned[key] = value
 	}
 	return cloned
-}
-
-func matchPath(pattern string, path string) (bool, map[string]string, []string) {
-	patternSegs := splitPath(pattern)
-	pathSegs := splitPath(path)
-
-	if len(patternSegs) != len(pathSegs) {
-		return false, nil, nil
-	}
-
-	var params map[string]string
-	var keys []string
-
-	for i := 0; i < len(patternSegs); i++ {
-		p := patternSegs[i]
-		v := pathSegs[i]
-
-		if isParamSegment(p) {
-			if params == nil {
-				params = make(map[string]string, len(patternSegs))
-				keys = make([]string, 0, len(patternSegs))
-			}
-			key := p[1:]
-			params[key] = v
-			keys = append(keys, key)
-			continue
-		}
-
-		if p != v {
-			return false, nil, nil
-		}
-	}
-
-	return true, params, keys
 }
 
 func splitPath(path string) []string {

@@ -2,6 +2,7 @@ package cors
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 )
 
 type testExecutionContext struct {
+	writer  core.ResponseWriter
 	method  string
 	headers map[string]string
 	store   map[string]any
@@ -49,7 +51,7 @@ func (w *testResponseWriter) WriteStatus(status int) error {
 	w.status = status
 	return nil
 }
-func (w *testResponseWriter) WriteJSON(status int, value any) error {
+func (w *testResponseWriter) WriteJSON(status int, value json.RawMessage) error {
 	w.status = status
 	return nil
 }
@@ -75,7 +77,7 @@ func TestCORSInterceptor_PreflightAllowedOrigin(t *testing.T) {
 	ctx.headers["Access-Control-Request-Method"] = "POST"
 
 	writer := newTestResponseWriter()
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	err := interceptor.PreHandle(ctx, core.HandlerMeta{})
 	if !errors.Is(err, core.ErrAbortPipeline) {
@@ -108,7 +110,7 @@ func TestCORSInterceptor_OrdinaryOptionsContinuesPipeline(t *testing.T) {
 	})
 	ctx := newTestExecutionContext("OPTIONS")
 	writer := newTestResponseWriter()
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	if err := interceptor.PreHandle(ctx, core.HandlerMeta{}); err != nil {
 		t.Fatalf("일반 OPTIONS 요청은 계속 진행해야 합니다: %v", err)
@@ -129,7 +131,7 @@ func TestCORSInterceptor_DisallowedOriginOmitsAllowOrigin(t *testing.T) {
 	ctx.headers["Origin"] = "https://evil.example"
 
 	writer := newTestResponseWriter()
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	if err := interceptor.PreHandle(ctx, core.HandlerMeta{}); err != nil {
 		t.Fatalf("예상하지 못한 에러입니다: %v", err)
@@ -170,7 +172,7 @@ func TestCORSInterceptor_WildcardNeverEnablesCredentials(t *testing.T) {
 	ctx := newTestExecutionContext("GET")
 	ctx.headers["Origin"] = "https://attacker.example"
 	writer := newTestResponseWriter()
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 	if err := interceptor.PreHandle(ctx, core.HandlerMeta{}); !errors.Is(err, ErrWildcardOriginWithCredentials) {
 		t.Fatalf("legacy constructor must surface validation error: %v", err)
 	}
@@ -187,3 +189,8 @@ func TestCORSInterceptor_NoResponseWriterIsNoop(t *testing.T) {
 		t.Fatalf("ResponseWriter가 없으면 no-op 이어야 합니다: %v", err)
 	}
 }
+
+func (c *testExecutionContext) SetRoute(params map[string]string, pathKeys []string) {}
+
+func (c *testExecutionContext) ResponseWriter() core.ResponseWriter          { return c.writer }
+func (c *testExecutionContext) SetResponseWriter(writer core.ResponseWriter) { c.writer = writer }

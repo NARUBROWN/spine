@@ -13,9 +13,16 @@ on:
 permissions:
   contents: read
 
+env:
+  GOWORK: "off"
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: spine
 
 jobs:
   quality:
@@ -25,35 +32,63 @@ jobs:
     env:
       GOCACHE: ${{ github.workspace }}/.cache/go-build
     steps:
-      - name: Checkout
+      - name: Checkout Spine
         uses: actions/checkout@v4
+        with:
+          path: spine
+
+      - name: Checkout Echo integration
+        uses: actions/checkout@v4
+        with:
+          repository: NARUBROWN/spine-echo-platform
+          ref: 0a80ce357ba5f8ace4c355674d2e691ae33d5a27
+          path: spine-echo-platform
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          go-version-file: spine/go.mod
+          cache-dependency-path: "**/go.sum"
 
       - name: Download dependencies
         run: go mod download
 
       - name: Check formatting
         run: |
-          unformatted=$(gofmt -l .)
+          unformatted=$(gofmt -l . ../spine-echo-platform)
           if [ -n "$unformatted" ]; then
             echo "The following files are not formatted:"
             echo "$unformatted"
             exit 1
           fi
 
+      - name: Prepare platform workspace
+        shell: bash
+        run: |
+          platform_workspace="$RUNNER_TEMP/spine-platform"
+          mkdir -p "$platform_workspace"
+          go -C "$platform_workspace" work init "$GITHUB_WORKSPACE/spine" "$GITHUB_WORKSPACE/spine-echo-platform"
+          local_spine=$(GOWORK="$platform_workspace/go.work" go -C ../spine-echo-platform list -m -f '{{.Main}}' github.com/NARUBROWN/spine)
+          test "$local_spine" = true
+
       - name: Run go vet
-        run: go vet ./...
+        run: |
+          for module in . test cmd/demo cmd/reference examples/security-config; do
+            go -C "$module" vet ./...
+          done
+          GOWORK="$RUNNER_TEMP/spine-platform/go.work" go -C ../spine-echo-platform vet ./...
+          bash scripts/check-module-boundaries.sh
 
       - name: Check module files
         run: |
-          go mod verify
-          go mod tidy
-          git diff --exit-code -- go.mod go.sum
+          for module in . ../spine-echo-platform test cmd/demo cmd/reference examples/security-config; do
+            go -C "$module" mod verify
+            go -C "$module" mod tidy
+          done
+          git diff --exit-code -- go.mod go.sum ':(glob)**/go.mod' ':(glob)**/go.sum'
+          git -C ../spine-echo-platform diff --exit-code -- go.mod go.sum
+          test "$(go -C ../spine-echo-platform list -m -f '{{.Main}}' github.com/NARUBROWN/spine)" = false
+          test -z "$(go -C ../spine-echo-platform list -m -f '{{if .Replace}}{{.Path}}{{end}}' all)"
 
   unit:
     name: Unit Tests (${{ matrix.os }})
@@ -66,27 +101,44 @@ jobs:
     env:
       GOCACHE: ${{ github.workspace }}/.cache/go-build
     steps:
-      - name: Checkout
+      - name: Checkout Spine
         uses: actions/checkout@v4
+        with:
+          path: spine
+
+      - name: Checkout Echo integration
+        uses: actions/checkout@v4
+        with:
+          repository: NARUBROWN/spine-echo-platform
+          ref: 0a80ce357ba5f8ace4c355674d2e691ae33d5a27
+          path: spine-echo-platform
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          go-version-file: spine/go.mod
+          cache-dependency-path: "**/go.sum"
 
       - name: Download dependencies
         run: go mod download
 
+      - name: Prepare platform workspace
+        shell: bash
+        run: |
+          platform_workspace="$RUNNER_TEMP/spine-platform"
+          mkdir -p "$platform_workspace"
+          go -C "$platform_workspace" work init "$GITHUB_WORKSPACE/spine" "$GITHUB_WORKSPACE/spine-echo-platform"
+          local_spine=$(GOWORK="$platform_workspace/go.work" go -C ../spine-echo-platform list -m -f '{{.Main}}' github.com/NARUBROWN/spine)
+          test "$local_spine" = true
+
       - name: Run unit tests
         shell: bash
         run: |
-          packages=$(go list ./... | grep -v '/test$')
-          if [ -z "$packages" ]; then
-            echo "No package to test."
-            exit 0
-          fi
-          go test $packages -count=1 -shuffle=on -timeout=8m
+          for module in . cmd/reference examples/security-config; do
+            go -C "$module" test ./... -count=1 -shuffle=on -timeout=8m
+          done
+          GOWORK="$RUNNER_TEMP/spine-platform/go.work" go -C ../spine-echo-platform test ./... -count=1 -shuffle=on -timeout=8m
+          go -C cmd/demo test ./... -run '^TestBuildApplication$' -count=1 -shuffle=on -timeout=8m
 
   integration:
     name: Integration Tests (${{ matrix.os }})
@@ -99,20 +151,29 @@ jobs:
     env:
       GOCACHE: ${{ github.workspace }}/.cache/go-build
     steps:
-      - name: Checkout
+      - name: Checkout Spine
         uses: actions/checkout@v4
+        with:
+          path: spine
+
+      - name: Checkout Echo integration
+        uses: actions/checkout@v4
+        with:
+          repository: NARUBROWN/spine-echo-platform
+          ref: 0a80ce357ba5f8ace4c355674d2e691ae33d5a27
+          path: spine-echo-platform
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          go-version-file: spine/go.mod
+          cache-dependency-path: "**/go.sum"
 
       - name: Download dependencies
         run: go mod download
 
       - name: Run integration tests
-        run: go test ./test -run '^TestAppIntegration_' -count=1 -shuffle=on -timeout=8m
+        run: go -C test test ./... -run '^TestAppIntegration_' -count=1 -shuffle=on -timeout=8m
 
   e2e:
     name: End-to-End Tests (${{ matrix.os }})
@@ -125,20 +186,42 @@ jobs:
     env:
       GOCACHE: ${{ github.workspace }}/.cache/go-build
     steps:
-      - name: Checkout
+      - name: Checkout Spine
         uses: actions/checkout@v4
+        with:
+          path: spine
+
+      - name: Checkout Echo integration
+        uses: actions/checkout@v4
+        with:
+          repository: NARUBROWN/spine-echo-platform
+          ref: 0a80ce357ba5f8ace4c355674d2e691ae33d5a27
+          path: spine-echo-platform
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          go-version-file: spine/go.mod
+          cache-dependency-path: "**/go.sum"
 
       - name: Download dependencies
         run: go mod download
 
-      - name: Run real-network E2E tests
-        run: go test ./test -run '^TestAppE2E_' -count=1 -timeout=8m
+      - name: Download demo dependencies
+        run: go -C cmd/demo mod download
+
+      - name: Install pinned Spine CLI
+        run: go install github.com/NARUBROWN/spine-cli/cmd/spine@f577772078d56595c179c6c53c46ee78cfeea4fa
+
+      - name: Verify demo CLI contract
+        run: |
+          spine context --root cmd/demo --json
+          spine contract check --root cmd/demo --warnings-as-errors --json
+          spine verify --root cmd/demo --warnings-as-errors --json
+          spine contract probe --root cmd/demo --json
+
+      - name: Run real-network demo E2E tests
+        run: go -C cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=8m
 
   race:
     name: Race Detector (Go 1.27.3)
@@ -147,17 +230,39 @@ jobs:
     env:
       GOCACHE: ${{ github.workspace }}/.cache/go-build
     steps:
-      - name: Checkout
+      - name: Checkout Spine
         uses: actions/checkout@v4
+        with:
+          path: spine
+
+      - name: Checkout Echo integration
+        uses: actions/checkout@v4
+        with:
+          repository: NARUBROWN/spine-echo-platform
+          ref: 0a80ce357ba5f8ace4c355674d2e691ae33d5a27
+          path: spine-echo-platform
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.27.3'
-          cache-dependency-path: go.sum
+          cache-dependency-path: "**/go.sum"
 
       - name: Download dependencies
         run: go mod download
 
+      - name: Prepare platform workspace
+        shell: bash
+        run: |
+          platform_workspace="$RUNNER_TEMP/spine-platform"
+          mkdir -p "$platform_workspace"
+          go -C "$platform_workspace" work init "$GITHUB_WORKSPACE/spine" "$GITHUB_WORKSPACE/spine-echo-platform"
+          local_spine=$(GOWORK="$platform_workspace/go.work" go -C ../spine-echo-platform list -m -f '{{.Main}}' github.com/NARUBROWN/spine)
+          test "$local_spine" = true
+
       - name: Run race detector
-        run: go test -race ./... -count=1 -shuffle=on -timeout=12m
+        run: |
+          for module in . test cmd/demo cmd/reference examples/security-config; do
+            go -C "$module" test -race ./... -count=1 -shuffle=on -timeout=12m
+          done
+          GOWORK="$RUNNER_TEMP/spine-platform/go.work" go -C ../spine-echo-platform test -race ./... -count=1 -shuffle=on -timeout=12m

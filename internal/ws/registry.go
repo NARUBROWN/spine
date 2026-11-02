@@ -2,6 +2,7 @@ package ws
 
 import (
 	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/NARUBROWN/spine/core"
@@ -52,4 +53,17 @@ func (r *Registry) Registrations() []Registration {
 	cpy := make([]Registration, len(r.registrations))
 	copy(cpy, r.registrations)
 	return cpy
+}
+
+// Snapshot은 등록 목록과 메타데이터 slice를 복사해 준비 결과를 원본 등록 변경에서 분리합니다.
+// 컨트롤러와 인터셉터 인스턴스 자체는 복제하지 않습니다.
+func (r *Registry) Snapshot() *Registry {
+	snapshot := NewRegistry()
+	snapshot.registrations = r.Registrations()
+	for i := range snapshot.registrations {
+		meta := &snapshot.registrations[i].Meta
+		meta.PathKeys = slices.Clone(meta.PathKeys)
+		meta.Interceptors = slices.Clone(meta.Interceptors)
+	}
+	return snapshot
 }

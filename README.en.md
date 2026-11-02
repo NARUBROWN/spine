@@ -1,6 +1,9 @@
 <p align="center">
-  <a href="README.md">한국어</a> | English | <a href="README.ja.md">日本語</a> | <a href="README.zh-Hans.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a>
+  <a href="README.md">한국어</a> Spine `v0.6.0` provides a public HTTP execution contract and a separate `spine-echo-platform` module. Create HTTP apps with `platform.New()`; `spine.New()` selects no HTTP implementation. See the [migration guide](docs/migration/http-adapter-modules.md) and [minimal demo](cmd/demo/README.md).
 </p>
+
+> The unreleased issue #9 development branch keeps the public HTTP contract in Spine and distributes the Echo integration as a separate platform module. Create HTTP apps with `platform.New()`; kernel `spine.New()` selects no HTTP implementation. See the [migration guide](docs/migration/http-adapter-modules.md) and [local demo](cmd/demo/README.md).
+
 
 # 🦴 Spine
 <p align="center">
@@ -63,6 +66,32 @@ GitHub Issues are public. Share a sanitized summary or minimal reproduction with
 - Simple WebSocket chat example project: https://github.com/NARUBROWN/spine-simple-chat-demo
 
 ---
+
+## Run an app with the Echo platform
+
+Select the platform module and call Run on the Spine App.
+
+```sh
+go get github.com/NARUBROWN/spine-echo-platform@v0.1.0
+```
+
+```go
+package main
+
+import (
+    "log"
+
+    platform "github.com/NARUBROWN/spine-echo-platform"
+    "github.com/NARUBROWN/spine/pkg/boot"
+)
+
+func main() {
+    app := platform.New()
+    if err := app.Run(boot.Options{Address: ":8080", HTTP: &boot.HTTPOptions{}}); err != nil {
+        log.Fatal(err)
+    }
+}
+```
 
 ## Spine CLI
 

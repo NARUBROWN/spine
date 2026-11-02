@@ -64,25 +64,6 @@ func (c *testExecutionContext) Get(key string) (any, bool)   { return nil, false
 
 var _ internalpublish.EventDispatcher = (*testDispatcher)(nil)
 
-func TestEventDispatchHook_IgnoresPriorError(t *testing.T) {
-	bus := &testEventBus{}
-	bus.Publish(testDomainEvent{name: "order.created", at: time.Now()})
-
-	dispatcher := &testDispatcher{}
-	hook := &EventDispatchHook{Dispatcher: dispatcher}
-
-	err := hook.AfterExecution(&testExecutionContext{bus: bus}, nil, errors.New("controller failed"))
-	if err != nil {
-		t.Fatalf("기존 에러가 있으면 hook은 no-op 이어야 합니다: %v", err)
-	}
-	if dispatcher.called != 0 {
-		t.Fatal("기존 에러가 있으면 dispatch 하면 안 됩니다")
-	}
-	if bus.drainCalls != 0 {
-		t.Fatal("기존 에러가 있으면 bus를 drain 하면 안 됩니다")
-	}
-}
-
 func TestEventDispatchHook_DispatchesEvents(t *testing.T) {
 	bus := &testEventBus{}
 	event := testDomainEvent{name: "order.created", at: time.Now()}
@@ -91,7 +72,7 @@ func TestEventDispatchHook_DispatchesEvents(t *testing.T) {
 	dispatcher := &testDispatcher{}
 	hook := &EventDispatchHook{Dispatcher: dispatcher}
 
-	if err := hook.AfterExecution(&testExecutionContext{bus: bus}, nil, nil); err != nil {
+	if err := hook.AfterExecution(&testExecutionContext{bus: bus}); err != nil {
 		t.Fatalf("예상하지 못한 에러입니다: %v", err)
 	}
 	if dispatcher.called != 1 {
@@ -109,7 +90,7 @@ func TestEventDispatchHook_PropagatesDispatcherError(t *testing.T) {
 	dispatcher := &testDispatcher{err: errors.New("publish failed")}
 	hook := &EventDispatchHook{Dispatcher: dispatcher}
 
-	err := hook.AfterExecution(&testExecutionContext{bus: bus}, nil, nil)
+	err := hook.AfterExecution(&testExecutionContext{bus: bus})
 	if err == nil || err.Error() != "publish failed" {
 		t.Fatalf("dispatcher 에러가 전파되어야 합니다: %v", err)
 	}
@@ -119,10 +100,12 @@ func TestEventDispatchHook_NoEventsIsNoop(t *testing.T) {
 	dispatcher := &testDispatcher{}
 	hook := &EventDispatchHook{Dispatcher: dispatcher}
 
-	if err := hook.AfterExecution(&testExecutionContext{bus: &testEventBus{}}, nil, nil); err != nil {
+	if err := hook.AfterExecution(&testExecutionContext{bus: &testEventBus{}}); err != nil {
 		t.Fatalf("이벤트가 없으면 no-op 이어야 합니다: %v", err)
 	}
 	if dispatcher.called != 0 {
 		t.Fatal("이벤트가 없으면 dispatch 하면 안 됩니다")
 	}
 }
+
+func (c *testExecutionContext) SetRoute(params map[string]string, pathKeys []string) {}

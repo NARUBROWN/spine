@@ -207,13 +207,13 @@ type runtimeTestPostHook struct {
 	err error
 }
 
-func (h *runtimeTestPostHook) AfterExecution(ctx core.ExecutionContext, result []any, err error) error {
+func (h *runtimeTestPostHook) AfterExecution(ctx core.ExecutionContext) error {
 	return h.err
 }
 
 type failOnceRuntimeTestPostHook struct{ calls atomic.Int32 }
 
-func (h *failOnceRuntimeTestPostHook) AfterExecution(core.ExecutionContext, []any, error) error {
+func (h *failOnceRuntimeTestPostHook) AfterExecution(core.ExecutionContext) error {
 	if h.calls.Add(1) == 1 {
 		return errors.New("first delivery fails")
 	}

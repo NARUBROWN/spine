@@ -107,26 +107,12 @@ func TestRouter_RouteMatchesPathAndInjectsPathArgs(t *testing.T) {
 		t.Fatalf("예상한 메서드와 일치하지 않습니다: %s", got.Method.Name)
 	}
 
-	paramsAny, ok := ctx.Get("spine.params")
-	if !ok {
-		t.Fatal("spine.params가 컨텍스트에 주입되지 않았습니다")
-	}
-	params, ok := paramsAny.(map[string]string)
-	if !ok {
-		t.Fatalf("spine.params 타입이 잘못되었습니다: %T", paramsAny)
-	}
+	params := ctx.Params()
 	if params["id"] != "42" {
 		t.Fatalf("path 파라미터 id가 잘못되었습니다: %q", params["id"])
 	}
 
-	pathKeysAny, ok := ctx.Get("spine.pathKeys")
-	if !ok {
-		t.Fatal("spine.pathKeys가 컨텍스트에 주입되지 않았습니다")
-	}
-	pathKeys, ok := pathKeysAny.([]string)
-	if !ok {
-		t.Fatalf("spine.pathKeys 타입이 잘못되었습니다: %T", pathKeysAny)
-	}
+	pathKeys := ctx.PathKeys()
 	if len(pathKeys) != 1 || pathKeys[0] != "id" {
 		t.Fatalf("pathKeys 값이 잘못되었습니다: %v", pathKeys)
 	}
@@ -151,6 +137,23 @@ func TestRouter_RouteRequiresMethodAndPathMatch(t *testing.T) {
 	}
 }
 
+func TestRouter_DoesNotExposeCanonicalPathKeysToContext(t *testing.T) {
+	r := NewRouter()
+	r.Register("GET", "/users/:id", testHandlerMeta("List"))
+	first := newTestExecutionContext("GET", "/users/1")
+	meta, err := r.Route(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 이 테스트 대역은 입력 슬라이스를 그대로 보관하므로 라우터 경계를 검증합니다.
+	first.pathKeys[0] = "mutated"
+	second := newTestExecutionContext("GET", "/users/2")
+	next, err := r.Route(second)
+	if err != nil || meta.PathKeys[0] != "id" || next.PathKeys[0] != "id" || second.PathKeys()[0] != "id" {
+		t.Fatalf("한 요청이 라우터 메타데이터와 다음 요청의 키를 바꾸면 안 됩니다: first=%v next=%v err=%v", meta.PathKeys, next.PathKeys, err)
+	}
+}
+
 func TestRouter_BacktracksFromStaticDeadEndToParameterRoute(t *testing.T) {
 	r := NewRouter()
 	r.Register("GET", "/files/static/metadata", testHandlerMeta("List"))
@@ -164,9 +167,9 @@ func TestRouter_BacktracksFromStaticDeadEndToParameterRoute(t *testing.T) {
 	if got.Method.Name != "Create" {
 		t.Fatalf("parameter route가 선택되어야 합니다: %s", got.Method.Name)
 	}
-	paramsAny, ok := ctx.Get("spine.params")
-	if !ok || paramsAny.(map[string]string)["name"] != "static" {
-		t.Fatalf("backtrack한 parameter 값이 보존되어야 합니다: %#v", paramsAny)
+	params := ctx.Params()
+	if params["name"] != "static" {
+		t.Fatalf("backtrack한 parameter 값이 보존되어야 합니다: %#v", params)
 	}
 }
 
@@ -208,21 +211,47 @@ func TestSplitPath(t *testing.T) {
 }
 
 func TestMatchPathWithParams(t *testing.T) {
-	ok, params, keys := matchPath("/team/:teamId/user/:userId", "/team/alpha/user/7")
-	if !ok {
-		t.Fatal("매칭되어야 합니다")
+	r := NewRouter()
+	r.Register("GET", "/team/:teamId/user/:userId", testHandlerMeta("List"))
+	ctx := newTestExecutionContext("GET", "/team/alpha/user/7")
+	meta, err := r.Route(ctx)
+	if err != nil {
+		t.Fatalf("매칭되어야 합니다: %v", err)
 	}
+	params := ctx.Params()
 	if params["teamId"] != "alpha" || params["userId"] != "7" {
 		t.Fatalf("파라미터 매핑이 잘못되었습니다: %v", params)
 	}
+	keys := ctx.PathKeys()
 	if len(keys) != 2 || keys[0] != "teamId" || keys[1] != "userId" {
 		t.Fatalf("path key 순서가 잘못되었습니다: %v", keys)
+	}
+	if !reflect.DeepEqual(meta.PathKeys, keys) {
+		t.Fatalf("핸들러의 PathKeys와 주입된 경로 키가 일치해야 합니다: %v, %v", meta.PathKeys, keys)
 	}
 }
 
 func TestMatchPathMismatch(t *testing.T) {
-	ok, _, _ := matchPath("/team/:id", "/team")
-	if ok {
+	r := NewRouter()
+	r.Register("GET", "/team/:id", testHandlerMeta("List"))
+	ctx := newTestExecutionContext("GET", "/team")
+	_, err := r.Route(ctx)
+	if err == nil {
 		t.Fatal("세그먼트 길이가 다르면 매칭되면 안 됩니다")
 	}
+	var httpErr *httperr.HTTPError
+	if !errors.As(err, &httpErr) || httpErr.Status != 404 {
+		t.Fatalf("세그먼트 길이가 다르면 404 오류여야 합니다: %v", err)
+	}
+	if value := ctx.Params(); len(value) != 0 {
+		t.Fatalf("매칭 실패 시 경로 파라미터를 주입하면 안 됩니다: %v", value)
+	}
+	if value := ctx.PathKeys(); len(value) != 0 {
+		t.Fatalf("매칭 실패 시 경로 키를 주입하면 안 됩니다: %v", value)
+	}
+}
+
+func (c *testExecutionContext) SetRoute(params map[string]string, pathKeys []string) {
+	c.params = params
+	c.pathKeys = pathKeys
 }

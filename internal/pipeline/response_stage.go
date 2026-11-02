@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/handler"
 )
 
 type stagedBodyKind uint8
@@ -65,28 +66,30 @@ func (w *stagedResponseWriter) IsCommitted() bool {
 }
 
 func (w *stagedResponseWriter) WriteStatus(status int) error {
-	if err := validateResponseStatus(status); err != nil {
+	if err := handler.ValidateStatus(status); err != nil {
 		return err
 	}
 	w.setPreparedResponse(stagedBodyStatus, status)
 	return nil
 }
 
-func (w *stagedResponseWriter) WriteJSON(status int, value any) error {
-	if err := validateResponseStatus(status); err != nil {
+func (w *stagedResponseWriter) WriteJSON(status int, value json.RawMessage) error {
+	if err := handler.ValidateStatus(status); err != nil {
 		return err
 	}
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		return fmt.Errorf("serialize JSON response: %w", err)
+	if value == nil {
+		value = json.RawMessage("null")
+	}
+	if !json.Valid(value) {
+		return fmt.Errorf("serialize JSON response: invalid JSON payload")
 	}
 	w.setPreparedResponse(stagedBodyJSON, status)
-	w.jsonBody = append(w.jsonBody[:0], encoded...)
+	w.jsonBody = append(w.jsonBody[:0], value...)
 	return nil
 }
 
 func (w *stagedResponseWriter) WriteString(status int, value string) error {
-	if err := validateResponseStatus(status); err != nil {
+	if err := handler.ValidateStatus(status); err != nil {
 		return err
 	}
 	w.setPreparedResponse(stagedBodyString, status)
@@ -95,18 +98,11 @@ func (w *stagedResponseWriter) WriteString(status int, value string) error {
 }
 
 func (w *stagedResponseWriter) WriteBytes(status int, value []byte) error {
-	if err := validateResponseStatus(status); err != nil {
+	if err := handler.ValidateStatus(status); err != nil {
 		return err
 	}
 	w.setPreparedResponse(stagedBodyBytes, status)
 	w.bytesBody = append(w.bytesBody[:0], value...)
-	return nil
-}
-
-func validateResponseStatus(status int) error {
-	if status < 100 || status > 599 {
-		return fmt.Errorf("invalid HTTP response status %d", status)
-	}
 	return nil
 }
 

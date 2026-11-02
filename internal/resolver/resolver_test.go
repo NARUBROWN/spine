@@ -391,3 +391,8 @@ func TestUploadedFilesResolver_PropagatesMultipartError(t *testing.T) {
 		t.Fatalf("Multipart 에러가 전파되어야 합니다: %v", err)
 	}
 }
+
+func (c *fakeHttpCtx) SetRoute(params map[string]string, pathKeys []string) {
+	c.params = params
+	c.pathKeys = pathKeys
+}
