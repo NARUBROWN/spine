@@ -4,12 +4,13 @@ package adapter
 
 import (
 	"context"
+	"encoding/json"
 	"mime/multipart"
 	"net"
 	"net/http"
 )
 
-const ContractVersion = "spine.http-adapter/v1"
+const ContractVersion = "spine.http-adapter/v2"
 
 // HTTPContext는 HTTP 요청 하나의 입력과 실제 응답 writer를 제공합니다.
 // 요청 store, 라우팅 결과와 도메인 이벤트 버스는 커널이 별도 뷰에 추가합니다.
@@ -34,7 +35,8 @@ type ResponseWriter interface {
 	AddHeader(key, value string)
 	IsCommitted() bool
 	WriteStatus(int) error
-	WriteJSON(int, any) error
+	// WriteJSON는 커널에서 직렬화한 JSON을 출력합니다. 사용자 DTO를 받지 않습니다.
+	WriteJSON(int, json.RawMessage) error
 	WriteString(int, string) error
 	WriteBytes(int, []byte) error
 }
@@ -51,10 +53,9 @@ type UpgradeRoute struct {
 
 // Config는 리스너 없이 어댑터 인스턴스를 준비하는 설정입니다.
 type Config struct {
-	Options     ServerOptions
-	Execute     ExecuteFunc
-	Upgrades    []UpgradeRoute
-	NativeHooks []func(any)
+	Options  ServerOptions
+	Execute  ExecuteFunc
+	Upgrades []UpgradeRoute
 }
 
 // Factory는 지원 기능을 선언하고 새 어댑터를 구성합니다.

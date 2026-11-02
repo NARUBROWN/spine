@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"testing"
 	"time"
@@ -12,7 +13,8 @@ import (
 )
 
 type fakeExecutionContext struct {
-	store map[string]any
+	writer core.ResponseWriter
+	store  map[string]any
 }
 
 func newFakeExecutionContext() *fakeExecutionContext {
@@ -34,7 +36,7 @@ type fakeResponseWriter struct {
 	headers          map[string]string
 	setCookies       []string
 	status           int
-	jsonBody         any
+	jsonBody         json.RawMessage
 	stringBody       string
 	bytesBody        []byte
 	writeJSONCalls   int
@@ -59,7 +61,7 @@ func (w *fakeResponseWriter) WriteStatus(status int) error {
 	w.status = status
 	return nil
 }
-func (w *fakeResponseWriter) WriteJSON(status int, value any) error {
+func (w *fakeResponseWriter) WriteJSON(status int, value json.RawMessage) error {
 	w.status = status
 	w.jsonBody = value
 	w.writeJSONCalls++
@@ -92,7 +94,7 @@ func TestJSONReturnHandler_Handle(t *testing.T) {
 	h := &JSONReturnHandler{}
 	ctx := newFakeExecutionContext()
 	writer := newFakeWriter()
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	resp := httpx.Response[int]{
 		Body: 7,
@@ -106,7 +108,7 @@ func TestJSONReturnHandler_Handle(t *testing.T) {
 	if err := h.Handle(resp, ctx); err != nil {
 		t.Fatalf("JSONReturnHandler Handle 실패: %v", err)
 	}
-	if writer.status != 201 || writer.jsonBody != 7 {
+	if writer.status != 201 || string(writer.jsonBody) != "7" {
 		t.Fatalf("JSON 응답이 잘못되었습니다: status=%d body=%v", writer.status, writer.jsonBody)
 	}
 	if writer.headers["X-Test"] != "1" {
@@ -128,7 +130,7 @@ func TestStringReturnHandler_SupportsAndHandle(t *testing.T) {
 
 	ctx := newFakeExecutionContext()
 	writer := newFakeWriter()
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	resp := httpx.Response[string]{
 		Body:    "ok",
@@ -157,7 +159,7 @@ func TestStringReturnHandler_InvalidValues(t *testing.T) {
 	h := &StringReturnHandler{}
 	ctx := newFakeExecutionContext()
 	writer := newFakeWriter()
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	if err := h.Handle((*httpx.Response[string])(nil), ctx); err == nil {
 		t.Fatal("nil 포인터는 에러여야 합니다")
@@ -171,7 +173,7 @@ func TestBinaryReturnHandler_Handle(t *testing.T) {
 	h := &BinaryReturnHandler{}
 	ctx := newFakeExecutionContext()
 	writer := newFakeWriter()
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	bin := httpx.Binary{
 		ContentType: "image/png",
@@ -215,7 +217,7 @@ func TestRedirectReturnHandler_RejectsInjectedCookieWithoutPartialResponse(t *te
 	h := &RedirectReturnValueHandler{}
 	ctx := newFakeExecutionContext()
 	writer := newFakeWriter()
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	err := h.Handle(httpx.Redirect{
 		Location: "/target",
@@ -272,7 +274,7 @@ func TestResponseHandlers_RejectInvalidCookieWithoutPartialResponse(t *testing.T
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := newFakeExecutionContext()
 			writer := newFakeWriter()
-			ctx.Set("spine.response_writer", writer)
+			ctx.SetResponseWriter(writer)
 
 			err := tt.handle(ctx)
 			if err == nil {
@@ -327,7 +329,7 @@ func TestBinaryReturnHandler_InvalidType(t *testing.T) {
 	h := &BinaryReturnHandler{}
 	ctx := newFakeExecutionContext()
 	writer := newFakeWriter()
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	if err := h.Handle("not-binary", ctx); err == nil {
 		t.Fatal("잘못된 타입은 에러여야 합니다")
@@ -338,7 +340,7 @@ func TestRedirectReturnValueHandler_Handle(t *testing.T) {
 	h := &RedirectReturnValueHandler{}
 	ctx := newFakeExecutionContext()
 	writer := newFakeWriter()
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	expires := time.Unix(1700000000, 0)
 	redirect := httpx.Redirect{
@@ -410,7 +412,7 @@ func TestErrorReturnHandler_HTTPError(t *testing.T) {
 	h := &ErrorReturnHandler{}
 	ctx := newFakeExecutionContext()
 	writer := newFakeWriter()
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	err := httperr.BadRequest("bad")
 	if err := h.Handle(err, ctx); err != nil {
@@ -419,7 +421,10 @@ func TestErrorReturnHandler_HTTPError(t *testing.T) {
 	if writer.status != 400 {
 		t.Fatalf("HTTPError 상태 코드가 잘못되었습니다: %d", writer.status)
 	}
-	body := writer.jsonBody.(map[string]any)
+	var body map[string]string
+	if err := json.Unmarshal(writer.jsonBody, &body); err != nil {
+		t.Fatal(err)
+	}
 	if body["message"] != "bad" {
 		t.Fatalf("메시지가 잘못되었습니다: %v", body)
 	}
@@ -429,7 +434,7 @@ func TestErrorReturnHandler_GenericError(t *testing.T) {
 	h := &ErrorReturnHandler{}
 	ctx := newFakeExecutionContext()
 	writer := newFakeWriter()
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	if err := h.Handle(customErr{"boom"}, ctx); err != nil {
 		t.Fatalf("ErrorReturnHandler 실패: %v", err)
@@ -437,7 +442,10 @@ func TestErrorReturnHandler_GenericError(t *testing.T) {
 	if writer.status != 500 {
 		t.Fatalf("기본 상태 코드는 500이어야 합니다: %d", writer.status)
 	}
-	body := writer.jsonBody.(map[string]any)
+	var body map[string]string
+	if err := json.Unmarshal(writer.jsonBody, &body); err != nil {
+		t.Fatal(err)
+	}
 	if body["message"] != "Internal server error" {
 		t.Fatalf("메시지가 잘못되었습니다: %v", body)
 	}
@@ -445,3 +453,8 @@ func TestErrorReturnHandler_GenericError(t *testing.T) {
 		t.Fatal("일반 오류 원문이 응답에 노출되었습니다")
 	}
 }
+
+func (c *fakeExecutionContext) SetRoute(params map[string]string, pathKeys []string) {}
+
+func (c *fakeExecutionContext) ResponseWriter() core.ResponseWriter          { return c.writer }
+func (c *fakeExecutionContext) SetResponseWriter(writer core.ResponseWriter) { c.writer = writer }

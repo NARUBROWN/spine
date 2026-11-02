@@ -34,14 +34,9 @@ func (h *RedirectReturnValueHandler) Handle(value any, ctx core.ExecutionContext
 		return fmt.Errorf("RedirectReturnValueHandler: value is not an httpx.Redirect")
 	}
 
-	rwAny, ok := ctx.Get("spine.response_writer")
-	if !ok {
-		return fmt.Errorf("ResponseWriter not found in ExecutionContext")
-	}
-
-	rw, ok := rwAny.(core.ResponseWriter)
-	if !ok {
-		return fmt.Errorf("invalid ResponseWriter type")
+	rw, writerErr := responseWriter(ctx)
+	if writerErr != nil {
+		return writerErr
 	}
 
 	serializedCookies, err := serializeCookiesValidated(redirect.Options.Cookies)

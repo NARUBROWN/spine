@@ -22,12 +22,12 @@ type App interface {
 	Interceptor(interceptors ...core.Interceptor)
 	// InterceptorFor는 선택한 기본 전송 방식에 전역 인터셉터를 등록합니다.
 	InterceptorFor(scope boot.InterceptorScope, interceptors ...core.Interceptor)
-	// HTTP 전송 방식 확장(Echo 등)
-	Transport(fn func(any))
 	// 독립 실행되는 사용자 정의 전송 방식 등록
 	RegisterTransport(t core.CustomTransport)
 	// Validate는 네트워크 연결을 열지 않고 애플리케이션 설정을 검사합니다.
 	Validate(opts boot.Options) error
+	// Prepare는 리스너 없이 앱을 준비합니다. 반환한 결과는 호출자가 Close해야 합니다.
+	Prepare(ctx context.Context, opts boot.Options) (PreparedApplication, error)
 	// 실행
 	Run(opts boot.Options) error
 	// RunContext는 context가 취소될 때 정상 종료를 시작합니다.
@@ -42,7 +42,6 @@ type app struct {
 	constructors       []any
 	routes             []router.RouteSpec
 	interceptors       []bootstrap.InterceptorBinding
-	transportHooks     []func(any)
 	customTransports   []core.CustomTransport
 	consumerRegistry   *consumer.Registry
 	websocketRegistry  *ws.Registry
@@ -59,6 +58,7 @@ func WithHTTPAdapter(factory adapter.Factory) Option {
 
 // New는 특정 HTTP 서버 구현을 선택하지 않는 Spine 커널 앱을 생성합니다.
 // HTTP를 사용할 때는 통합 모듈의 생성자 또는 WithHTTPAdapter를 사용합니다.
+// 예: New(WithHTTPAdapter(factory)). HTTP 없는 앱은 New()로 생성합니다.
 func New(options ...Option) App {
 	a := &app{}
 	for _, option := range options {
@@ -67,11 +67,6 @@ func New(options ...Option) App {
 		}
 	}
 	return a
-}
-
-// NewWithHTTPAdapter는 factory를 명시적으로 주입하는 생성자입니다.
-func NewWithHTTPAdapter(factory adapter.Factory) App {
-	return New(WithHTTPAdapter(factory))
 }
 
 func (a *app) Constructor(constructors ...any) {
@@ -108,10 +103,6 @@ func (a *app) InterceptorFor(scope boot.InterceptorScope, interceptors ...core.I
 	}
 }
 
-func (a *app) Transport(fn func(any)) {
-	a.transportHooks = append(a.transportHooks, fn)
-}
-
 func (a *app) RegisterTransport(t core.CustomTransport) {
 	a.customTransports = append(a.customTransports, t)
 }
@@ -122,7 +113,6 @@ func (a *app) bootstrapConfig(opts boot.Options) bootstrap.Config {
 		Constructors:           a.constructors,
 		Routes:                 a.routes,
 		ScopedInterceptors:     a.interceptors,
-		TransportHooks:         a.transportHooks,
 		CustomTransports:       a.customTransports,
 		EnableGracefulShutdown: opts.EnableGracefulShutdown,
 		ShutdownTimeout:        opts.ShutdownTimeout,

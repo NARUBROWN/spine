@@ -41,8 +41,8 @@ func (c *wsIntegrationController) Echo(ctx context.Context, connID pkgws.Connect
 	_ = pkgws.Send(ctx, pkgws.TextMessage, response)
 }
 
-func setupWebSocketApp() spine.App {
-	app := platform.New()
+func setupWebSocketApp(options ...platform.EchoOption) spine.App {
+	app := platform.New(options...)
 	app.Constructor(func() *wsIntegrationController { return &wsIntegrationController{} })
 	app.Route("GET", "/hello", (*wsIntegrationController).Hello)
 	if err := app.WebSocket().Register("/ws/echo", (*wsIntegrationController).Echo); err != nil {

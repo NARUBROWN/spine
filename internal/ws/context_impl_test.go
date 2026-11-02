@@ -94,8 +94,7 @@ func TestWSExecutionContext_ExposesRouterPathParams(t *testing.T) {
 		func(int, []byte) error { return nil },
 	)
 
-	ctx.Set("spine.params", map[string]string{"roomId": "7"})
-	ctx.Set("spine.pathKeys", []string{"roomId"})
+	ctx.SetRoute(map[string]string{"roomId": "7"}, []string{"roomId"})
 
 	if got := ctx.Params(); got["roomId"] != "7" {
 		t.Fatalf("path params가 노출되어야 합니다: %v", got)

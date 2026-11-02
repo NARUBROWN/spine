@@ -2,17 +2,15 @@
 
 Echo 기반 앱은 `spine-echo-platform`을 설치하고 `platform.New()`로 생성합니다. 플랫폼이 Spine과 Echo를 함께 가져오며, HTTP 실행 계약은 Spine 모듈의 공개 `adapter` 패키지에서 관리합니다.
 
-이 문서는 [이슈 #9](https://github.com/NARUBROWN/spine/issues/9)와 [PR #10](https://github.com/NARUBROWN/spine/pull/10)의 공개 개발 스냅샷을 기준으로 합니다. 정식 릴리스 태그는 아직 발행하지 않았습니다.
+이 문서는 HTTP 계약 `spine.http-adapter/v2`를 적용한 개발 트리를 기준으로 합니다. 현재 공개된 플랫폼 `v0.0.0-20261101230311-ded538a25193`과 Spine `v0.5.3-0.20261101161224-490135eda06f`은 v1 계약을 사용합니다. v2의 공개 모듈 버전은 아직 발행하지 않았으므로 현재는 아래 두 저장소의 v2 소스를 함께 체크아웃해 검증합니다.
 
-## 플랫폼 설치와 앱 생성
+## 플랫폼 선택과 앱 생성
 
-애플리케이션의 Go 모듈에서 다음 버전을 설치합니다.
+형제 폴더에 두 저장소를 체크아웃합니다. 아래 demo 검증은 예제 go.mod의 로컬 replace로 두 소스를 선택하므로 go.work를 만들지 않습니다.
 
 ```sh
-go get github.com/NARUBROWN/spine-echo-platform@v0.0.0-20261101230311-ded538a25193
+GOWORK=off go -C spine/cmd/demo test -race ./... -count=1
 ```
-
-이 버전은 Prepare API를 포함한 Spine `v0.5.3-0.20261101161224-490135eda06f`에 의존합니다. 플랫폼을 설치하면 필요한 Spine과 Echo 버전도 선택됩니다. 별도 계약 모듈을 설치하거나 로컬 `replace`를 추가할 필요는 없습니다.
 
 앱 생성 코드를 다음과 같이 바꿉니다. 기존 생성자, 컨트롤러와 라우트 등록은 이어서 사용합니다.
 
@@ -50,19 +48,19 @@ app := spine.New(platform.Option())
 
 구현 소스는 별도 [Echo 플랫폼 저장소](https://github.com/NARUBROWN/spine-echo-platform)에서 관리합니다. Go 패키지 이름은 `platform`이고, native Labstack Echo의 패키지 이름은 `echo`입니다. 기존 서버 API를 Spine 계약에 맞게 연결하는 책임은 플랫폼에 있습니다.
 
-플랫폼은 Echo v5.4.4를 사용합니다. Spine의 공개 adapter 계약은 유지하며 native Echo 확장 코드는 아래 v5 API로 전환합니다. Go 1.25.5 최소 설정도 유지합니다.
+플랫폼은 Echo v5.4.4를 사용합니다. 공개 adapter 계약은 v2이며 native Echo 확장 코드는 아래 typed 옵션을 사용합니다. Go 1.25.5 최소 설정도 유지합니다.
 
 ASGI의 앱과 서버 분리, 요청과 연결의 수명 및 시작과 종료 책임을 참고합니다. **이번 작업은 Python ASGI와의 호환을 의미하지 않습니다.** 현재 HTTP 구현은 Echo 플랫폼이며, 자체 `net/http` 플랫폼 구현은 후속 작업입니다.
 
 ## 리스너 없이 앱 준비하기
 
-`spine.Prepare(ctx, app, options)`는 준비한 앱의 `Handler()`와 `Close(ctx)`를 반환합니다. 기존 App 인터페이스는 유지하며, 선택적 `ApplicationPreparer`를 구현한 앱이 이 기능을 제공합니다. `spine.New(...)`와 `platform.New()`로 만든 기본 앱은 이를 지원합니다.
+`App.Prepare(ctx, options)`는 리스너 없이 앱을 준비하고 `Handler()`와 `Close(ctx)`를 반환합니다. `spine.New(...)`와 `platform.New()`가 반환하는 `App`이 직접 제공하는 API이며, 별도 지원 여부 검사는 없습니다. 일반 서버 실행은 기존처럼 `app.Run(options)`를 사용합니다.
 
 아래는 `/health` 라우트가 등록된 앱을 테스트하는 예입니다. HTTP를 사용하려면 `boot.Options.HTTP`를 지정해야 합니다.
 
 ```go
 options := boot.Options{HTTP: &boot.HTTPOptions{}}
-prepared, err := spine.Prepare(context.Background(), app, options)
+prepared, err := app.Prepare(context.Background(), options)
 if err != nil {
     t.Fatal(err)
 }
@@ -91,26 +89,41 @@ Prepare와 준비 결과의 수명 규칙은 다음과 같습니다.
 
 HTTP 없는 앱도 Prepare와 Close를 사용할 수 있습니다. 이 경우 Handler는 nil이고 준비한 custom transport에는 Init과 Stop을 호출합니다. Run과 RunContext는 같은 준비 경로를 사용하며, 준비에 성공한 뒤 consumer와 custom transport를 시작하고 마지막으로 HTTP listener를 엽니다. 관리 실행의 OS 신호 구독은 준비 전에 수행합니다.
 
-nil context는 `ErrInvalidContext`, nil 앱과 nil 준비 결과는 `ErrInvalidApplication`, 외부 App 구현의 준비 미지원은 `ErrPreparationUnsupported`로 검사할 수 있습니다. 기존 `RunContext(nil, options)`의 background 동작은 유지합니다.
+nil context는 `ErrInvalidContext`로 거부하며 준비가 실패하면 nil 결과와 오류를 반환합니다. 기존 `RunContext(nil, options)`의 background 동작은 유지합니다.
 
 ## 유지되는 동작과 native 확장
 
 바인딩과 응답 형식, 응답 staging, 인터셉터 순서, 제한값과 정상 종료 동작을 유지합니다. staging은 커널에 남고 실제 HTTP 출력은 플랫폼이 처리합니다. WebSocket 업그레이드는 공개 계약으로 연결하며 Gorilla 메시지 엔진과 연결 종료는 커널에 유지합니다.
 
-`app.Transport`는 `github.com/labstack/echo/v5`의 `*echo.Echo`를 전달합니다. native Echo 경로는 Spine의 HTTP 인터셉터, 본문 제한과 staging을 거치지 않습니다. native Echo store와 Spine 요청 store는 분리하므로 공유 값은 표준 request context로 전달합니다. DTO의 `param` 태그는 native 파라미터를, Spine path 인자는 커널 라우팅 결과를 사용하는 기존 차이도 유지합니다.
+`app.Transport(func(any))`는 제거했습니다. Echo 설정은 플랫폼의 `WithEcho(func(*echo.Echo))` 옵션으로 등록합니다. native Echo 경로는 Spine의 HTTP 인터셉터, 본문 제한과 staging을 거치지 않습니다. native Echo store와 Spine 요청 store는 분리하므로 공유 값은 표준 request context로 전달합니다. DTO의 `param` 태그는 native 파라미터를, Spine path 인자는 커널 라우팅 결과를 사용하는 기존 차이도 유지합니다.
 
 ```go
 import "github.com/labstack/echo/v5"
 
-app.Transport(func(native any) {
-    e := native.(*echo.Echo)
+app := platform.New(platform.WithEcho(func(e *echo.Echo) {
     e.GET("/native", func(ctx *echo.Context) error {
         return ctx.String(200, "native")
     })
-})
+}))
 ```
 
 Echo v4에서 사용하던 handler와 middleware의 `echo.Context`는 `*echo.Context`로 바꿉니다. `HTTPErrorHandler`는 `func(ctx *echo.Context, err error)` 순서이고 logger는 `log/slog`입니다. 경로 인자는 `PathValues()`로 조회하며 `Response()`는 `http.ResponseWriter`를 반환합니다. 응답 상태를 읽을 때는 `echo.UnwrapResponse`를 사용하고, native 응답 wrapper는 `Unwrap() http.ResponseWriter`를 제공해야 합니다.
+
+## v2 계약 변경
+
+| v1 | v2 |
+|---|---|
+| `spine.NewWithHTTPAdapter(factory)` | `spine.New(spine.WithHTTPAdapter(factory))` |
+| `spine.Prepare(ctx, app, options)`와 선택적 `ApplicationPreparer` | `app.Prepare(ctx, options)` |
+| `App.Transport(func(any))`, `Config.NativeHooks` | 플랫폼의 typed `WithEcho` 옵션 |
+| `ResponseWriter.WriteJSON(int, any)` | `WriteJSON(int, json.RawMessage)` |
+| `ctx.Set/Get("spine.response_writer", ...)` | HTTP 전용 `core.HTTPResponseContext`의 writer 접근자 |
+| `ctx.Set("spine.params"/"spine.pathKeys", ...)` | `ExecutionContext.SetRoute(params, pathKeys)`와 typed 필드 |
+| `PostExecutionHook.AfterExecution(ctx, results, err)` | 성공 후처리 `AfterExecution(ctx)` |
+
+HTTP, WS와 컨슈머의 사용자 확장 저장소는 `Set/Get`을 유지합니다. 사용자 저장소의 값은 프레임워크 writer나 라우팅 상태를 바꾸지 않습니다. HTTP writer를 공통 ExecutionContext에 요구하지 않으므로 WS·컨슈머는 HTTP 응답 계약을 구현하지 않습니다. 직접 실행 컨텍스트를 구현한 경우 새 `SetRoute` 메서드를 구현해야 합니다.
+
+동적 반환값의 JSON 직렬화는 core에서 수행합니다. Echo의 JSONSerializer에는 원래 DTO 대신 json.RawMessage를 전달하므로, 사용자 serializer도 이 타입을 처리해야 합니다. 상태·쿠키·직렬화 오류를 응답 준비 중 발견하고, BeforeResponse 뒤에 flush하는 순서는 유지합니다. 플랫폼은 Echo의 JSON 출력 경로로 최종 Content-Type·개행·pretty 출력과 실제 쓰기를 처리합니다. 사용자 serializer의 오류는 실제 출력 단계에서도 발생할 수 있습니다. DTO 바인딩, 동적 DI와 리플렉션 인자·반환값에 필요한 any는 해당 경계에 남습니다.
 
 ## 프레임워크 소스 개발과 검증
 
@@ -137,7 +150,7 @@ go -C cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=90s
 
 CLI 정적 분석, 부분 runtime probe와 실제 E2E는 별도 검증 결과입니다. Prepare 추가가 CLI probe의 HTTP 실행 분석 범위를 확장하는 것은 아닙니다.
 
-공개 버전의 설치와 실행은 다음 명령으로 따로 검사합니다.
+v2 공개 후 플랫폼의 Spine 버전과 fixture·CI의 플랫폼 버전을 고정한 다음, 공개 버전의 설치와 실행을 아래 명령으로 따로 검사합니다. 현재 v1 공개 pin에 이 v2 fixture를 적용한 결과를 v2 배포 검증으로 해석하지 않습니다.
 
 ```sh
 bash scripts/check-published-demo.sh

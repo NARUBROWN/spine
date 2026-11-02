@@ -158,3 +158,7 @@ func TestDTOResolver(t *testing.T) {
 		t.Fatal("ConsumerRequestContext가 아니면 에러여야 합니다")
 	}
 }
+
+func (c *testConsumerContext) SetRoute(params map[string]string, pathKeys []string) {}
+
+func (c *nonConsumerContext) SetRoute(params map[string]string, pathKeys []string) {}

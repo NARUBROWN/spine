@@ -2,6 +2,8 @@ package consumer
 
 import (
 	"context"
+	"maps"
+	"slices"
 
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/event/publish"
@@ -12,6 +14,8 @@ type ConsumerRequestContextImpl struct {
 	msg      *Message
 	eventBus publish.EventBus
 	store    map[string]any
+	params   map[string]string
+	pathKeys []string
 }
 
 func NewRequestContext(
@@ -75,13 +79,14 @@ func (c *ConsumerRequestContextImpl) Path() string {
 	return c.msg.EventName
 }
 
-func (c *ConsumerRequestContextImpl) Params() map[string]string {
-	return nil
+func (c *ConsumerRequestContextImpl) Params() map[string]string { return maps.Clone(c.params) }
+
+func (c *ConsumerRequestContextImpl) SetRoute(params map[string]string, pathKeys []string) {
+	c.params = maps.Clone(params)
+	c.pathKeys = slices.Clone(pathKeys)
 }
 
-func (c *ConsumerRequestContextImpl) PathKeys() []string {
-	return nil
-}
+func (c *ConsumerRequestContextImpl) PathKeys() []string { return slices.Clone(c.pathKeys) }
 
 func (c *ConsumerRequestContextImpl) Queries() map[string][]string {
 	return nil

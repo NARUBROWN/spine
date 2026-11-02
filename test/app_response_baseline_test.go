@@ -45,13 +45,10 @@ func (s *responseBaselineState) observe(phase string, ctx core.ExecutionContext)
 		event.writtenBytes = s.recorder.Body.Len()
 		event.successHeader = s.recorder.Header().Get("X-Success")
 	}
-	if ctx != nil {
-		if value, ok := ctx.Get("spine.response_writer"); ok {
-			if writer, ok := value.(core.ResponseWriter); ok {
-				event.prepared = writer.IsCommitted()
-			}
-		}
+	if response, ok := ctx.(core.HTTPResponseContext); ok && response.ResponseWriter() != nil {
+		event.prepared = response.ResponseWriter().IsCommitted()
 	}
+
 	s.events = append(s.events, event)
 }
 
@@ -143,16 +140,7 @@ func TestAppIntegration_ResponseStagingBaseline(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			state := &responseBaselineState{serializeError: tc.serializeError, finalizerError: tc.finalizerError}
-			app := platform.New()
-			app.Constructor(func() *responseBaselineController { return &responseBaselineController{state: state} })
-			app.Route(http.MethodGet, "/reply", (*responseBaselineController).Reply)
-			app.Interceptor(&responseBaselineInterceptor{state: state})
-			app.Transport(func(value any) {
-				engine, ok := value.(*echo.Echo)
-				if !ok {
-					t.Errorf("기준 전송 객체가 Echo여야 합니다: %T", value)
-					return
-				}
+			app := platform.New(platform.WithEcho(func(engine *echo.Echo) {
 				engine.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 					return func(ctx *echo.Context) error {
 						// 요청이 끝난 뒤 재사용되는 Echo Context 자체는 보관하지 않는다.
@@ -165,7 +153,10 @@ func TestAppIntegration_ResponseStagingBaseline(t *testing.T) {
 						return next(ctx)
 					}
 				})
-			})
+			}))
+			app.Constructor(func() *responseBaselineController { return &responseBaselineController{state: state} })
+			app.Route(http.MethodGet, "/reply", (*responseBaselineController).Reply)
+			app.Interceptor(&responseBaselineInterceptor{state: state})
 			handler := newHTTPBaselineHandler(t, app, boot.HTTPOptions{})
 			state.recorder = httptest.NewRecorder()
 			handler.ServeHTTP(state.recorder, httptest.NewRequest(http.MethodGet, "/reply", nil))

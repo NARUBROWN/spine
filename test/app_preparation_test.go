@@ -13,6 +13,7 @@ import (
 	platform "github.com/NARUBROWN/spine-echo-platform"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httpx"
+	"github.com/labstack/echo/v5"
 )
 
 type preparationController struct{ generation int }
@@ -30,7 +31,7 @@ func (*preparationController) Context(ctx context.Context) httpx.Response[string
 
 func prepareForHTTPTest(t *testing.T, app spine.App, ctx context.Context, options boot.Options) spine.PreparedApplication {
 	t.Helper()
-	prepared, err := spine.Prepare(ctx, app, options)
+	prepared, err := app.Prepare(ctx, options)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,24 +76,25 @@ func TestAppIntegration_PrepareCreatesIndependentDIAndRouteSnapshots(t *testing.
 }
 
 func TestAppIntegration_PrepareFreezesConsumerRegistrationsBeforeNativeHooks(t *testing.T) {
-	app := platform.New()
-	app.Constructor(func() *preparationController { return &preparationController{generation: 1} })
-	app.Route("GET", "/generation", (*preparationController).Generation)
-	app.Consumers()
+	var app spine.App
 	var register sync.Once
-	app.Transport(func(any) {
+	app = platform.New(platform.WithEcho(func(_ *echo.Echo) {
 		register.Do(func() {
 			if err := app.Consumers().Register("later", (*preparationMissingConsumer).Handle); err != nil {
 				t.Error(err)
 			}
 		})
-	})
+	}))
+	app.Constructor(func() *preparationController { return &preparationController{generation: 1} })
+	app.Route("GET", "/generation", (*preparationController).Generation)
+	app.Consumers()
+
 	options := boot.Options{HTTP: &boot.HTTPOptions{}}
 	first := prepareForHTTPTest(t, app, context.Background(), options)
 	if len(app.Consumers().Registrations()) != 1 {
 		t.Fatal("원본 앱의 등록 변경은 다음 준비에 반영돼야 합니다")
 	}
-	if prepared, err := spine.Prepare(context.Background(), app, options); err == nil || prepared != nil {
+	if prepared, err := app.Prepare(context.Background(), options); err == nil || prepared != nil {
 		if prepared != nil {
 			_ = prepared.Close(context.Background())
 		}

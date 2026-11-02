@@ -12,7 +12,6 @@ func snapshotConfig(config Config) Config {
 	}
 	config.Interceptors = slices.Clone(config.Interceptors)
 	config.ScopedInterceptors = slices.Clone(config.ScopedInterceptors)
-	config.TransportHooks = slices.Clone(config.TransportHooks)
 	config.CustomTransports = slices.Clone(config.CustomTransports)
 	if config.ConsumerRegistry != nil {
 		config.ConsumerRegistry = config.ConsumerRegistry.Snapshot()

@@ -53,74 +53,13 @@ func TestValidateFactory(t *testing.T) {
 		wantErr      error
 		wantDetails  []string
 	}{
-		{
-			name:         "HTTP_only",
-			capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion},
-		},
-		{
-			name:         "WebSocket_supported",
-			capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion, WebSocketUpgrade: true},
-			required:     adapter.Requirements{WebSocketUpgrade: true},
-		},
-		{
-			name:         "native_supported",
-			capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion, NativeHooks: true},
-			required:     adapter.Requirements{NativeHooks: true},
-		},
-		{
-			name:         "both_supported",
-			capabilities: fullCapabilities(),
-			required:     adapter.Requirements{WebSocketUpgrade: true, NativeHooks: true},
-		},
-		{
-			name:         "extra_capabilities_allowed",
-			capabilities: fullCapabilities(),
-		},
-		{
-			name:        "missing_version",
-			wantErr:     adapter.ErrInvalidAdapter,
-			wantDetails: []string{adapter.ContractVersion},
-		},
-		{
-			name:         "different_version",
-			capabilities: adapter.Capabilities{ContractVersion: "spine.http-adapter/v2"},
-			wantErr:      adapter.ErrInvalidAdapter,
-			wantDetails:  []string{"spine.http-adapter/v2", adapter.ContractVersion},
-		},
-		{
-			name:         "version_checked_before_features",
-			capabilities: adapter.Capabilities{ContractVersion: "spine.http-adapter/v2"},
-			required:     adapter.Requirements{WebSocketUpgrade: true, NativeHooks: true},
-			wantErr:      adapter.ErrInvalidAdapter,
-		},
-		{
-			name:         "WebSocket_unsupported",
-			capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion, NativeHooks: true},
-			required:     adapter.Requirements{WebSocketUpgrade: true},
-			wantErr:      adapter.ErrUnsupportedCapability,
-			wantDetails:  []string{"WebSocketUpgrade"},
-		},
-		{
-			name:         "native_unsupported",
-			capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion, WebSocketUpgrade: true},
-			required:     adapter.Requirements{NativeHooks: true},
-			wantErr:      adapter.ErrUnsupportedCapability,
-			wantDetails:  []string{"NativeHooks"},
-		},
-		{
-			name:         "one_of_two_requirements_unsupported",
-			capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion, WebSocketUpgrade: true},
-			required:     adapter.Requirements{WebSocketUpgrade: true, NativeHooks: true},
-			wantErr:      adapter.ErrUnsupportedCapability,
-			wantDetails:  []string{"NativeHooks"},
-		},
-		{
-			name:         "both_unsupported",
-			capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion},
-			required:     adapter.Requirements{WebSocketUpgrade: true, NativeHooks: true},
-			wantErr:      adapter.ErrUnsupportedCapability,
-			wantDetails:  []string{"WebSocketUpgrade", "NativeHooks"},
-		},
+		{name: "HTTP_only", capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion}},
+		{name: "WebSocket_supported", capabilities: fullCapabilities(), required: adapter.Requirements{WebSocketUpgrade: true}},
+		{name: "extra_capabilities_allowed", capabilities: fullCapabilities()},
+		{name: "missing_version", wantErr: adapter.ErrInvalidAdapter, wantDetails: []string{adapter.ContractVersion}},
+		{name: "different_version", capabilities: adapter.Capabilities{ContractVersion: "spine.http-adapter/v1"}, wantErr: adapter.ErrInvalidAdapter, wantDetails: []string{"spine.http-adapter/v1", adapter.ContractVersion}},
+		{name: "version_checked_before_features", capabilities: adapter.Capabilities{ContractVersion: "spine.http-adapter/v1"}, required: adapter.Requirements{WebSocketUpgrade: true}, wantErr: adapter.ErrInvalidAdapter},
+		{name: "WebSocket_unsupported", capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion}, required: adapter.Requirements{WebSocketUpgrade: true}, wantErr: adapter.ErrUnsupportedCapability, wantDetails: []string{"WebSocketUpgrade"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -187,7 +126,7 @@ func TestValidateFactoryAcceptsNonNilFactoryKinds(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := adapter.ValidateFactory(tt.factory, adapter.Requirements{WebSocketUpgrade: true, NativeHooks: true})
+			err := adapter.ValidateFactory(tt.factory, adapter.Requirements{WebSocketUpgrade: true})
 			if err != nil {
 				t.Fatalf("nil이 아닌 factory의 종류를 제한해서는 안 됩니다: %v", err)
 			}
@@ -199,7 +138,6 @@ func fullCapabilities() adapter.Capabilities {
 	return adapter.Capabilities{
 		ContractVersion:  adapter.ContractVersion,
 		WebSocketUpgrade: true,
-		NativeHooks:      true,
 	}
 }
 

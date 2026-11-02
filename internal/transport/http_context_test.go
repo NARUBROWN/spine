@@ -12,6 +12,29 @@ import (
 	"github.com/NARUBROWN/spine/pkg/httperr"
 )
 
+type stateWriter struct{ adapter.ResponseWriter }
+
+func TestHTTPContextTypedStateIsIndependentOfUserStore(t *testing.T) {
+	ctx := NewHTTPContext(testScope{ctx: context.Background()})
+	writer := &stateWriter{}
+	ctx.SetResponseWriter(writer)
+	params := map[string]string{"id": "route"}
+	keys := []string{"id"}
+	ctx.SetRoute(params, keys)
+	params["id"], keys[0] = "mutated", "mutated"
+	ctx.Set("spine.response_writer", "user value")
+	ctx.Set("spine.params", "user value")
+	ctx.Set("spine.pathKeys", "user value")
+	if ctx.ResponseWriter() != writer || ctx.Param("id") != "route" || ctx.PathKeys()[0] != "id" {
+		t.Fatal("사용자 저장소와 입력 map/slice가 내부 실행 상태를 덮어쓰면 안 됩니다")
+	}
+	returnedKeys := ctx.PathKeys()
+	returnedKeys[0] = "mutated"
+	if ctx.PathKeys()[0] != "id" {
+		t.Fatal("외부에서 반환된 키 목록을 변경해도 라우팅 상태를 보존해야 합니다")
+	}
+}
+
 type testScope struct {
 	adapter.HTTPContext
 	ctx context.Context
@@ -39,8 +62,7 @@ func TestHTTPContextOwnsSpineStatePerRequest(t *testing.T) {
 	if _, exists := second.Get("value"); exists || first.Context().Value(key{}) != "carried" {
 		t.Fatal("요청 context를 보존하고 요청 store를 격리해야 합니다")
 	}
-	first.Set("spine.params", map[string]string{"id": "spine"})
-	first.Set("spine.pathKeys", []string{"id"})
+	first.SetRoute(map[string]string{"id": "spine"}, []string{"id"})
 	params := first.Params()
 	params["id"] = "mutated"
 	if first.Param("id") != "spine" || second.Param("id") != "native" || len(first.PathKeys()) != 1 {

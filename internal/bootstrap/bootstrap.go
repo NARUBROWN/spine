@@ -28,7 +28,6 @@ type Config struct {
 	Routes                 []spineRouter.RouteSpec
 	Interceptors           []core.Interceptor
 	ScopedInterceptors     []InterceptorBinding
-	TransportHooks         []func(any)
 	CustomTransports       []core.CustomTransport
 	EnableGracefulShutdown bool
 	ShutdownTimeout        time.Duration
@@ -150,7 +149,6 @@ func Validate(config Config) error {
 	if config.HTTP != nil {
 		return adapter.ValidateFactory(config.HTTPAdapterFactory, adapter.Requirements{
 			WebSocketUpgrade: config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0,
-			NativeHooks:      len(config.TransportHooks) > 0,
 		})
 	}
 	return nil

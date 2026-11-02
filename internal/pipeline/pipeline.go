@@ -76,13 +76,11 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 		if responseStage == nil {
 			return
 		}
-		ctx.Set("spine.response_writer", responseStage.target)
+		ctx.(core.HTTPResponseContext).SetResponseWriter(responseStage.target)
 		if err := responseStage.flush(); err != nil {
 			finalErr = errors.Join(finalErr, fmt.Errorf("flush staged response: %w", err))
 			if !responseStage.target.IsCommitted() {
-				if fallbackErr := responseStage.target.WriteJSON(http.StatusInternalServerError, map[string]any{
-					"message": "Internal server error",
-				}); fallbackErr != nil {
+				if fallbackErr := responseStage.target.WriteJSON(http.StatusInternalServerError, handler.ErrorJSON("Internal server error")); fallbackErr != nil {
 					finalErr = errors.Join(finalErr, fmt.Errorf("write fallback error response: %w", fallbackErr))
 				}
 			}
@@ -99,7 +97,7 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 		}
 
 		if returnedErr != nil {
-			handled, err := callHandleErrorReturn(p, ctx, results)
+			handled, err := callHandleErrorReturn(p, ctx, returnedErr)
 			if err != nil {
 				finalErr = errors.Join(finalErr, err)
 			} else if handled {
@@ -190,7 +188,7 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 	// 응답이 직렬화·쿠키·status 검증을 통과한 뒤에만 domain-event 후처리를
 	// 실행한다. 실제 transport flush는 BeforeResponse 이후까지 계속 지연된다.
 	for _, hook := range p.postHooks {
-		if err := hook.AfterExecution(ctx, results, nil); err != nil {
+		if err := hook.AfterExecution(ctx); err != nil {
 			return err
 		}
 	}
@@ -279,14 +277,14 @@ func callAfterCompletion(
 func callHandleErrorReturn(
 	p *Pipeline,
 	ctx core.ExecutionContext,
-	results []any,
+	returnedErr error,
 ) (handled bool, err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			err = panicAsError(recovered)
 		}
 	}()
-	return p.handleErrorReturn(ctx, results)
+	return p.handleErrorReturn(ctx, returnedErr)
 }
 
 func callHandleExecutionError(
@@ -350,29 +348,20 @@ func isNilResult(v any) bool {
 	}
 }
 
-func (p *Pipeline) handleErrorReturn(ctx core.ExecutionContext, results []any) (bool, error) {
-	for _, result := range results {
-		if isNilResult(result) {
-			continue
-		}
-		if _, isErr := result.(error); isErr {
-			resultType := reflect.TypeOf(result)
-			for _, h := range p.returnHandlers {
-				if h.Supports(resultType) {
-					if err := h.Handle(result, ctx); err != nil {
-						return false, err
-					}
-					return true, nil
-				}
+func (p *Pipeline) handleErrorReturn(ctx core.ExecutionContext, returnedErr error) (bool, error) {
+	if isNilResult(returnedErr) {
+		return false, nil
+	}
+	resultType := reflect.TypeOf(returnedErr)
+	for _, h := range p.returnHandlers {
+		if h.Supports(resultType) {
+			if err := h.Handle(returnedErr, ctx); err != nil {
+				return false, err
 			}
-			return false, fmt.Errorf(
-				"no ReturnValueHandler can handle the error return value (%s)",
-				resultType.String(),
-			)
+			return true, nil
 		}
 	}
-
-	return false, nil
+	return false, fmt.Errorf("no ReturnValueHandler can handle the error return value (%s)", resultType.String())
 }
 
 func (p *Pipeline) handleSuccessReturn(ctx core.ExecutionContext, results []any) error {
@@ -441,14 +430,13 @@ func (p *Pipeline) AddPostExecutionHook(hook hook.PostExecutionHook) {
 }
 
 func (p *Pipeline) handleExecutionError(ctx core.ExecutionContext, err error) error {
-	rwAny, ok := ctx.Get("spine.response_writer")
+	response, ok := ctx.(core.HTTPResponseContext)
 	if !ok {
 		return nil
 	}
-
-	rw, ok := rwAny.(core.ResponseWriter)
-	if !ok {
-		return fmt.Errorf("invalid ResponseWriter type while rendering execution error")
+	rw := response.ResponseWriter()
+	if rw == nil {
+		return nil
 	}
 
 	// ReturnValueHandler 등에서 이미 응답이 커밋된 경우 이중 응답을 방지한다.
@@ -475,23 +463,23 @@ func (p *Pipeline) handleExecutionError(ctx core.ExecutionContext, err error) er
 		}
 	}
 
-	if writeErr := rw.WriteJSON(status, map[string]any{"message": message}); writeErr != nil {
+	if writeErr := rw.WriteJSON(status, handler.ErrorJSON(message)); writeErr != nil {
 		responseErr = errors.Join(responseErr, fmt.Errorf("write execution error response: %w", writeErr))
 	}
 	return responseErr
 }
 
 func stageResponseWriter(ctx core.ExecutionContext) *stagedResponseWriter {
-	rwAny, ok := ctx.Get("spine.response_writer")
+	response, ok := ctx.(core.HTTPResponseContext)
 	if !ok {
 		return nil
 	}
-	rw, ok := rwAny.(core.ResponseWriter)
-	if !ok {
+	rw := response.ResponseWriter()
+	if rw == nil {
 		return nil
 	}
 	staged := newStagedResponseWriter(rw)
-	ctx.Set("spine.response_writer", staged)
+	response.SetResponseWriter(staged)
 	return staged
 }
 

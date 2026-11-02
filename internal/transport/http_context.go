@@ -5,6 +5,7 @@ import (
 	"errors"
 	"maps"
 	"mime/multipart"
+	"slices"
 
 	adapter "github.com/NARUBROWN/spine/adapter"
 	"github.com/NARUBROWN/spine/core"
@@ -14,16 +15,26 @@ import (
 
 // HTTPContext는 독립 HTTP scope에 Spine 요청 store와 이벤트 버스를 결합합니다.
 type HTTPContext struct {
-	scope adapter.HTTPContext
-	store map[string]any
-	bus   core.EventBus
+	scope    adapter.HTTPContext
+	store    map[string]any
+	bus      core.EventBus
+	writer   core.ResponseWriter
+	params   map[string]string
+	pathKeys []string
 }
 
 var _ core.ExecutionContext = (*HTTPContext)(nil)
 var _ core.HttpRequestContext = (*HTTPContext)(nil)
 
 func NewHTTPContext(scope adapter.HTTPContext) *HTTPContext {
-	return &HTTPContext{scope: scope, store: map[string]any{"spine.response_writer": scope.Writer()}}
+	return &HTTPContext{scope: scope, store: make(map[string]any), writer: scope.Writer()}
+}
+
+func (c *HTTPContext) ResponseWriter() core.ResponseWriter          { return c.writer }
+func (c *HTTPContext) SetResponseWriter(writer core.ResponseWriter) { c.writer = writer }
+func (c *HTTPContext) SetRoute(params map[string]string, pathKeys []string) {
+	c.params = maps.Clone(params)
+	c.pathKeys = slices.Clone(pathKeys)
 }
 
 func (c *HTTPContext) Context() context.Context     { return c.scope.Context() }
@@ -43,8 +54,8 @@ func (c *HTTPContext) MultipartForm() (*multipart.Form, error) {
 }
 
 func (c *HTTPContext) Param(name string) string {
-	if params, ok := c.store["spine.params"].(map[string]string); ok {
-		if value, exists := params[name]; exists {
+	if c.params != nil {
+		if value, exists := c.params[name]; exists {
 			return value
 		}
 	}
@@ -52,15 +63,14 @@ func (c *HTTPContext) Param(name string) string {
 }
 
 func (c *HTTPContext) Params() map[string]string {
-	if params, ok := c.store["spine.params"].(map[string]string); ok {
-		return maps.Clone(params)
+	if c.params != nil {
+		return maps.Clone(c.params)
 	}
 	return c.scope.Params()
 }
 
 func (c *HTTPContext) PathKeys() []string {
-	keys, _ := c.store["spine.pathKeys"].([]string)
-	return keys
+	return slices.Clone(c.pathKeys)
 }
 
 func (c *HTTPContext) EventBus() core.EventBus {

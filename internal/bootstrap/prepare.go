@@ -305,7 +305,6 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 			wsPipeline := buildWSPipeline(container, config.WebSocketRegistry, dispatchHook, resolvedWSInterceptors)
 
 			application.wsRuntime = ws.NewRuntime(
-				config.WebSocketRegistry,
 				wsPipeline,
 				config.HTTP.WebSocket,
 				webSocketHandshakeInterceptors(resolvedWSInterceptors)...,
@@ -327,8 +326,7 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 			Execute: func(scope adapter.HTTPContext) error {
 				return httpPipeline.Execute(transport.NewHTTPContext(scope))
 			},
-			Upgrades:    upgrades,
-			NativeHooks: config.TransportHooks,
+			Upgrades: upgrades,
 		})
 		if !isNilHTTPValue(server) {
 			application.server = server

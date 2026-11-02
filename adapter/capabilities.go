@@ -3,7 +3,6 @@ package adapter
 import (
 	"fmt"
 	"reflect"
-	"strings"
 )
 
 // Capabilities는 factory의 규약 버전과 선택적 지원 기능입니다.
@@ -11,13 +10,11 @@ import (
 type Capabilities struct {
 	ContractVersion  string
 	WebSocketUpgrade bool
-	NativeHooks      bool
 }
 
-// Requirements는 애플리케이션에 등록된 경로와 훅이 요구하는 기능입니다.
+// Requirements는 애플리케이션에 등록된 경로가 요구하는 기능입니다.
 type Requirements struct {
 	WebSocketUpgrade bool
-	NativeHooks      bool
 }
 
 // ValidateFactory는 어댑터를 생성하거나 훅을 실행하지 않고 버전과 지원 기능을 검사합니다.
@@ -33,15 +30,8 @@ func ValidateFactory(factory Factory, required Requirements) error {
 		return fmt.Errorf("%w: contract version %q, want %q", ErrInvalidAdapter, capabilities.ContractVersion, ContractVersion)
 	}
 
-	var unsupported []string
 	if required.WebSocketUpgrade && !capabilities.WebSocketUpgrade {
-		unsupported = append(unsupported, "WebSocketUpgrade")
-	}
-	if required.NativeHooks && !capabilities.NativeHooks {
-		unsupported = append(unsupported, "NativeHooks")
-	}
-	if len(unsupported) != 0 {
-		return fmt.Errorf("%w: %s", ErrUnsupportedCapability, strings.Join(unsupported, ", "))
+		return fmt.Errorf("%w: WebSocketUpgrade", ErrUnsupportedCapability)
 	}
 	return nil
 }

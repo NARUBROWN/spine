@@ -600,11 +600,11 @@ func TestIsAllowedWebSocketOrigin_RejectsSameHostCrossSchemeOrigin(t *testing.T)
 	req.Host = "example.test"
 	req.TLS = &tls.ConnectionState{}
 	req.Header.Set("Origin", "http://example.test")
-	if isAllowedWebSocketOrigin(req, nil) {
+	if isAllowedWebSocketOriginWithTrustedProxies(req, nil, nil) {
 		t.Fatal("secure endpoint must reject a same-host HTTP origin")
 	}
 	req.Header.Set("Origin", "https://example.test")
-	if !isAllowedWebSocketOrigin(req, nil) {
+	if !isAllowedWebSocketOriginWithTrustedProxies(req, nil, nil) {
 		t.Fatal("secure endpoint must allow an exact same-origin request")
 	}
 }
@@ -672,7 +672,7 @@ func newTestRuntime(t *testing.T, controller any, handler any, options boot.WebS
 	p := pipeline.NewPipeline(router, invoker.NewInvoker(c))
 	p.AddArgumentResolver(&resolver.StdContextResolver{})
 
-	return NewRuntime(registry, p, options), registration
+	return NewRuntime(p, options), registration
 }
 
 func newRuntimeTestServer(runtime *Runtime, registration Registration) *httptest.Server {

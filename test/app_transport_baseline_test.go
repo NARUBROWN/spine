@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	platform "github.com/NARUBROWN/spine-echo-platform"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/gorilla/websocket"
@@ -35,17 +36,10 @@ func (*transportBaselineCounter) BeforeResponse(core.ExecutionContext, core.Hand
 func (*transportBaselineCounter) AfterCompletion(core.ExecutionContext, core.HandlerMeta, error) {}
 
 func TestAppIntegration_NativeRouteBaseline(t *testing.T) {
-	app := setupHTTPBaselineApp()
 	counter := &transportBaselineCounter{}
-	app.InterceptorFor(boot.InterceptorHTTP, counter)
 	var hookOrder []string
-	app.Transport(func(value any) {
+	app := setupHTTPBaselineApp(platform.WithEcho(func(engine *echo.Echo) {
 		hookOrder = append(hookOrder, "first")
-		engine, ok := value.(*echo.Echo)
-		if !ok {
-			t.Errorf("기존 전송 훅은 Echo 객체를 받아야 합니다: %T", value)
-			return
-		}
 		engine.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 			return func(ctx *echo.Context) error {
 				ctx.Response().Header().Set("X-Echo-Middleware", "applied")
@@ -53,23 +47,20 @@ func TestAppIntegration_NativeRouteBaseline(t *testing.T) {
 			}
 		})
 		engine.GET("/api/body", func(ctx *echo.Context) error { return ctx.String(200, "first") })
-	})
-	app.Transport(func(value any) {
-		hookOrder = append(hookOrder, "second")
-		engine, ok := value.(*echo.Echo)
-		if !ok {
-			t.Errorf("기존 전송 훅은 Echo 객체를 받아야 합니다: %T", value)
-			return
-		}
-		engine.GET("/api/body", func(ctx *echo.Context) error { return ctx.String(200, "second") })
-		engine.POST("/native/body", func(ctx *echo.Context) error {
-			content, err := io.ReadAll(ctx.Request().Body)
-			if err != nil {
-				return err
-			}
-			return ctx.String(200, strconv.Itoa(len(content)))
-		})
-	})
+	}),
+		platform.WithEcho(func(engine *echo.Echo) {
+			hookOrder = append(hookOrder, "second")
+			engine.GET("/api/body", func(ctx *echo.Context) error { return ctx.String(200, "second") })
+			engine.POST("/native/body", func(ctx *echo.Context) error {
+				content, err := io.ReadAll(ctx.Request().Body)
+				if err != nil {
+					return err
+				}
+				return ctx.String(200, strconv.Itoa(len(content)))
+			})
+		}))
+	app.InterceptorFor(boot.InterceptorHTTP, counter)
+
 	handler := newHTTPBaselineHandler(t, app, boot.HTTPOptions{GlobalPrefix: "/api", MaxBodyBytes: 32})
 	if got := strings.Join(hookOrder, ","); got != "first,second" {
 		t.Fatalf("사용자 훅은 등록 순서대로 실행해야 합니다: %s", got)
@@ -111,21 +102,15 @@ func TestAppIntegration_NativeRouteBaseline(t *testing.T) {
 }
 
 func TestAppIntegration_WebSocketMountBaseline(t *testing.T) {
-	app := setupWebSocketApp()
+	app := setupWebSocketApp(platform.WithEcho(func(engine *echo.Echo) {
+		// 내장 WS 마운트 뒤에 실행되는 사용자 훅이 같은 GET 경로를 대체하는 현재 동작이다.
+		engine.GET("/ws/echo", func(ctx *echo.Context) error { return ctx.String(200, "native-ws") })
+	}))
 	if err := app.WebSocket().Register("/ws/prefix", (*wsIntegrationController).Echo); err != nil {
 		t.Fatal(err)
 	}
 	counter := &transportBaselineCounter{}
 	app.InterceptorFor(boot.InterceptorHTTP, counter)
-	app.Transport(func(value any) {
-		engine, ok := value.(*echo.Echo)
-		if !ok {
-			t.Errorf("기존 전송 훅은 Echo 객체를 받아야 합니다: %T", value)
-			return
-		}
-		// 내장 WS 마운트 뒤에 실행되는 사용자 훅이 같은 GET 경로를 대체하는 현재 동작이다.
-		engine.GET("/ws/echo", func(ctx *echo.Context) error { return ctx.String(200, "native-ws") })
-	})
 	handler := newHTTPBaselineHandler(t, app, boot.HTTPOptions{GlobalPrefix: "/api"})
 	server := httptest.NewServer(handler)
 	defer server.Close()

@@ -90,7 +90,7 @@ func (*httpBaselineController) Upload(form *httpBaselineForm, files spinemultipa
 // 기준 요청은 공개 Prepare API로 구성합니다. 리스너나 관리 실행 고루틴을 시작하지 않습니다.
 func newHTTPBaselineHandler(t *testing.T, app spine.App, options boot.HTTPOptions) http.Handler {
 	t.Helper()
-	prepared, err := spine.Prepare(context.Background(), app, boot.Options{
+	prepared, err := app.Prepare(context.Background(), boot.Options{
 		ShutdownTimeout: 3 * time.Second, HTTP: &options,
 	})
 	if err != nil {
@@ -106,8 +106,8 @@ func newHTTPBaselineHandler(t *testing.T, app spine.App, options boot.HTTPOption
 	return prepared.Handler()
 }
 
-func setupHTTPBaselineApp() spine.App {
-	app := platform.New()
+func setupHTTPBaselineApp(options ...platform.EchoOption) spine.App {
+	app := platform.New(options...)
 	app.Constructor(func() *httpBaselineController { return &httpBaselineController{} })
 	for _, method := range []string{http.MethodGet, http.MethodDelete, http.MethodPost} {
 		app.Route(method, "/body", (*httpBaselineController).Bind)

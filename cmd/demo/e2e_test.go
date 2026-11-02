@@ -19,10 +19,12 @@ import (
 	"time"
 
 	"github.com/NARUBROWN/spine"
+	platform "github.com/NARUBROWN/spine-echo-platform"
 	"github.com/NARUBROWN/spine/cmd/demo/application"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/gorilla/websocket"
+	"github.com/labstack/echo/v5"
 )
 
 const (
@@ -83,16 +85,14 @@ func TestDemoE2EHelperProcess(t *testing.T) {
 	}
 
 	if os.Getenv(e2eSignalOnMountEnv) == "1" {
-		app, options, err := application.BuildApplication()
-		if err != nil {
-			t.Fatal(err)
-		}
-		app.Transport(func(any) {
+		app := spine.New(platform.Option(platform.WithEcho(func(_ *echo.Echo) {
 			process, err := os.FindProcess(os.Getpid())
 			if err == nil {
 				_ = process.Signal(os.Interrupt)
 			}
-		})
+		})))
+		options := boot.Options{Address: address, HTTP: &boot.HTTPOptions{}, EnableGracefulShutdown: true, ShutdownTimeout: 3 * time.Second}
+
 		if err := app.Validate(options); err != nil {
 			t.Fatal(err)
 		}
@@ -383,7 +383,7 @@ func TestDemoE2E_PreparedHandlerHTTPWebSocketAndClose(t *testing.T) {
 		t.Fatal(err)
 	}
 	options.Address = "prepare-must-not-listen"
-	prepared, err := spine.Prepare(context.Background(), app, options)
+	prepared, err := app.Prepare(context.Background(), options)
 	if err != nil {
 		t.Fatal(err)
 	}

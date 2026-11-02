@@ -33,11 +33,13 @@ See `docs/migration/http-adapter-modules.md` for the intentional constructor cha
 - `github.com/NARUBROWN/spine`: kernel and public adapter contract, with no Echo or platform-module dependency.
 - `github.com/NARUBROWN/spine-echo-platform` (package platform): Echo v5.4.4 implementation and starter, depending on Spine and Echo.
 
+The working tree uses `spine.http-adapter/v2`: native hooks belong to typed platform.WithEcho options, JSON writers accept json.RawMessage, and framework routing/writer state uses typed fields. App.Transport and Config.NativeHooks are removed. Custom ExecutionContext implementations must provide SetRoute(params map[string]string, pathKeys []string); HTTP response access uses core.HTTPResponseContext. User Set/Get storage remains separate. The published pseudo-versions listed below still implement v1; v2 currently requires matching local source checkouts/workspace and has not been published. The v1 snapshot exposes package-level spine.Prepare; it does not expose app.Prepare, typed platform.WithEcho or core.HTTPResponseContext.
+
 Native Echo extensions import `github.com/labstack/echo/v5`. Handlers and middleware take `*echo.Context`,
 the error handler takes `(ctx *echo.Context, err error)`, and logging uses `log/slog`. Path values use
 `PathValues()`. Response returns `http.ResponseWriter`; use `echo.UnwrapResponse` for Echo state, and
-provide `Unwrap() http.ResponseWriter` on native middleware wrappers. The public Spine adapter contract
-and controller registration APIs remain unchanged.
+provide `Unwrap() http.ResponseWriter` on native middleware wrappers. Controller registration is unchanged;
+the v2 adapter and preparation API changes are described in the migration guide.
 
 Applications normally choose `platform.New()`. This is equivalent to `spine.New(platform.Option())`.
 The current CLI recognizes `spine.New(...)`, so cmd/demo uses the latter. Do not claim direct starter
@@ -174,9 +176,9 @@ remain on GOWORK=off. The integration and demo modules use their local replaceme
 
 ## Prepare an application without a listener
 
-`spine.Prepare(ctx, app, options)` returns a `spine.PreparedApplication` with `Handler()` and `Close(ctx)`.
-The existing App interface is unchanged; optional ApplicationPreparer provides this capability. The default
-Spine app supports it, while external App implementations can return ErrPreparationUnsupported.
+`app.Prepare(ctx, options)` returns a `spine.PreparedApplication` with `Handler()` and `Close(ctx)`.
+Prepare is part of the App interface returned by spine.New and platform.New. Ordinary managed execution
+continues to use app.Run(options).
 
 Preparation snapshots registration topology and boot option values, configures DI/HTTP/WS and checks consumer
 readiness. It does not listen, subscribe to OS signals, start consumers or call custom transport Start.
@@ -193,7 +195,7 @@ server timeouts; connect the returned Handler so request lifetimes are tracked. 
 concurrently with preparation. The listener-free API does not add a CLI HTTP runtime manifest or widen the partial probe.
 
 RunContext shares preparation and cleanup, subscribes to shutdown signals before initialization, and starts
-consumers/custom transports before exposing the final HTTP listener. Prepare is included in the public Spine
+consumers/custom transports before exposing the final HTTP listener. Package-level spine.Prepare, rather than the v2 App method, is included in the v1 public Spine
 development snapshot v0.5.3-0.20261101161224-490135eda06f, which the Echo platform snapshot
 v0.0.0-20261101230311-ded538a25193 requires without a local replacement. These are development snapshots;
 formal release tags have not been published. See docs/migration/http-adapter-modules.md.
@@ -535,7 +537,9 @@ Response serialization, cookie validation, event dispatch, and post-processing h
 
 ## Swagger and transport extensions
 
-Spine does not generate OpenAPI automatically. The Bun demo uses Swaggo annotations and generated `docs/docs.go`, `docs/swagger.json`, and `docs/swagger.yaml`, imports that generated package for registration, then uses `app.Transport` to type-assert `*echo.Echo` and mount `httpSwagger.WrapHandler` at `/swagger/*`. Keep annotations and generated `docs/*` in sync. See the demo's `main.go` for the copy-safe imports and hook; generated Swagger is supporting output, not the authority for route behavior.
+Spine does not generate OpenAPI automatically. The Bun demo uses Swaggo annotations and generated `docs/docs.go`, `docs/swagger.json`, and `docs/swagger.yaml`. It imports the generated package to register the specification.
+
+The published v1 demo mounts Swagger through `app.Transport`. For adapter v2, mount `httpSwagger.WrapHandler` at `/swagger/*` with `platform.WithEcho(func(e *echo.Echo) { ... })` when constructing the app. Keep annotations and generated `docs/*` in sync. The v1 demo's `main.go` shows the previous hook; use the v2 platform option in new code. Generated Swagger is supporting output, not the authority for route behavior.
 
 Use `App.RegisterTransport` only for an independent custom transport implementing `core.CustomTransport` (`Init`, `Start`, and `Stop`).
 

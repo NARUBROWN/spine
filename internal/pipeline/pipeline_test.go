@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"reflect"
@@ -26,6 +27,7 @@ func (b *testEventBus) Publish(events ...publish.DomainEvent) {}
 func (b *testEventBus) Drain() []publish.DomainEvent          { return nil }
 
 type testExecutionContext struct {
+	writer   core.ResponseWriter
 	method   string
 	path     string
 	params   map[string]string
@@ -138,16 +140,48 @@ func (h *testReturnHandler) Handle(v any, ctx core.ExecutionContext) error {
 
 type testPostHook struct {
 	called      bool
-	results     []any
-	err         error
 	returnedErr error
 }
 
-func (h *testPostHook) AfterExecution(ctx core.ExecutionContext, result []any, err error) error {
+func (h *testPostHook) AfterExecution(ctx core.ExecutionContext) error {
 	h.called = true
-	h.results = result
-	h.err = err
 	return h.returnedErr
+}
+
+func TestExecute_ControllerFailureSkipsPostExecutionHook(t *testing.T) {
+	called := 0
+	p, _ := newPipelineWithController(t, "Fail", &called)
+	postHook := &testPostHook{}
+	p.AddPostExecutionHook(postHook)
+	err := p.Execute(newTestExecutionContext())
+	if err == nil || !strings.Contains(err.Error(), "boom") || called != 1 {
+		t.Fatalf("컨트롤러 오류를 보존해야 합니다: called=%d err=%v", called, err)
+	}
+	if postHook.called {
+		t.Fatal("컨트롤러가 실패하면 성공 후처리 훅을 호출하면 안 됩니다")
+	}
+}
+
+func TestStagedJSONValidatesBeforeCommitAndCopiesPayload(t *testing.T) {
+	target := &testResponseWriter{}
+	stage := newStagedResponseWriter(target)
+	if err := stage.WriteJSON(200, json.RawMessage(`{"invalid":`)); err == nil || stage.IsCommitted() || target.writes != 0 {
+		t.Fatalf("잘못된 JSON은 응답 준비 전에 거부해야 합니다: err=%v writes=%d", err, target.writes)
+	}
+	payload := json.RawMessage(`{"value":"before"}`)
+	if err := stage.WriteJSON(201, payload); err != nil {
+		t.Fatal(err)
+	}
+	payload[10] = 'X'
+	if target.writes != 0 {
+		t.Fatal("준비한 응답을 flush 전에 전송하면 안 됩니다")
+	}
+	if err := stage.flush(); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(target.body.(json.RawMessage)); got != `{"value":"before"}` || target.status != 201 {
+		t.Fatalf("준비 뒤 원본 바이트 변경이 전송 응답을 바꾸면 안 됩니다: %q", got)
+	}
 }
 
 type testResponseWriter struct {
@@ -167,7 +201,7 @@ func (w *testResponseWriter) WriteStatus(status int) error {
 	w.writes++
 	return w.writeErr
 }
-func (w *testResponseWriter) WriteJSON(status int, value any) error {
+func (w *testResponseWriter) WriteJSON(status int, value json.RawMessage) error {
 	w.committed = true
 	w.status = status
 	w.body = value
@@ -335,11 +369,7 @@ func TestExecute_PostHookFailureDiscardsPreparedSuccessResponse(t *testing.T) {
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
 		handle: func(v any, ctx core.ExecutionContext) error {
 			handled = true
-			rwAny, ok := ctx.Get("spine.response_writer")
-			if !ok {
-				t.Fatal("response writer가 주입되어야 합니다")
-			}
-			rw := rwAny.(core.ResponseWriter)
+			rw := ctx.(core.HTTPResponseContext).ResponseWriter()
 			return rw.WriteStatus(204)
 		},
 	})
@@ -349,7 +379,7 @@ func TestExecute_PostHookFailureDiscardsPreparedSuccessResponse(t *testing.T) {
 
 	ctx := newTestExecutionContext()
 	writer := &testResponseWriter{}
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	err := p.Execute(ctx)
 	if err == nil {
@@ -372,7 +402,7 @@ func TestExecute_RecoversFromPanic(t *testing.T) {
 
 	ctx := newTestExecutionContext()
 	writer := &testResponseWriter{}
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	err := p.Execute(ctx)
 	if err == nil {
@@ -519,7 +549,7 @@ func TestExecute_ResponsePreparationFailureSkipsPostHooks(t *testing.T) {
 
 	ctx := newTestExecutionContext()
 	writer := &testResponseWriter{}
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	err := p.Execute(ctx)
 	if err == nil {
@@ -536,7 +566,7 @@ func TestExecute_ControllerReturnedErrorReachesBeforeResponseBeforeErrorWrite(t 
 
 	ctx := newTestExecutionContext()
 	writer := &testResponseWriter{}
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	var beforeErr error
 	events := []string{}
@@ -578,7 +608,7 @@ func TestExecute_RecoversErrorResponseAndAfterCompletionPanics(t *testing.T) {
 
 	ctx := newTestExecutionContext()
 	writer := &testResponseWriter{}
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	errorHandlerPanic := errors.New("error handler panic")
 	afterCompletionPanic := errors.New("after completion panic")
@@ -655,7 +685,7 @@ func TestExecute_BeforeResponseFailurePreventsSuccessWrite(t *testing.T) {
 
 	ctx := newTestExecutionContext()
 	writer := &testResponseWriter{}
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	events := []string{}
 	commitErr := errors.New("commit failed")
@@ -678,11 +708,7 @@ func TestExecute_BeforeResponseFailurePreventsSuccessWrite(t *testing.T) {
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
 		handle: func(v any, ctx core.ExecutionContext) error {
 			successHandled = true
-			rwAny, ok := ctx.Get("spine.response_writer")
-			if !ok {
-				t.Fatal("response writer가 주입되어야 합니다")
-			}
-			return rwAny.(core.ResponseWriter).WriteString(200, v.(string))
+			return ctx.(core.HTTPResponseContext).ResponseWriter().WriteString(200, v.(string))
 		},
 	})
 
@@ -725,7 +751,7 @@ func TestExecute_ResponsePreparationFailureReachesBeforeResponseBeforeCommit(t *
 	})
 	ctx := newTestExecutionContext()
 	writer := &testResponseWriter{}
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	err := p.Execute(ctx)
 	if err == nil || !strings.Contains(err.Error(), "unsupported type") {
@@ -766,7 +792,7 @@ func TestExecute_CookieValidationFailureReachesBeforeResponseBeforeCommit(t *tes
 	})
 	ctx := newTestExecutionContext()
 	writer := &testResponseWriter{}
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	err := p.Execute(ctx)
 	if err == nil || !strings.Contains(err.Error(), "invalid cookie") {
@@ -790,14 +816,14 @@ func TestExecute_StagedTransportWriteFailureIsReturned(t *testing.T) {
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
 		handle: func(value any, ctx core.ExecutionContext) error {
-			rw, _ := ctx.Get("spine.response_writer")
-			return rw.(core.ResponseWriter).WriteString(http.StatusOK, value.(string))
+			rw := ctx.(core.HTTPResponseContext).ResponseWriter()
+			return rw.WriteString(http.StatusOK, value.(string))
 		},
 	})
 	writeErr := errors.New("socket write failed")
 	writer := &testResponseWriter{writeErr: writeErr}
 	ctx := newTestExecutionContext()
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	err := p.Execute(ctx)
 	if !errors.Is(err, writeErr) {
@@ -812,16 +838,16 @@ func TestHandleExecutionError_WritesHTTPError(t *testing.T) {
 	p := &Pipeline{}
 	ctx := newTestExecutionContext()
 	writer := &testResponseWriter{}
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	p.handleExecutionError(ctx, httperr.BadRequest("bad request"))
 
 	if writer.writes != 1 || writer.status != 400 {
 		t.Fatalf("400 응답은 한 번만 기록되어야 합니다. 실제 writes=%d status=%d", writer.writes, writer.status)
 	}
-	body, ok := writer.body.(map[string]any)
-	if !ok {
-		t.Fatalf("예상하지 못한 바디 타입입니다: %T", writer.body)
+	var body map[string]string
+	if err := json.Unmarshal(writer.body.(json.RawMessage), &body); err != nil {
+		t.Fatal(err)
 	}
 	if body["message"] != "bad request" {
 		t.Fatalf("예상하지 못한 메시지입니다: %v", body["message"])
@@ -832,7 +858,7 @@ func TestHandleExecutionError_WritesInternalServerError(t *testing.T) {
 	p := &Pipeline{}
 	ctx := newTestExecutionContext()
 	writer := &testResponseWriter{}
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	p.handleExecutionError(ctx, errors.New("boom"))
 
@@ -845,7 +871,7 @@ func TestHandleExecutionError_InvalidStatusFallsBackAndReportsConfigurationError
 	p := &Pipeline{}
 	ctx := newTestExecutionContext()
 	writer := &testResponseWriter{}
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	err := p.handleExecutionError(ctx, &httperr.HTTPError{Status: 42, Message: "invalid"})
 	if err == nil || !strings.Contains(err.Error(), "invalid HTTP error status 42") {
@@ -861,7 +887,7 @@ func TestHandleExecutionError_PreservesWriteFailure(t *testing.T) {
 	ctx := newTestExecutionContext()
 	writeErr := errors.New("write failed")
 	writer := &testResponseWriter{writeErr: writeErr}
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	err := p.handleExecutionError(ctx, errors.New("boom"))
 	if !errors.Is(err, writeErr) {
@@ -873,7 +899,7 @@ func TestHandleExecutionError_SkipsWhenCommitted(t *testing.T) {
 	p := &Pipeline{}
 	ctx := newTestExecutionContext()
 	writer := &testResponseWriter{committed: true}
-	ctx.Set("spine.response_writer", writer)
+	ctx.SetResponseWriter(writer)
 
 	p.handleExecutionError(ctx, errors.New("boom"))
 
@@ -908,3 +934,11 @@ func TestBuildParameterMeta_AssignsPathKeysOnlyForPathTypes(t *testing.T) {
 
 var _ hook.PostExecutionHook = (*testPostHook)(nil)
 var _ handler.ReturnValueHandler = (*testReturnHandler)(nil)
+
+func (c *testExecutionContext) SetRoute(params map[string]string, pathKeys []string) {
+	c.params = params
+	c.pathKeys = pathKeys
+}
+
+func (c *testExecutionContext) ResponseWriter() core.ResponseWriter          { return c.writer }
+func (c *testExecutionContext) SetResponseWriter(writer core.ResponseWriter) { c.writer = writer }

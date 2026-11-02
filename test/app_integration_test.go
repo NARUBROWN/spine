@@ -60,77 +60,21 @@ func newTestHandlerFromApp(t *testing.T, app spine.App) http.Handler {
 func newTestHandlerFromAppWithOptions(t *testing.T, app spine.App, opts boot.Options) http.Handler {
 	t.Helper()
 
-	ready := make(chan http.Handler, 1)
-	runErr := make(chan error, 1)
-	runCtx, cancelRun := context.WithCancel(context.Background())
-
-	app.Transport(func(v any) {
-		h, ok := v.(http.Handler)
-		if !ok {
-			return
-		}
-		select {
-		case ready <- h:
-		default:
-		}
-	})
-
-	go func() {
-		if opts.Address == "" {
-			opts.Address = "127.0.0.1:0"
-		}
-		if opts.HTTP == nil {
-			opts.HTTP = &boot.HTTPOptions{}
-		}
-		runErr <- app.RunContext(runCtx, opts)
-	}()
-
-	var h http.Handler
-	select {
-	case h = <-ready:
-	case err := <-runErr:
-		t.Fatalf("spine 앱 실행 실패: %v", err)
-	case <-time.After(3 * time.Second):
-		t.Fatalf("spine 앱 시작 타임아웃")
+	if opts.HTTP == nil {
+		opts.HTTP = &boot.HTTPOptions{}
 	}
-
-	// 전송 훅은 라우트 마운트 이전에 호출될 수 있으므로,
-	// 테스트에서는 마운트 완료 시점까지 짧게 대기해 404 레이스를 제거한다.
-	deadline := time.Now().Add(3 * time.Second)
-	for {
-		req := httptest.NewRequest("GET", "/hello", nil)
-		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, req)
-
-		if rec.Result().StatusCode == http.StatusOK {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("핸들러 준비 타임아웃: /hello 상태=%d", rec.Result().StatusCode)
-		}
-		time.Sleep(10 * time.Millisecond)
+	prepared, err := app.Prepare(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("Spine 앱 준비 실패: %v", err)
 	}
-
 	t.Cleanup(func() {
-		cancelRun()
-
-		stopped := false
-		select {
-		case <-runErr:
-			stopped = true
-		default:
-		}
-
-		if !stopped {
-			select {
-			case <-runErr:
-			case <-time.After(3 * time.Second):
-				t.Fatalf("spine 앱 종료 타임아웃")
-			}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := prepared.Close(ctx); err != nil {
+			t.Errorf("Spine 앱 종료 실패: %v", err)
 		}
 	})
-
-	return h
+	return prepared.Handler()
 }
 
 func TestAppIntegration_JSON(t *testing.T) {

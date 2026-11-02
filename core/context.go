@@ -16,7 +16,7 @@ type EventBusCarrier interface {
 /*
 ExecutionContext
 - 파이프라인과 라우터 전용
-- HTTP 전송 실행 흐름에서만 사용
+- HTTP, WebSocket과 컨슈머의 공통 실행 흐름에서 사용
 */
 type ExecutionContext interface {
 	ContextCarrier
@@ -27,6 +27,9 @@ type ExecutionContext interface {
 	Params() map[string]string
 	Header(name string) string
 	PathKeys() []string
+	// SetRoute는 라우터가 찾은 요청별 파라미터와 키 순서를 저장합니다.
+	// 구현체는 입력을 복사하여 사용자 저장소 및 다른 요청과 분리합니다.
+	SetRoute(params map[string]string, pathKeys []string)
 	Queries() map[string][]string
 	Set(key string, value any)
 	Get(key string) (any, bool)
@@ -65,6 +68,14 @@ type HttpRequestContext interface {
 
 	// 멀티파트
 	MultipartForm() (*multipart.Form, error)
+}
+
+// HTTPResponseContext는 HTTP 응답 writer에 접근하는 실행 전용 계약입니다.
+// 파이프라인은 응답 staging 동안 writer를 교체하고 전송 전에 원래 writer로 복구합니다.
+// WS와 컨슈머 실행 컨텍스트에는 이 계약을 요구하지 않습니다.
+type HTTPResponseContext interface {
+	ResponseWriter() ResponseWriter
+	SetResponseWriter(ResponseWriter)
 }
 
 /*
