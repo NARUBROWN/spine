@@ -74,8 +74,7 @@ ASGI informs the boundary and lifetime design. This does not provide Python ASGI
 From Spine v0.6.0, direct new users to [Spine CLI](https://github.com/NARUBROWN/spine-cli) and `spine new`.
 Install the latest released CLI for general use. The verification baseline recorded on 2026-11-02 is CLI v0.4.0
 at commit `bf2ac43503cd37e2da327746bbe4a07d7c0e9ed9`, selecting Spine v0.6.0, Echo platform v0.1.0, and Echo v5.4.4.
-Install the `cmd/spine` entry point to get the `spine` command; installing the module root creates
-`spine-cli` instead. Install the CLI, then create and run a project:
+The official installation package is `github.com/NARUBROWN/spine-cli/cmd/spine`; the executable and user command are `spine`. Rerun the same `go install` command to update the CLI itself. `spine update` updates project dependencies and does not replace the CLI executable. Install the CLI, then create and run a project:
 
 ```sh
 go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
@@ -88,13 +87,14 @@ spine dev
 In another terminal, `curl http://localhost:8080/health` should return 200 and `{"status":"ok"}`.
 By default, `new` configures the Echo platform, installs dependencies, checks the static contract, and
 builds the application before creating the project. It does not initialize the application, run tests, or
-open a listener. Use `spine dev` to start it. Only `--skip-install` requires a separate `go mod tidy` afterward.
+open a listener. Use `spine dev` to start it. With `--skip-install`, run `go mod tidy` and `go mod download all` afterward. Static module inspection is offline. After manual dependency changes, or if inspection reports `MODULE_GRAPH_UNAVAILABLE`, use the same commands to prepare all module metadata before checking again.
 
 ### What the CLI covers
 
 - `new` installs and builds a project with `BuildApplication`, `app.Validate`, `GET /health`, and `spine.toml`; `--skip-install` creates files only.
-- `generate`/`g` creates resources, vertical slices, controllers, services, repositories, consumers, and
-  WebSockets and normally registers them in the composition root.
+- Default `layered-v1` generators create domain, DTO, repository, service, controller, and route files under their role roots with optional nested groups. A resource composes role generators; DTOs and HTTP routes require separate commands.
+- Legacy resource generation also registers a GET handler. Vertical slices are supported only in legacy projects and require explicit `--storage memory`; they are not available in the default layout. Consumer and WebSocket generators create skeletons that need application logic.
+- `update` validates the bundled dependency recipe in a temporary copy of a single-module project and applies go.mod/go.sum. It does not migrate application source or update the CLI executable.
 - `inspect` and `explain` report a static-source contract for HTTP, DI, interceptors, consumers, WebSockets,
   resources, and supported boot options.
 - `contract check`, snapshot/diff, and OpenAPI/AsyncAPI 3.1 export validate or materialize that static contract.

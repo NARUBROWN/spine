@@ -82,13 +82,15 @@ cd todo-api
 spine dev
 ```
 
+To update the CLI itself, rerun the same `go install` command. `spine update` updates the project’s Spine and Echo platform dependencies; it does not update the CLI executable.
+
 In another terminal, check the default health endpoint. It returns `200 OK` and `{"status":"ok"}`.
 
 ```sh
 curl http://localhost:8080/health
 ```
 
-By default, `new` configures the Echo platform, installs dependencies, checks the static contract, and builds the app before creating the project. Start the server with `spine dev`. If you use `--skip-install` to generate files only, run `go mod tidy` afterward.
+By default, `new` configures the Echo platform, installs dependencies, checks the static contract, and builds the app before creating the project. Start the server with `spine dev`. If you use `--skip-install` to generate files only, run `go mod tidy` and `go mod download all` afterward. If static inspection reports `MODULE_GRAPH_UNAVAILABLE`, use the same commands to prepare the full module metadata before checking again.
 
 Run contract and local checks from the project directory.
 

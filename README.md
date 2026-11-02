@@ -72,13 +72,15 @@ cd todo-api
 spine dev
 ```
 
+CLI 자체를 갱신할 때는 같은 `go install` 명령을 다시 실행합니다. `spine update`는 프로젝트의 Spine과 Echo 플랫폼 의존성을 갱신하며 CLI 실행 파일을 갱신하지 않습니다.
+
 다른 터미널에서 기본 health endpoint를 확인합니다. `200 OK`와 `{"status":"ok"}`가 반환됩니다.
 
 ```sh
 curl http://localhost:8080/health
 ```
 
-`new`는 기본으로 Echo 플랫폼 연결, 의존성 설치, 정적 계약 검사와 빌드를 완료한 뒤 프로젝트를 생성합니다. 서버는 `spine dev`로 시작합니다. 파일만 생성하는 `--skip-install`을 사용한 경우에는 생성 후 `go mod tidy`를 실행하세요.
+`new`는 기본으로 Echo 플랫폼 연결, 의존성 설치, 정적 계약 검사와 빌드를 완료한 뒤 프로젝트를 생성합니다. 서버는 `spine dev`로 시작합니다. 파일만 생성하는 `--skip-install`을 사용한 경우에는 생성 후 `go mod tidy`와 `go mod download all`을 실행하세요. 정적 검사에서 `MODULE_GRAPH_UNAVAILABLE`이 발생한 경우에도 두 명령으로 전체 모듈 메타데이터를 준비한 뒤 다시 검사합니다.
 
 실행 계약과 로컬 검사는 프로젝트 디렉터리에서 수행합니다.
 

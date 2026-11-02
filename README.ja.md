@@ -82,13 +82,15 @@ cd todo-api
 spine dev
 ```
 
+CLI 自体を更新する場合は、同じ `go install` コマンドを再実行します。`spine update` はプロジェクトの Spine と Echo プラットフォームの依存関係を更新するコマンドであり、CLI 実行ファイルは更新しません。
+
 別のターミナルで標準の health endpoint を確認します。`200 OK` と `{"status":"ok"}` が返ります。
 
 ```sh
 curl http://localhost:8080/health
 ```
 
-`new` は標準で Echo プラットフォームの設定、依存関係のインストール、静的契約の検査とビルドを完了してからプロジェクトを作成します。サーバーは `spine dev` で起動します。`--skip-install` でファイルだけを生成した場合は、その後に `go mod tidy` を実行してください。
+`new` は標準で Echo プラットフォームの設定、依存関係のインストール、静的契約の検査とビルドを完了してからプロジェクトを作成します。サーバーは `spine dev` で起動します。`--skip-install` でファイルだけを生成した場合は、その後に `go mod tidy` と `go mod download all` を実行してください。静的検査で `MODULE_GRAPH_UNAVAILABLE` が表示された場合も、この2つのコマンドでモジュールのメタデータを揃えてから再検査します。
 
 プロジェクトのディレクトリで契約とローカル検査を実行します。
 
