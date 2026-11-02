@@ -3,8 +3,8 @@ module github.com/NARUBROWN/spine/examples/security-config
 go 1.25.5
 
 require (
-	github.com/NARUBROWN/spine v0.5.3-0.20261101161224-490135eda06f
-	github.com/NARUBROWN/spine-echo-platform v0.0.0-20261101230311-ded538a25193
+	github.com/NARUBROWN/spine v0.5.3-0.20261102012946-eed61dc88259
+	github.com/NARUBROWN/spine-echo-platform v0.0.0-20261102013128-0a80ce357ba5
 )
 
 require (

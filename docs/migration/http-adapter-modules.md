@@ -2,7 +2,7 @@
 
 Echo 기반 앱은 `spine-echo-platform`을 설치하고 `platform.New()`로 생성합니다. 플랫폼이 Spine과 Echo를 함께 가져오며, HTTP 실행 계약은 Spine 모듈의 공개 `adapter` 패키지에서 관리합니다.
 
-이 문서는 HTTP 계약 `spine.http-adapter/v2`를 적용한 개발 트리를 기준으로 합니다. 현재 공개된 플랫폼 `v0.0.0-20261101230311-ded538a25193`과 Spine `v0.5.3-0.20261101161224-490135eda06f`은 v1 계약을 사용합니다. v2의 공개 모듈 버전은 아직 발행하지 않았으므로 현재는 아래 두 저장소의 v2 소스를 함께 체크아웃해 검증합니다.
+이 문서는 HTTP 계약 `spine.http-adapter/v2`를 기준으로 합니다. 공개 개발 스냅샷은 플랫폼 `v0.0.0-20261102013128-0a80ce357ba5`과 Spine `v0.5.3-0.20261102012946-eed61dc88259`입니다. 플랫폼은 해당 공개 Spine 버전을 의존성으로 사용하며 로컬 replace를 포함하지 않습니다. 정식 릴리스 태그는 아직 발행하지 않았습니다.
 
 ## 플랫폼 선택과 앱 생성
 
@@ -150,7 +150,7 @@ go -C cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=90s
 
 CLI 정적 분석, 부분 runtime probe와 실제 E2E는 별도 검증 결과입니다. Prepare 추가가 CLI probe의 HTTP 실행 분석 범위를 확장하는 것은 아닙니다.
 
-v2 공개 후 플랫폼의 Spine 버전과 fixture·CI의 플랫폼 버전을 고정한 다음, 공개 버전의 설치와 실행을 아래 명령으로 따로 검사합니다. 현재 v1 공개 pin에 이 v2 fixture를 적용한 결과를 v2 배포 검증으로 해석하지 않습니다.
+플랫폼의 Spine 버전과 예제·CI의 플랫폼 버전은 위 v2 공개 스냅샷으로 고정했습니다. 공개 버전의 설치와 실행은 아래 명령으로 따로 검사합니다.
 
 ```sh
 bash scripts/check-published-demo.sh
@@ -160,7 +160,7 @@ bash scripts/check-published-demo.sh
 
 ## 검증된 범위와 남은 작업
 
-[PR 커밋 93cfac1](https://github.com/NARUBROWN/spine/commit/93cfac157468c54a0f2ceccbf243fbaff7792007)의 [원격 CI 10개 검사](https://github.com/NARUBROWN/spine/actions/runs/41327017512)가 통과했습니다. 새 clone과 Go 1.25.5 / Linux arm64 컨테이너에서도 6개 모듈과 CLI, 공개 소비자 demo를 검증했습니다. 실브로커가 필요한 Kafka/RabbitMQ 테스트 2개는 환경이 없어 생략했습니다.
+v2 소스는 6개 모듈의 로컬 vet/race와 CLI strict contract check·verify를 통과했습니다. race는 최상위 309개와 하위 사례 87개를 포함하며, 실제 cmd/demo의 HTTP/WS·SIGINT 종료·Prepare E2E도 검증했습니다. 실브로커가 필요한 Kafka/RabbitMQ 테스트 2개는 환경이 없어 생략했습니다. 최신 커밋의 원격 CI 결과는 [PR #10의 Checks](https://github.com/NARUBROWN/spine/pull/10/checks)에서 별도로 확인합니다.
 
 CI의 플랫폼 단독 vet/unit/race는 `RUNNER_TEMP` 아래의 임시 Go workspace로 두 checkout을 연결해 PR의 Spine 소스를 검사합니다. 플랫폼 검사 전에 Spine이 workspace의 주 모듈로 선택됐는지도 확인합니다. 이 workspace는 플랫폼 명령에만 적용합니다.
 
