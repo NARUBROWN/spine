@@ -68,18 +68,18 @@ GitHub Issues are public. Share a sanitized summary or minimal reproduction with
 
 ## Get started with Spine CLI
 
-From Spine `v0.6.0`, `spine new` is the official way to create a project. Follow the [Spine CLI installation guide](https://github.com/NARUBROWN/spine-cli#권장-환경과-설치) to install the `spine` command and check its supported versions.
+From Spine `v0.6.0`, `spine-cli new` is the official way to create a project. Follow the [Spine CLI installation guide](https://github.com/NARUBROWN/spine-cli#권장-환경과-설치) to install the `spine-cli` command and check its supported versions.
 
 `new` selects compatible Spine, Echo platform, and Echo versions using the verified recipe bundled with the installed CLI. Check the generated `go.mod` for the selected versions.
 
 Create a project and start its development server.
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
-spine version
-spine new todo-api --module github.com/acme/todo-api
+go install github.com/NARUBROWN/spine-cli@latest
+spine-cli version
+spine-cli new todo-api --module github.com/acme/todo-api
 cd todo-api
-spine dev
+spine-cli dev
 ```
 
 In another terminal, check the default health endpoint. It returns `200 OK` and `{"status":"ok"}`.
@@ -88,23 +88,23 @@ In another terminal, check the default health endpoint. It returns `200 OK` and 
 curl http://localhost:8080/health
 ```
 
-By default, `new` configures the Echo platform, installs dependencies, checks the static contract, and builds the app before creating the project. Start the server with `spine dev`. If you use `--skip-install` to generate files only, run `go mod tidy` afterward.
+By default, `new` configures the Echo platform, installs dependencies, checks the static contract, and builds the app before creating the project. Start the server with `spine-cli dev`. If you use `--skip-install` to generate files only, run `go mod tidy` afterward.
 
 Run contract and local checks from the project directory.
 
 ```sh
-spine context --root . --json
-spine contract check --root . --warnings-as-errors --json
-spine verify --root . --warnings-as-errors --json
+spine-cli context --root . --json
+spine-cli contract check --root . --warnings-as-errors --json
+spine-cli verify --root . --warnings-as-errors --json
 ```
 
-`spine verify` checks the static contract, formatting, `go vet`, and Go tests. Validate database connections, message brokers, and deployed behavior separately.
+`spine-cli verify` checks the static contract, formatting, `go vet`, and Go tests. Validate database connections, message brokers, and deployed behavior separately.
 
 Generators refuse to overwrite existing files by default. Review the dry-run changes and `base_hash`, then pass the same hash to `--if-match`.
 
 ```sh
-spine g resource order --root . --dry-run --json
-spine g resource order --root . --if-match <base_hash> --json
+spine-cli g resource order --root . --dry-run --json
+spine-cli g resource order --root . --if-match <base_hash> --json
 ```
 
 The CLI analyzes HTTP, DI, interceptor, consumer, and WebSocket registrations, compares contract snapshots, and exports OpenAPI/AsyncAPI. See the [migration guide](docs/migration/http-adapter-modules.md) for manual platform integration and App APIs, and the [CLI documentation](https://github.com/NARUBROWN/spine-cli#readme) for commands and analysis boundaries.

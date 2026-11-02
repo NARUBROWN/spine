@@ -211,14 +211,14 @@ jobs:
         run: go -C cmd/demo mod download all
 
       - name: Install pinned Spine CLI
-        run: go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.0
+        run: go install github.com/NARUBROWN/spine-cli@v0.4.0
 
       - name: Verify demo CLI contract
         run: |
-          spine context --root cmd/demo --json
-          spine contract check --root cmd/demo --warnings-as-errors --json
-          spine verify --root cmd/demo --warnings-as-errors --json
-          spine contract probe --root cmd/demo --json
+          spine-cli context --root cmd/demo --json
+          spine-cli contract check --root cmd/demo --warnings-as-errors --json
+          spine-cli verify --root cmd/demo --warnings-as-errors --json
+          spine-cli contract probe --root cmd/demo --json
 
       - name: Run real-network demo E2E tests
         run: go -C cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=8m

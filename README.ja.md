@@ -68,18 +68,18 @@ GitHub Issuesは公開されます。機密情報を除いた概要や最小限�
 
 ## Spine CLI で始める
 
-Spine `v0.6.0` 以降、公式のプロジェクト作成方法は `spine new` です。[Spine CLI のインストールガイド](https://github.com/NARUBROWN/spine-cli#권장-환경과-설치)に従って `spine` コマンドをインストールし、対応バージョンを確認してください。
+Spine `v0.6.0` 以降、公式のプロジェクト作成方法は `spine-cli new` です。[Spine CLI のインストールガイド](https://github.com/NARUBROWN/spine-cli#권장-환경과-설치)に従って `spine-cli` コマンドをインストールし、対応バージョンを確認してください。
 
 `new` はインストールした CLI に含まれる検証済みレシピに従い、互換性のある Spine、Echo プラットフォーム、Echo のバージョンを設定します。選択されたバージョンは生成された `go.mod` で確認してください。
 
 プロジェクトを作成し、開発サーバーを起動します。
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
-spine version
-spine new todo-api --module github.com/acme/todo-api
+go install github.com/NARUBROWN/spine-cli@latest
+spine-cli version
+spine-cli new todo-api --module github.com/acme/todo-api
 cd todo-api
-spine dev
+spine-cli dev
 ```
 
 別のターミナルで標準の health endpoint を確認します。`200 OK` と `{"status":"ok"}` が返ります。
@@ -88,23 +88,23 @@ spine dev
 curl http://localhost:8080/health
 ```
 
-`new` は標準で Echo プラットフォームの設定、依存関係のインストール、静的契約の検査とビルドを完了してからプロジェクトを作成します。サーバーは `spine dev` で起動します。`--skip-install` でファイルだけを生成した場合は、その後に `go mod tidy` を実行してください。
+`new` は標準で Echo プラットフォームの設定、依存関係のインストール、静的契約の検査とビルドを完了してからプロジェクトを作成します。サーバーは `spine-cli dev` で起動します。`--skip-install` でファイルだけを生成した場合は、その後に `go mod tidy` を実行してください。
 
 プロジェクトのディレクトリで契約とローカル検査を実行します。
 
 ```sh
-spine context --root . --json
-spine contract check --root . --warnings-as-errors --json
-spine verify --root . --warnings-as-errors --json
+spine-cli context --root . --json
+spine-cli contract check --root . --warnings-as-errors --json
+spine-cli verify --root . --warnings-as-errors --json
 ```
 
-`spine verify` は静的契約、コード書式、`go vet` と Go テストを検査します。データベース、メッセージブローカー、デプロイ環境の動作は別途検証してください。
+`spine-cli verify` は静的契約、コード書式、`go vet` と Go テストを検査します。データベース、メッセージブローカー、デプロイ環境の動作は別途検証してください。
 
 ジェネレーターは標準で既存ファイルを上書きしません。dry-run の変更内容と `base_hash` を確認し、同じ値を `--if-match` に渡してください。
 
 ```sh
-spine g resource order --root . --dry-run --json
-spine g resource order --root . --if-match <base_hash> --json
+spine-cli g resource order --root . --dry-run --json
+spine-cli g resource order --root . --if-match <base_hash> --json
 ```
 
 CLI は HTTP、DI、インターセプター、コンシューマー、WebSocket の登録を解析し、契約スナップショットの比較と OpenAPI/AsyncAPI の出力を提供します。手動のプラットフォーム接続と App API は[移行ガイド](docs/migration/http-adapter-modules.md)、全コマンドと解析範囲は [CLI ドキュメント](https://github.com/NARUBROWN/spine-cli#readme)を参照してください。
