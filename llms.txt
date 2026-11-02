@@ -42,11 +42,11 @@ the error handler takes `(ctx *echo.Context, err error)`, and logging uses `log/
 provide `Unwrap() http.ResponseWriter` on native middleware wrappers. Controller registration is unchanged;
 the v2 adapter and preparation API changes are described in the migration guide.
 
-New projects start with `spine-cli new`; generated applications use `platform.New()`.
+New projects start with `spine new`; generated applications use `platform.New()`.
 This is equivalent to `spine.New(platform.Option())` when wiring an existing application manually.
 The cmd/demo fixture composes the factory explicitly with `spine.New(platform.Option())`. The CLI recognizes both this form and `platform.New()`.
 The installed CLI selects a compatible Spine, Echo platform, and Echo combination through its bundled recipe.
-Use `spine-cli new` and inspect the generated go.mod instead of assuming a fixed version combination.
+Use `spine new` and inspect the generated go.mod instead of assuming a fixed version combination.
 A custom implementation uses `spine.New(spine.WithHTTPAdapter(factory))`.
 `spine.New()` selects no HTTP implementation; enabling HTTP without a factory fails preflight validation.
 HTTP-less workers do not need an HTTP adapter.
@@ -71,23 +71,24 @@ ASGI informs the boundary and lifetime design. This does not provide Python ASGI
 
 ## Spine CLI
 
-From Spine v0.6.0, direct new users to [Spine CLI](https://github.com/NARUBROWN/spine-cli) and `spine-cli new`.
+From Spine v0.6.0, direct new users to [Spine CLI](https://github.com/NARUBROWN/spine-cli) and `spine new`.
 Install the latest released CLI for general use. The verification baseline recorded on 2026-11-02 is CLI v0.4.0
 at commit `bf2ac43503cd37e2da327746bbe4a07d7c0e9ed9`, selecting Spine v0.6.0, Echo platform v0.1.0, and Echo v5.4.4.
-Install the module root to get the default `spine-cli` command. Install the CLI, then create and run a project:
+Install the `cmd/spine` entry point to get the `spine` command; installing the module root creates
+`spine-cli` instead. Install the CLI, then create and run a project:
 
 ```sh
-go install github.com/NARUBROWN/spine-cli@latest
-spine-cli version
-spine-cli new todo-api --module github.com/acme/todo-api
+go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
+spine version
+spine new todo-api --module github.com/acme/todo-api
 cd todo-api
-spine-cli dev
+spine dev
 ```
 
 In another terminal, `curl http://localhost:8080/health` should return 200 and `{"status":"ok"}`.
 By default, `new` configures the Echo platform, installs dependencies, checks the static contract, and
 builds the application before creating the project. It does not initialize the application, run tests, or
-open a listener. Use `spine-cli dev` to start it. Only `--skip-install` requires a separate `go mod tidy` afterward.
+open a listener. Use `spine dev` to start it. Only `--skip-install` requires a separate `go mod tidy` afterward.
 
 ### What the CLI covers
 
@@ -112,10 +113,10 @@ Discover the installed CLI instead of relying on memorized flags, then inspect t
 changing it:
 
 ```sh
-spine-cli schema --json
-spine-cli capabilities --json
-spine-cli context --root <project-directory> --json
-spine-cli inspect --root <project-directory> --json
+spine schema --json
+spine capabilities --json
+spine context --root <project-directory> --json
+spine inspect --root <project-directory> --json
 ```
 
 JSON-capable commands wrap success and failure in `spine.cli-result/v1`; read `ok`, `exit_code`, `result`, and
@@ -125,11 +126,11 @@ any structured `error` even when the process exits non-zero. Treat `inspect` as 
 For any generated change, use optimistic concurrency rather than immediately writing or forcing files:
 
 ```sh
-spine-cli g resource order --root <project-directory> --dry-run --json
+spine g resource order --root <project-directory> --dry-run --json
 # Review result.changes, result.diff, and result.base_hash.
-spine-cli g resource order --root <project-directory> --if-match <base_hash> --json
-spine-cli contract check --root <project-directory> --warnings-as-errors --json
-spine-cli verify --root <project-directory> --warnings-as-errors --json
+spine g resource order --root <project-directory> --if-match <base_hash> --json
+spine contract check --root <project-directory> --warnings-as-errors --json
+spine verify --root <project-directory> --warnings-as-errors --json
 ```
 
 The default is to refuse overwriting an existing target. Use `--force` only after reviewing a
@@ -160,12 +161,12 @@ Go module. Its `replace ../..` dependency uses the current framework source. Use
 E2E after every implementation step; keep `-count=1` so a cached result cannot replace a fresh run.
 
 ```sh
-spine-cli context --root cmd/demo --json
-spine-cli contract check --root cmd/demo --warnings-as-errors --json
-spine-cli verify --root cmd/demo --warnings-as-errors --json
-spine-cli contract probe --root cmd/demo --json
+spine context --root cmd/demo --json
+spine contract check --root cmd/demo --warnings-as-errors --json
+spine verify --root cmd/demo --warnings-as-errors --json
+spine contract probe --root cmd/demo --json
 go -C cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=90s
-spine-cli check --root .
+spine check --root .
 ```
 
 The CLI, entrypoint, and HTTP/WS E2E share `cmd/demo/application.BuildApplication`. Keep static analysis,

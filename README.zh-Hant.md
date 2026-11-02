@@ -68,18 +68,18 @@ GitHub Issues 為公開內容。請分享已移除機密資訊的摘要或最小
 
 ## 使用 Spine CLI 開始
 
-從 Spine `v0.6.0` 開始，官方專案建立方式是 `spine-cli new`。請依照 [Spine CLI 安裝指南](https://github.com/NARUBROWN/spine-cli#권장-환경과-설치)安裝 `spine-cli` 指令，並確認支援的版本。
+從 Spine `v0.6.0` 開始，官方專案建立方式是 `spine new`。請依照 [Spine CLI 安裝指南](https://github.com/NARUBROWN/spine-cli#권장-환경과-설치)安裝 `spine` 指令，並確認支援的版本。
 
 `new` 依照已安裝 CLI 內建的驗證配方，設定相容的 Spine、Echo 平台與 Echo 版本組合。請在產生的 `go.mod` 中查看選取的版本。
 
 建立專案並啟動開發伺服器。
 
 ```sh
-go install github.com/NARUBROWN/spine-cli@latest
-spine-cli version
-spine-cli new todo-api --module github.com/acme/todo-api
+go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
+spine version
+spine new todo-api --module github.com/acme/todo-api
 cd todo-api
-spine-cli dev
+spine dev
 ```
 
 在另一個終端機中檢查預設的 health endpoint。它應回傳 `200 OK` 和 `{"status":"ok"}`。
@@ -88,23 +88,23 @@ spine-cli dev
 curl http://localhost:8080/health
 ```
 
-預設情況下，`new` 完成 Echo 平台設定、相依套件安裝、靜態契約檢查與建置後才建立專案。使用 `spine-cli dev` 啟動伺服器。如果使用 `--skip-install` 僅產生檔案，請接著執行 `go mod tidy`。
+預設情況下，`new` 完成 Echo 平台設定、相依套件安裝、靜態契約檢查與建置後才建立專案。使用 `spine dev` 啟動伺服器。如果使用 `--skip-install` 僅產生檔案，請接著執行 `go mod tidy`。
 
 在專案目錄中執行契約與本機檢查。
 
 ```sh
-spine-cli context --root . --json
-spine-cli contract check --root . --warnings-as-errors --json
-spine-cli verify --root . --warnings-as-errors --json
+spine context --root . --json
+spine contract check --root . --warnings-as-errors --json
+spine verify --root . --warnings-as-errors --json
 ```
 
-`spine-cli verify` 檢查靜態契約、程式碼格式、`go vet` 與 Go 測試。資料庫連線、訊息代理與部署環境的行為需要另外驗證。
+`spine verify` 檢查靜態契約、程式碼格式、`go vet` 與 Go 測試。資料庫連線、訊息代理與部署環境的行為需要另外驗證。
 
 產生器預設不會覆寫既有檔案。先檢查 dry-run 的變更與 `base_hash`，再將相同值傳給 `--if-match`。
 
 ```sh
-spine-cli g resource order --root . --dry-run --json
-spine-cli g resource order --root . --if-match <base_hash> --json
+spine g resource order --root . --dry-run --json
+spine g resource order --root . --if-match <base_hash> --json
 ```
 
 CLI 分析 HTTP、DI、攔截器、消費者與 WebSocket 註冊，支援契約快照比較及 OpenAPI/AsyncAPI 匯出。手動平台整合與 App API 請參閱[遷移指南](docs/migration/http-adapter-modules.md)，完整指令與分析範圍請參閱 [CLI 文件](https://github.com/NARUBROWN/spine-cli#readme)。
