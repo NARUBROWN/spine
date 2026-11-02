@@ -20,7 +20,7 @@ Prepare E2E는 같은 앱을 외부 HTTP 서버에 연결해 실제 HTTP/WS 처�
 저장소 루트에서 실행합니다.
 
 ```sh
-spine run --root cmd/demo
+spine-cli run --root cmd/demo
 ```
 
 Go로 직접 실행할 수도 있습니다.
@@ -32,7 +32,7 @@ go -C cmd/demo run .
 기본 주소는 `127.0.0.1:8080`입니다. CLI의 `SPINE_PORT`를 지원하며 `SPINE_DEMO_ADDRESS`가 있으면 그 주소를 우선합니다.
 
 ```sh
-SPINE_DEMO_ADDRESS=127.0.0.1:9000 spine run --root cmd/demo
+SPINE_DEMO_ADDRESS=127.0.0.1:9000 spine-cli run --root cmd/demo
 ```
 
 ## 변경 후 필수 검증
@@ -40,10 +40,10 @@ SPINE_DEMO_ADDRESS=127.0.0.1:9000 spine run --root cmd/demo
 프레임워크 구현 단위가 끝날 때마다 아래 검사를 수행합니다. E2E에는 `-count=1`을 유지하여 이전 성공 결과를 재사용하지 않습니다.
 
 ```sh
-spine context --root cmd/demo --json
-spine contract check --root cmd/demo --warnings-as-errors --json
-spine verify --root cmd/demo --warnings-as-errors --json
-spine contract probe --root cmd/demo --json
+spine-cli context --root cmd/demo --json
+spine-cli contract check --root cmd/demo --warnings-as-errors --json
+spine-cli verify --root cmd/demo --warnings-as-errors --json
+spine-cli contract probe --root cmd/demo --json
 go -C cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=90s
 ```
 
@@ -58,7 +58,7 @@ HTTP 구성은 `spine.New(platform.Option())`으로 Echo 통합 모듈을 명시
 
 예제는 독립 Go 모듈입니다. `go.mod`의 replace로 공개 계약을 포함한 현재 커널과 별도 Echo 플랫폼 모듈을 함께 사용합니다. 의존 버전은 공개 커밋의 Go 의사버전으로 고정하며 replace로 현재 소스를 검사합니다. 정식 버전 태그는 아직 발행하지 않았습니다.
 저장소 루트의 `go test ./...`는 이 중첩 모듈을 검사하지 않으므로 위 E2E 명령을 별도로 실행해야 합니다.
-프레임워크 자체의 전체 검사는 루트에서 `spine check --root .`로 수행합니다.
+프레임워크 자체의 전체 검사는 루트에서 `spine-cli check --root .`로 수행합니다.
 
 전체 검증에서는 `../spine-echo-platform`, `test`, `cmd/reference`, `examples/security-config`의 테스트도 각각 실행하고 `bash scripts/check-module-boundaries.sh`로 의존 경계를 검사합니다.
 

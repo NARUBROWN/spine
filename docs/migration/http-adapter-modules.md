@@ -1,6 +1,6 @@
 # Echo 플랫폼으로 전환하기
 
-Spine `v0.6.0`부터 새 프로젝트의 공식 시작 경로는 Spine CLI의 `spine new`입니다. CLI가 Echo 플랫폼 연결과 의존성을 구성합니다. 이 문서는 기존 앱의 전환과 직접 플랫폼을 연결하는 방법을 설명합니다.
+Spine `v0.6.0`부터 새 프로젝트의 공식 시작 경로는 Spine CLI의 `spine-cli new`입니다. CLI가 Echo 플랫폼 연결과 의존성을 구성합니다. 이 문서는 기존 앱의 전환과 직접 플랫폼을 연결하는 방법을 설명합니다.
 
 Spine `v0.6.0`과 Echo 플랫폼 `v0.1.0`의 HTTP 계약 `spine.http-adapter/v2`를 기준으로 합니다. HTTP 실행 계약은 Spine 모듈의 공개 `adapter` 패키지에서 관리하며, 플랫폼은 Spine과 Echo를 공개 의존성으로 가져옵니다. 플랫폼의 go.mod에는 로컬 replace가 없습니다.
 
@@ -9,11 +9,11 @@ Spine `v0.6.0`과 Echo 플랫폼 `v0.1.0`의 HTTP 계약 `spine.http-adapter/v2`
 [Spine CLI `v0.4.0`](https://github.com/NARUBROWN/spine-cli/releases/tag/v0.4.0)을 설치합니다. `new`는 Spine `v0.6.0`, Echo 플랫폼 `v0.1.0`과 Echo `v5.4.4`를 함께 구성합니다.
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.0
-spine version
-spine new todo-api --module github.com/acme/todo-api
+go install github.com/NARUBROWN/spine-cli@v0.4.0
+spine-cli version
+spine-cli new todo-api --module github.com/acme/todo-api
 cd todo-api
-spine dev
+spine-cli dev
 ```
 
 다른 터미널에서 `curl http://localhost:8080/health`로 `200 OK`와 `{"status":"ok"}` 응답을 확인합니다. 생성된 `go.mod`에는 Spine `v0.6.0`과 Echo 플랫폼 `v0.1.0`이 있어야 합니다.
@@ -176,10 +176,10 @@ Spine 저장소의 `test`, `cmd/demo`, `cmd/reference`와 `examples/security-con
 
 ```sh
 bash scripts/check-module-boundaries.sh
-spine context --root cmd/demo --json
-spine contract check --root cmd/demo --warnings-as-errors --json
-spine verify --root cmd/demo --warnings-as-errors --json
-spine contract probe --root cmd/demo --json
+spine-cli context --root cmd/demo --json
+spine-cli contract check --root cmd/demo --warnings-as-errors --json
+spine-cli verify --root cmd/demo --warnings-as-errors --json
+spine-cli contract probe --root cmd/demo --json
 go -C cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=90s
 ```
 
