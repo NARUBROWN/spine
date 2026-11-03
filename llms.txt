@@ -610,13 +610,24 @@ The Bun demo uses this safe boundary:
 
 Response serialization, cookie validation, event dispatch, and post-processing happen before `BeforeResponse`, so their framework-controlled failures can trigger rollback. This also means a broker event can be published before the transaction commit, and a later commit failure cannot recall it. A database commit is atomic with neither broker publication nor the physical socket write. Use an outbox for database-plus-broker atomicity.
 
-## Swagger and transport extensions
+## Runtime OpenAPI and transport extensions
 
-Spine does not generate OpenAPI automatically. The Bun demo uses Swaggo annotations and generated `docs/docs.go`, `docs/swagger.json`, and `docs/swagger.yaml`. It imports the generated package to register the specification.
+HTTP apps now generate OpenAPI 3.1.2 at `/openapi.json` by default during preparation. CLI, source files,
+swaggo and documentation annotations are not required. The resource is independent of GlobalPrefix;
+`boot.HTTPOptions.OpenAPI` changes its path/title/API version or disables it. It uses server middleware
+but bypasses business controllers, DTO validation and Spine transaction/interceptor pipelines.
 
-The published v1 demo mounts Swagger through `app.Transport`. For adapter v2, mount `httpSwagger.WrapHandler` at `/swagger/*` with `platform.WithEcho(func(e *echo.Echo) { ... })` when constructing the app. Keep annotations and generated `docs/*` in sync. The v1 demo's `main.go` shows the previous hook; use the v2 platform option in new code. Generated Swagger is supporting output, not the authority for route behavior.
+Use `spine.DescribeHTTP(app, options)` for listener-free, constructor-free descriptions and
+`pkg/openapi.Generate` to serialize them. The existing App interface is unchanged; standard apps expose
+an optional HTTPDescriber. Validation constraints come only from the registered validator's optional
+contract/validator.SchemaDescriber. Missing description support and dynamic/unsupported behavior remain
+explicit diagnostics. See contract/description/README.md for supported types and boundaries.
 
-Use `App.RegisterTransport` only for an independent custom transport implementing `core.CustomTransport` (`Init`, `Start`, and `Stop`).
+The Bun demo's existing Swaggo UI can remain on `/swagger/*` through platform.WithEcho. Its generated
+Swagger document remains separate from the runtime OpenAPI endpoint. Swagger UI and ReDoc integration
+with the new JSON are follow-up work.
+
+Use App.RegisterTransport only for an independent core.CustomTransport.
 
 ## WebSocket
 

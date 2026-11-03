@@ -51,6 +51,9 @@ HTTP 런타임 설정입니다.
 HTTP 요청 실행 흐름에만 영향을 줍니다.
 */
 type HTTPOptions struct {
+	// OpenAPI는 별도 CLI나 주석 없이 제공하는 표준 HTTP 명세의 설정입니다.
+	OpenAPI OpenAPIOptions
+
 	// HTTP API 전역 접두사(예: "/api/v1")
 	// 빈 값이면 접두사를 적용하지 않습니다.
 	GlobalPrefix string
@@ -91,7 +94,7 @@ func (o HTTPOptions) ValidateIssues(prefix string) []ConfigIssue {
 	if prefix == "" {
 		prefix = "HTTP"
 	}
-	var issues []ConfigIssue
+	issues := o.OpenAPI.ValidateIssues(configPath(prefix, "OpenAPI"))
 	for _, field := range []struct {
 		name  string
 		value time.Duration

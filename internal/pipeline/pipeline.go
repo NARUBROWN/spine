@@ -15,7 +15,6 @@ import (
 	"github.com/NARUBROWN/spine/internal/resolver"
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/pkg/httperr"
-	"github.com/NARUBROWN/spine/pkg/path"
 )
 
 type Pipeline struct {
@@ -302,35 +301,7 @@ func callHandleExecutionError(
 }
 
 func buildParameterMeta(method reflect.Method, pathKeys []string) []resolver.ParameterMeta {
-	pathIdx := 0
-	metas := make([]resolver.ParameterMeta, 0, method.Type.NumIn()-1)
-
-	for i := 1; i < method.Type.NumIn(); i++ {
-		pt := method.Type.In(i)
-
-		pm := resolver.ParameterMeta{
-			Index: i - 1,
-			Type:  pt,
-		}
-
-		if isPathType(pt) {
-			if pathIdx >= len(pathKeys) {
-				pm.PathKey = ""
-			} else {
-				pm.PathKey = pathKeys[pathIdx]
-			}
-			pathIdx++
-		}
-
-		metas = append(metas, pm)
-	}
-
-	return metas
-}
-
-func isPathType(pt reflect.Type) bool {
-	pathPkg := reflect.TypeFor[path.Int]().PkgPath()
-	return pt.PkgPath() == pathPkg
+	return resolver.Parameters(method, pathKeys)
 }
 
 // isNilResult는 명시적으로 nil을 검사합니다. error 인터페이스에 nil이 담긴 경우처럼

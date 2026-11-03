@@ -17,6 +17,7 @@ import (
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	eventResolver "github.com/NARUBROWN/spine/internal/event/consumer/resolver"
 	"github.com/NARUBROWN/spine/internal/event/hook"
+	"github.com/NARUBROWN/spine/internal/httpplan"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/internal/resolver"
@@ -144,6 +145,7 @@ func Validate(config Config) error {
 			})
 		}
 		issues = append(issues, config.HTTP.ValidateIssues("HTTP")...)
+		issues = append(issues, openAPICollisionIssues(config)...)
 	}
 	for i, route := range config.Routes {
 		if _, err := spineRouter.NewHandlerMeta(route.Handler); err != nil {
@@ -296,19 +298,7 @@ func globalInterceptorIdentity(interceptor core.Interceptor) (interceptorIdentit
 }
 
 func joinPath(prefix, path string) (string, error) {
-	if path == "" {
-		return "", fmt.Errorf("route path cannot be empty")
-	}
-
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-
-	if prefix == "" {
-		return path, nil
-	}
-
-	return prefix + path, nil
+	return httpplan.Path(prefix, path)
 }
 
 func assertNoAmbiguousRoute(method, newPath string, existing []string) error {

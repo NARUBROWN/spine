@@ -13,14 +13,14 @@ import (
 	adapter "github.com/NARUBROWN/spine/contract/http"
 	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/apidesc"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	"github.com/NARUBROWN/spine/internal/event/hook"
 	eventPublish "github.com/NARUBROWN/spine/internal/event/publish"
-	"github.com/NARUBROWN/spine/internal/handler"
+	"github.com/NARUBROWN/spine/internal/httpplan"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
-	"github.com/NARUBROWN/spine/internal/resolver"
 	spineRouter "github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/transport"
 	"github.com/NARUBROWN/spine/internal/ws"
@@ -41,6 +41,17 @@ func Prepare(ctx context.Context, config Config) (*Application, error) {
 func prepare(ctx context.Context, config Config) (result *Application, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	var openAPIDocument []byte
+	if config.HTTP != nil && !config.HTTP.OpenAPI.Disabled {
+		description, describeErr := DescribeHTTP(config)
+		if describeErr != nil {
+			return nil, describeErr
+		}
+		openAPIDocument, err = apidesc.OpenAPI(description, config.HTTP.OpenAPI)
+		if err != nil {
+			return nil, err
+		}
 	}
 	application := &Application{config: config, closeDone: make(chan struct{})}
 	ready := false
@@ -218,43 +229,8 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 		}
 
 		log.Println("[Bootstrap] Registering argument resolvers")
-		httpPipeline.AddArgumentResolver(
-			// 표준 컨텍스트 리졸버
-			&resolver.StdContextResolver{},
-
-			// Spine 컨트롤러 컨텍스트 뷰
-			&resolver.ControllerContextResolver{},
-
-			// 헤더 리졸버
-			&resolver.HeaderResolver{},
-
-			// 경로 리졸버들
-			&resolver.PathIntResolver{},
-			&resolver.PathStringResolver{},
-			&resolver.PathBooleanResolver{},
-
-			// 쿼리의 의미 타입 리졸버들
-			&resolver.PaginationResolver{},
-			&resolver.QueryValuesResolver{},
-
-			// 요청 본문 리졸버
-			&resolver.DTOResolver{Validator: config.Validator},
-
-			// 폼 DTO(멀티파트/폼)
-			&resolver.FormDTOResolver{Validator: config.Validator},
-
-			// 멀티파트 파일
-			&resolver.UploadedFilesResolver{},
-		)
-
-		log.Println("[Bootstrap] Registering return value handlers")
-		httpPipeline.AddReturnValueHandler(
-			&handler.RedirectReturnValueHandler{},
-			&handler.BinaryReturnHandler{},
-			&handler.StringReturnHandler{},
-			&handler.JSONReturnHandler{},
-			&handler.ErrorReturnHandler{},
-		)
+		httpPipeline.AddArgumentResolver(httpplan.Resolvers(config.Validator)...)
+		httpPipeline.AddReturnValueHandler(httpplan.Returns()...)
 
 		log.Println("[Bootstrap] Registering interceptors")
 
@@ -309,6 +285,14 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 		server, err := config.HTTPAdapterFactory.New(adapter.Config{
 			Options: serverOptions(*config.HTTP),
 			Execute: func(scope adapter.HTTPContext) error {
+				if len(openAPIDocument) > 0 && scope.Path() == config.HTTP.OpenAPI.DocumentPath() && (scope.Method() == http.MethodGet || scope.Method() == http.MethodHead) {
+					scope.Writer().SetHeader("Cache-Control", "no-cache")
+					if scope.Method() == http.MethodHead {
+						scope.Writer().SetHeader("Content-Type", "application/json")
+						return scope.Writer().WriteStatus(http.StatusOK)
+					}
+					return scope.Writer().WriteJSON(http.StatusOK, append([]byte(nil), openAPIDocument...))
+				}
 				return httpPipeline.Execute(transport.NewHTTPContext(scope))
 			},
 			Upgrades: upgrades,

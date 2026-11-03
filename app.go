@@ -2,9 +2,11 @@ package spine
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
+	"github.com/NARUBROWN/spine/contract/description"
 	eventadapter "github.com/NARUBROWN/spine/contract/event"
 	adapter "github.com/NARUBROWN/spine/contract/http"
 	validation "github.com/NARUBROWN/spine/contract/validator"
@@ -179,6 +181,26 @@ func (a *app) bootstrapConfig(opts boot.Options) bootstrap.Config {
 
 func (a *app) Validate(opts boot.Options) error {
 	return bootstrap.Validate(a.bootstrapConfig(opts))
+}
+
+// HTTPDescriber는 기존 App 구현을 확장하지 않는 선택적 HTTP 설명 기능입니다.
+type HTTPDescriber interface {
+	DescribeHTTP(boot.Options) (description.HTTP, error)
+}
+
+// ErrHTTPDescriptionUnavailable는 선택적 HTTP 설명 기능이 없는 앱을 나타냅니다.
+var ErrHTTPDescriptionUnavailable = errors.New("application does not provide HTTP descriptions")
+
+// DescribeHTTP는 생성자나 네트워크를 실행하지 않고 현재 HTTP 등록을 설명합니다.
+func DescribeHTTP(application App, opts boot.Options) (description.HTTP, error) {
+	if describer, ok := application.(HTTPDescriber); ok {
+		return describer.DescribeHTTP(opts)
+	}
+	return description.HTTP{}, ErrHTTPDescriptionUnavailable
+}
+
+func (a *app) DescribeHTTP(opts boot.Options) (description.HTTP, error) {
+	return bootstrap.DescribeHTTP(a.bootstrapConfig(opts))
 }
 
 func (a *app) Run(opts boot.Options) error {
