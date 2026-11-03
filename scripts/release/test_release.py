@@ -258,6 +258,13 @@ class ReleasePolicyTests(unittest.TestCase):
                     self.assertEqual("--prerelease" in arguments, channel != "stable")
                     self.assertEqual("--latest" in arguments, channel == "stable")
 
+    def test_repository_settings_endpoint_has_no_trailing_slash(self):
+        result = subprocess.CompletedProcess([], 0, '{"default_branch":"preview"}', "")
+        with patch.object(release.subprocess, "run", return_value=result) as command:
+            actual = release.GitHub("NARUBROWN/spine").api("", method="PATCH", data={"default_branch": "preview"})
+            self.assertEqual(actual["default_branch"], "preview")
+            self.assertEqual(command.call_args.args[0][4], "repos/NARUBROWN/spine")
+
     def test_unknown_api_failures_are_not_treated_as_missing_tags(self):
         github = release.GitHub("NARUBROWN/spine")
         for status in ("401", "403", "500"):
