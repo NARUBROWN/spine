@@ -13,7 +13,7 @@
 
 잘못된 방향의 PR은 `Branch Flow / <대상>` 필수 상태를 실패로 표시하고 자동으로 닫습니다. 대상을 바꾼 뒤 다시 열 수 있습니다. 다른 fork의 `preview`·`rc`라는 이름으로 승격 권한을 얻을 수는 없습니다.
 
-세 채널 브랜치는 직접 push·강제 push·삭제를 금지하고 PR, `Verified Source`, 대상별 `Branch Flow` 검사를 요구합니다. 관리자도 우회할 수 없습니다. 현재 단일 관리자가 자신의 PR을 처리할 수 있도록 승인 리뷰 개수는 0으로 두고, CI와 방향 검사로 병합을 보호합니다. 정식 발행의 별도 사용자 승인은 그대로 유지합니다.
+세 채널 브랜치는 직접 push·강제 push·삭제를 금지하고 PR, 대상별 `Verified Source / <대상>`과 `Branch Flow / <대상>` 검사를 요구합니다. 같은 커밋으로 다른 대상을 향한 PR을 열어도 필수 상태를 공유하지 않습니다. 관리자도 우회할 수 없습니다. 현재 단일 관리자가 자신의 PR을 처리할 수 있도록 승인 리뷰 개수는 0으로 두고, CI와 방향 검사로 병합을 보호합니다. 정식 발행의 별도 사용자 승인은 그대로 유지합니다.
 
 GitHub 설정은 [configure_branches.py](scripts/release/configure_branches.py)로 재현합니다. `python3 scripts/release/configure_branches.py`는 현재 설정을 읽어 검사하고, `--apply`를 붙이면 채널 ruleset·기본 브랜치·Preview/RC 실행 환경을 적용합니다. 적용 전 `preview`에 PR 방향 workflow가 있어야 하며, 기존 main 보호 설정은 `.git/branch-flow-setup/`에 백업합니다. 정식 발행 승인 환경은 이 명령으로 변경하지 않습니다.
 
