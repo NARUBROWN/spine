@@ -11,6 +11,7 @@ import (
 	eventadapter "github.com/NARUBROWN/spine/contract/event"
 	adapter "github.com/NARUBROWN/spine/contract/http"
 	validation "github.com/NARUBROWN/spine/contract/validator"
+	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
@@ -26,21 +27,22 @@ import (
 )
 
 type Config struct {
-	Address                string
-	Constructors           []any
-	Routes                 []spineRouter.RouteSpec
-	Interceptors           []core.Interceptor
-	ScopedInterceptors     []InterceptorBinding
-	CustomTransports       []core.CustomTransport
-	EnableGracefulShutdown bool
-	ShutdownTimeout        time.Duration
-	EventAdapters          []EventAdapterBinding
-	ConsumerRegistry       *consumer.Registry
-	HTTP                   *boot.HTTPOptions
-	HTTPAdapterFactory     adapter.Factory
-	WebSocketRegistry      *ws.Registry
-	Validator              validation.Validator
-	ValidatorConfigured    bool
+	Address                 string
+	Constructors            []any
+	Routes                  []spineRouter.RouteSpec
+	Interceptors            []core.Interceptor
+	ScopedInterceptors      []InterceptorBinding
+	CustomTransports        []core.CustomTransport
+	EnableGracefulShutdown  bool
+	ShutdownTimeout         time.Duration
+	EventAdapters           []EventAdapterBinding
+	ConsumerRegistry        *consumer.Registry
+	HTTP                    *boot.HTTPOptions
+	HTTPAdapterFactory      adapter.Factory
+	WebSocketAdapterFactory wsadapter.Factory
+	WebSocketRegistry       *ws.Registry
+	Validator               validation.Validator
+	ValidatorConfigured     bool
 }
 
 // EventAdapterBinding은 구현과 공통 실행 정책을 연결하는 준비 설정입니다.
@@ -177,8 +179,14 @@ func Validate(config Config) error {
 		}
 	}
 	if config.HTTP != nil {
-		if err := adapter.ValidateFactory(config.HTTPAdapterFactory, adapter.Requirements{WebSocketUpgrade: config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0}); err != nil {
+		hasWebSocketRoutes := config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0
+		if err := adapter.ValidateFactory(config.HTTPAdapterFactory, adapter.Requirements{WebSocketUpgrade: hasWebSocketRoutes}); err != nil {
 			adapterErrors = append(adapterErrors, err)
+		}
+		if hasWebSocketRoutes {
+			if err := wsadapter.ValidateFactory(config.WebSocketAdapterFactory); err != nil {
+				adapterErrors = append(adapterErrors, err)
+			}
 		}
 	}
 	return errors.Join(adapterErrors...)

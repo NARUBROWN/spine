@@ -8,6 +8,7 @@ import (
 	eventadapter "github.com/NARUBROWN/spine/contract/event"
 	adapter "github.com/NARUBROWN/spine/contract/http"
 	validation "github.com/NARUBROWN/spine/contract/validator"
+	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/bootstrap"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
@@ -42,16 +43,17 @@ type App interface {
 }
 
 type app struct {
-	constructors        []any
-	routes              []router.RouteSpec
-	interceptors        []bootstrap.InterceptorBinding
-	customTransports    []core.CustomTransport
-	consumerRegistry    *consumer.Registry
-	websocketRegistry   *ws.Registry
-	httpAdapterFactory  adapter.Factory
-	eventAdapters       []bootstrap.EventAdapterBinding
-	validator           validation.Validator
-	validatorConfigured bool
+	constructors            []any
+	routes                  []router.RouteSpec
+	interceptors            []bootstrap.InterceptorBinding
+	customTransports        []core.CustomTransport
+	consumerRegistry        *consumer.Registry
+	websocketRegistry       *ws.Registry
+	httpAdapterFactory      adapter.Factory
+	websocketAdapterFactory wsadapter.Factory
+	eventAdapters           []bootstrap.EventAdapterBinding
+	validator               validation.Validator
+	validatorConfigured     bool
 }
 
 // Option은 애플리케이션의 통합 구현을 명시적으로 선택하는 생성 옵션입니다.
@@ -60,6 +62,12 @@ type Option func(*app)
 // WithHTTPAdapter는 HTTP 실행에 사용할 독립 계약의 factory를 지정합니다.
 func WithHTTPAdapter(factory adapter.Factory) Option {
 	return func(a *app) { a.httpAdapterFactory = factory }
+}
+
+// WithWebSocketAdapter는 HTTP 플랫폼과 독립적으로 WebSocket 구현을 선택합니다.
+// WS 경로를 등록한 앱은 factory를 명시해야 합니다.
+func WithWebSocketAdapter(factory wsadapter.Factory) Option {
+	return func(a *app) { a.websocketAdapterFactory = factory }
 }
 
 // EventAdapterOption은 브로커 공통 실행 정책을 설정합니다.
@@ -151,20 +159,21 @@ func (a *app) RegisterTransport(t core.CustomTransport) {
 
 func (a *app) bootstrapConfig(opts boot.Options) bootstrap.Config {
 	return bootstrap.Config{
-		Address:                opts.Address,
-		Constructors:           a.constructors,
-		Routes:                 a.routes,
-		ScopedInterceptors:     a.interceptors,
-		CustomTransports:       a.customTransports,
-		EnableGracefulShutdown: opts.EnableGracefulShutdown,
-		ShutdownTimeout:        opts.ShutdownTimeout,
-		EventAdapters:          a.eventAdapters,
-		ConsumerRegistry:       a.consumerRegistry,
-		WebSocketRegistry:      a.websocketRegistry,
-		HTTP:                   opts.HTTP,
-		HTTPAdapterFactory:     a.httpAdapterFactory,
-		Validator:              a.validator,
-		ValidatorConfigured:    a.validatorConfigured,
+		Address:                 opts.Address,
+		Constructors:            a.constructors,
+		Routes:                  a.routes,
+		ScopedInterceptors:      a.interceptors,
+		CustomTransports:        a.customTransports,
+		EnableGracefulShutdown:  opts.EnableGracefulShutdown,
+		ShutdownTimeout:         opts.ShutdownTimeout,
+		EventAdapters:           a.eventAdapters,
+		ConsumerRegistry:        a.consumerRegistry,
+		WebSocketRegistry:       a.websocketRegistry,
+		HTTP:                    opts.HTTP,
+		HTTPAdapterFactory:      a.httpAdapterFactory,
+		WebSocketAdapterFactory: a.websocketAdapterFactory,
+		Validator:               a.validator,
+		ValidatorConfigured:     a.validatorConfigured,
 	}
 }
 

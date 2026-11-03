@@ -11,6 +11,7 @@ import (
 
 	eventadapter "github.com/NARUBROWN/spine/contract/event"
 	adapter "github.com/NARUBROWN/spine/contract/http"
+	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
@@ -280,8 +281,16 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 			// WS 전용 인자 리졸버 등록
 			wsPipeline := buildWSPipeline(container, config.WebSocketRegistry, dispatchHook, resolvedWSInterceptors, config.Validator)
 
+			wsAdapter, err := config.WebSocketAdapterFactory.New(ws.AdapterOptions(config.HTTP.WebSocket))
+			if err != nil {
+				return nil, fmt.Errorf("[Bootstrap] failed to configure WebSocket adapter: %w", err)
+			}
+			if err := wsadapter.ValidateAdapter(wsAdapter); err != nil {
+				return nil, err
+			}
 			application.wsRuntime = ws.NewRuntime(
 				wsPipeline,
+				wsAdapter,
 				config.HTTP.WebSocket,
 				webSocketHandshakeInterceptors(resolvedWSInterceptors)...,
 			)

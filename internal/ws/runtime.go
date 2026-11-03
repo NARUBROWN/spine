@@ -14,11 +14,11 @@ import (
 	"time"
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
+	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httperr"
-	"github.com/gorilla/websocket"
 )
 
 const (
@@ -43,6 +43,7 @@ type normalizedWebSocketOptions struct {
 
 type Runtime struct {
 	pipeline *pipeline.Pipeline
+	adapter  wsadapter.Adapter
 	options  normalizedWebSocketOptions
 	stopOnce sync.Once
 	ctx      context.Context
@@ -62,31 +63,39 @@ type Runtime struct {
 }
 
 type trackedConn struct {
-	conn *websocket.Conn
+	conn wsadapter.Connection
 	mu   sync.Mutex
+}
+
+func writeDeadline(timeout time.Duration) time.Time {
+	if timeout > 0 {
+		return time.Now().Add(timeout)
+	}
+	return time.Time{}
 }
 
 func (c *trackedConn) writeMessage(messageType int, data []byte, timeout time.Duration) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if timeout > 0 {
-		_ = c.conn.SetWriteDeadline(time.Now().Add(timeout))
-	}
-	return c.conn.WriteMessage(messageType, data)
+	return c.conn.WriteMessage(messageType, data, writeDeadline(timeout))
 }
 
-func (c *trackedConn) writeControl(messageType int, data []byte, timeout time.Duration) error {
+func (c *trackedConn) ping(timeout time.Duration) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	deadline := time.Time{}
-	if timeout > 0 {
-		deadline = time.Now().Add(timeout)
-		_ = c.conn.SetWriteDeadline(deadline)
-	}
-	return c.conn.WriteControl(messageType, data, deadline)
+	return c.conn.Ping(writeDeadline(timeout))
 }
 
-func NewRuntime(pipeline *pipeline.Pipeline, opts boot.WebSocketOptions, handshakeInterceptors ...core.WebSocketHandshakeInterceptor) *Runtime {
+func (c *trackedConn) writeClose(code int, reason string, timeout time.Duration) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.conn.WriteClose(code, reason, writeDeadline(timeout))
+}
+
+func NewRuntime(pipeline *pipeline.Pipeline, adapter wsadapter.Adapter, opts boot.WebSocketOptions, handshakeInterceptors ...core.WebSocketHandshakeInterceptor) *Runtime {
+	if wsadapter.ValidateAdapter(adapter) != nil {
+		panic("ws: adapter cannot be nil")
+	}
 	if pipeline == nil {
 		panic("ws: pipeline cannot be nil")
 	}
@@ -95,12 +104,19 @@ func NewRuntime(pipeline *pipeline.Pipeline, opts boot.WebSocketOptions, handsha
 
 	return &Runtime{
 		pipeline:              pipeline,
+		adapter:               adapter,
 		options:               normalizeWebSocketOptions(opts),
 		ctx:                   ctx,
 		cancel:                cancel,
 		conns:                 make(map[string]*trackedConn),
 		handshakeInterceptors: append([]core.WebSocketHandshakeInterceptor(nil), handshakeInterceptors...),
 	}
+}
+
+// AdapterOptions는 커널 기본값을 적용한 연결 설정만 플랫폼에 전달합니다.
+func AdapterOptions(opts boot.WebSocketOptions) wsadapter.Options {
+	normalized := normalizeWebSocketOptions(opts)
+	return wsadapter.Options{HandshakeTimeout: normalized.HandshakeTimeout, ReadTimeout: normalized.ReadTimeout, MaxMessageBytes: normalized.MaxMessageBytes}
 }
 
 func normalizeWebSocketOptions(opts boot.WebSocketOptions) normalizedWebSocketOptions {
@@ -147,15 +163,6 @@ func normalizeWebSocketOptions(opts boot.WebSocketOptions) normalizedWebSocketOp
 	}
 
 	return normalized
-}
-
-func (r *Runtime) upgrader() websocket.Upgrader {
-	return websocket.Upgrader{
-		HandshakeTimeout: r.options.HandshakeTimeout,
-		CheckOrigin: func(req *http.Request) bool {
-			return isAllowedWebSocketOriginWithTrustedProxies(req, r.options.AllowedOrigins, r.options.TrustedProxies)
-		},
-	}
 }
 
 func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Registration) {
@@ -206,9 +213,23 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 		return
 	}
 
-	upgrader := r.upgrader()
-	conn, err := upgrader.Upgrade(w, req, nil)
+	if handshakeCtx.Err() != nil || r.ctx.Err() != nil {
+		http.Error(w, "websocket runtime is shutting down", http.StatusServiceUnavailable)
+		return
+	}
+	if !isAllowedWebSocketOriginWithTrustedProxies(req, r.options.AllowedOrigins, r.options.TrustedProxies) {
+		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		return
+	}
+	conn, err := r.adapter.Upgrade(w, req.WithContext(handshakeCtx))
 	if err != nil {
+		if wsadapter.ValidateConnection(conn) == nil {
+			_ = conn.Close()
+		}
+		log.Printf("[WS] Upgrade failed (%s): %v", reg.Path, err)
+		return
+	}
+	if err := wsadapter.ValidateConnection(conn); err != nil {
 		log.Printf("[WS] Upgrade failed (%s): %v", reg.Path, err)
 		return
 	}
@@ -231,14 +252,6 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 
 	log.Printf("[WS] Connection established (conn=%p, path=%s)", &connID, reg.Path)
 
-	if r.options.MaxMessageBytes > 0 {
-		conn.SetReadLimit(r.options.MaxMessageBytes)
-	}
-	_ = conn.SetReadDeadline(time.Now().Add(r.options.ReadTimeout))
-	conn.SetPongHandler(func(string) error {
-		return conn.SetReadDeadline(time.Now().Add(r.options.ReadTimeout))
-	})
-
 	sendFn := func(messageType int, data []byte) error {
 		return tracked.writeMessage(messageType, data, r.options.WriteTimeout)
 	}
@@ -257,7 +270,7 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 			case <-connCtx.Done():
 				return
 			case <-ticker.C:
-				err := tracked.writeControl(websocket.PingMessage, nil, r.options.WriteTimeout)
+				err := tracked.ping(r.options.WriteTimeout)
 				if err != nil {
 					return
 				}
@@ -286,18 +299,16 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 
 		if err := r.pipeline.Execute(ctx); err != nil {
 			log.Printf("[WS] Handler failed (conn=%p): %v", &connID, err)
-			code, reason := websocket.CloseInternalServerErr, "handler error"
+			code, reason := wsadapter.CloseInternalServerErr, "handler error"
 			if _, ok := validation.AsError(err); ok {
-				code, reason = websocket.ClosePolicyViolation, "invalid message"
+				code, reason = wsadapter.ClosePolicyViolation, "invalid message"
 			}
-			_ = tracked.writeControl(
-				websocket.CloseMessage,
-				websocket.FormatCloseMessage(code, reason),
+			_ = tracked.writeClose(
+				code, reason,
 				r.options.WriteTimeout,
 			)
 			return
 		}
-		_ = conn.SetReadDeadline(time.Now().Add(r.options.ReadTimeout))
 	}
 }
 
@@ -355,9 +366,8 @@ func (r *Runtime) Stop() {
 		r.connMu.Unlock()
 
 		for _, conn := range conns {
-			_ = conn.writeControl(
-				websocket.CloseMessage,
-				websocket.FormatCloseMessage(websocket.CloseNormalClosure, "server shutting down"),
+			_ = conn.writeClose(
+				wsadapter.CloseNormalClosure, "server shutting down",
 				r.options.WriteTimeout,
 			)
 			_ = conn.conn.Close()
