@@ -1,6 +1,8 @@
-# Spine v0.6.6 development
+# Spine release channels
 
-The current main branch prepares v0.6.6; no v0.6.6 tag or release has been published.
+This source targets v0.6.6. Publication state is determined by its tag and GitHub Releases, not by this file.
+Use main -> Preview -> RC -> Stable; see RELEASING.md and .github/release-policy.json.
+The three public workflows are manual. Stable requires the release-stable environment approval.
 WebSocket compatibility aliases now live at adapter/websocket alongside adapter/http and adapter/event.
 The old root wsadapter package was removed. Update that import to adapter/websocket or contract/websocket.
 Canonical contract types and contract versions are unchanged. See docs/migration/v0.6.6.md.

@@ -1,0 +1,26 @@
+name: Publish Preview
+run-name: Preview ${{ inputs.version }}
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '새 Preview 버전 (예: v0.6.6-preview.1)'
+        type: string
+        required: true
+      source_sha:
+        description: main에 포함된 전체 40자리 커밋 SHA
+        type: string
+        required: true
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: spine-release-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    uses: ./.github/workflows/release-pipeline.yml
+    with:
+      channel: preview
+      version: ${{ inputs.version }}
+      source: ${{ inputs.source_sha }}

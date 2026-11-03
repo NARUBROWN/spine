@@ -2,7 +2,7 @@
   <a href="README.md">한국어</a> | English | <a href="README.ja.md">日本語</a> | <a href="README.zh-Hans.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a>
 </p>
 
-> **main is preparing v0.6.6.** WebSocket compatibility aliases have moved to `adapter/websocket`. No tag or release has been published yet. See the [import migration guide](docs/migration/v0.6.6.md).
+> **Release channels: Preview → RC → Stable.** This source targets `v0.6.6`. See the [release process](RELEASING.md), [import migration guide](docs/migration/v0.6.6.md), and [published releases](https://github.com/NARUBROWN/spine/releases).
 
 > **v0.6.5** unifies public HTTP, WebSocket, event and validator contracts with independent implementation selection. The core uses only the standard library. See the [v0.6.5 migration guide](docs/migration/v0.6.5.md).
 

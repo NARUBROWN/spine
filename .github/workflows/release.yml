@@ -1,0 +1,26 @@
+name: Publish Stable
+run-name: Stable from ${{ inputs.rc_tag }}
+on:
+  workflow_dispatch:
+    inputs:
+      rc_tag:
+        description: '승격할 RC 태그 (예: v0.6.6-rc.1). 정식 버전은 자동 결정'
+        type: string
+        required: true
+      observation_override_reason:
+        description: '긴급 관찰 기간·출시 간격 단축 사유 (평소에는 비움, 20자 이상)'
+        type: string
+        required: false
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: spine-release-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    uses: ./.github/workflows/release-pipeline.yml
+    with:
+      channel: stable
+      source: ${{ inputs.rc_tag }}
+      observation_override_reason: ${{ inputs.observation_override_reason }}

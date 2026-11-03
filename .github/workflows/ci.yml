@@ -1,6 +1,17 @@
 name: CI
 
 on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: 검증할 커밋 SHA
+        type: string
+        required: true
+    outputs:
+      verified_sha:
+        description: 모든 검사를 통과한 커밋
+        value: ${{ jobs.verified.outputs.sha }}
   push:
     branches:
       - main
@@ -12,12 +23,13 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 env:
   GOWORK: "off"
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ inputs.ref || github.ref }}
   cancel-in-progress: true
 
 defaults:
@@ -36,6 +48,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: spine
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
 
       - name: Checkout Echo integration
         uses: actions/checkout@v4
@@ -105,6 +119,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: spine
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
 
       - name: Checkout Echo integration
         uses: actions/checkout@v4
@@ -155,6 +171,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: spine
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
 
       - name: Checkout Echo integration
         uses: actions/checkout@v4
@@ -190,6 +208,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: spine
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
 
       - name: Checkout Echo integration
         uses: actions/checkout@v4
@@ -234,6 +254,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: spine
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
 
       - name: Checkout Echo integration
         uses: actions/checkout@v4
@@ -286,6 +308,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: spine
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
       - name: Checkout Echo integration
         uses: actions/checkout@v4
         with:
@@ -315,3 +339,51 @@ jobs:
           SPINE_TEST_KAFKA_BROKER: 127.0.0.1:19092
           SPINE_TEST_RABBITMQ_URL: amqp://guest:guest@127.0.0.1:5672/
         run: go -C test/platform-e2e test -race -v ./... -count=1 -timeout=3m
+
+  release-policy:
+    name: Release Policy and Workflows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.0'
+      - run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+        working-directory: .
+      - run: actionlint -shellcheck= -pyflakes=
+        working-directory: .
+      - run: python3 scripts/release/release.py validate-policy
+        working-directory: .
+      - run: python3 scripts/release/release.py check-environment
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
+        working-directory: .
+
+  verified:
+    name: Verified Source
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs: [quality, unit, integration, e2e, race, event-platform-e2e, release-policy]
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - name: Require every verification job
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          SOURCE_SHA: ${{ inputs.ref || github.sha }}
+        id: source
+        working-directory: .
+        run: |
+          python3 - <<'PYCODE'
+          import json, os
+          jobs = json.loads(os.environ['RESULTS'])
+          if any(job['result'] != 'success' for job in jobs.values()):
+              raise SystemExit('필수 CI 작업이 모두 성공해야 합니다')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('sha=' + os.environ['SOURCE_SHA'] + '\n')
+          PYCODE

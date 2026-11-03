@@ -1,0 +1,27 @@
+{
+  "schema_version": "spine.release-policy/v1",
+  "next_version": "v0.6.6",
+  "preview_hours": 72,
+  "rc_hours": 24,
+  "stable_interval_hours": 168,
+  "approval_environment": "release-stable",
+  "reviewer_login": "NARUBROWN",
+  "cli_version": "v0.4.2",
+  "modules": {
+    "github.com/NARUBROWN/spine-echo-platform": "v0.1.0",
+    "github.com/NARUBROWN/spine-gorilla-platform": "v0.1.0",
+    "github.com/NARUBROWN/spine-kafka-platform": "v0.1.0",
+    "github.com/NARUBROWN/spine-rabbitmq-platform": "v0.1.0",
+    "github.com/NARUBROWN/spine-validator-playground": "v0.1.0"
+  },
+  "examples": {
+    "chat": {
+      "repository": "NARUBROWN/spine-simple-chat-demo",
+      "ref": "7379abc672a6a5b330c15adfc5f0b4b775b532dd"
+    },
+    "msa": {
+      "repository": "NARUBROWN/spine-simple-msa-demo",
+      "ref": "c84998658380ff005286a193bf6a6379de00bfbe"
+    }
+  }
+}

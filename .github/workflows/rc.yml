@@ -1,0 +1,31 @@
+name: Publish RC
+run-name: RC ${{ inputs.version }} from ${{ inputs.preview_tag }}
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '새 RC 버전 (예: v0.6.6-rc.1)'
+        type: string
+        required: true
+      preview_tag:
+        description: 검증과 공개를 마친 같은 버전의 Preview 태그
+        type: string
+        required: true
+      observation_override_reason:
+        description: '긴급 관찰 기간 단축 사유 (평소에는 비움, 20자 이상)'
+        type: string
+        required: false
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: spine-release-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    uses: ./.github/workflows/release-pipeline.yml
+    with:
+      channel: rc
+      version: ${{ inputs.version }}
+      source: ${{ inputs.preview_tag }}
+      observation_override_reason: ${{ inputs.observation_override_reason }}

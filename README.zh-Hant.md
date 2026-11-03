@@ -2,7 +2,7 @@
   <a href="README.md">한국어</a> | <a href="README.en.md">English</a> | <a href="README.ja.md">日本語</a> | <a href="README.zh-Hans.md">简体中文</a> | 繁體中文
 </p>
 
-> **main 正在準備 v0.6.6。** WebSocket 相容別名已移至 `adapter/websocket`，尚未發布標籤或正式版本。請參閱 [import 遷移指南](docs/migration/v0.6.6.md)。
+> **發布管道：Preview → RC → Stable。** 此原始碼的目標版本為 `v0.6.6`。請參閱[發布流程](RELEASING.md)、[import 遷移指南](docs/migration/v0.6.6.md)和[已發布版本](https://github.com/NARUBROWN/spine/releases)。
 
 > **v0.6.5** 整合 HTTP、WebSocket、event、validator 的公開契約與獨立實作選擇。核心僅使用標準函式庫。請參閱 [v0.6.5 遷移指南](docs/migration/v0.6.5.md)。
 

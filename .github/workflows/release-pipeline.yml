@@ -1,0 +1,104 @@
+name: Release Pipeline
+on:
+  workflow_call:
+    inputs:
+      channel:
+        type: string
+        required: true
+      version:
+        type: string
+        default: ''
+      source:
+        type: string
+        required: true
+      observation_override_reason:
+        type: string
+        default: ''
+permissions:
+  contents: read
+  actions: read
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.plan.outputs.sha }}
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate release policy and source
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_SOURCE: ${{ inputs.source }}
+          RELEASE_OVERRIDE_REASON: ${{ inputs.observation_override_reason }}
+        run: python3 scripts/release/release.py plan
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-plan
+          path: release-plan.json
+          if-no-files-found: error
+  ci:
+    needs: plan
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.plan.outputs.sha }}
+  public-before-tag:
+    needs: plan
+    uses: ./.github/workflows/release-public-check.yml
+    with:
+      source_sha: ${{ needs.plan.outputs.sha }}
+      query: ${{ inputs.source }}
+      artifact: public-before-tag
+  tag:
+    needs: [plan, ci, public-before-tag]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    environment: ${{ inputs.channel == 'stable' && 'release-stable' || format('release-{0}', inputs.channel) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-plan
+      - name: Create immutable tag after verification and approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERIFIED_SHA: ${{ needs.ci.outputs.verified_sha }}
+        run: python3 scripts/release/release.py tag
+  public-after-tag:
+    needs: [plan, tag]
+    uses: ./.github/workflows/release-public-check.yml
+    with:
+      source_sha: ${{ needs.plan.outputs.sha }}
+      query: ${{ needs.plan.outputs.version }}
+      artifact: public-after-tag
+  finish:
+    needs: [plan, tag, public-after-tag]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-plan
+      - uses: actions/download-artifact@v4
+        with:
+          name: public-after-tag
+      - name: Publish release with verified manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release/release.py finish
