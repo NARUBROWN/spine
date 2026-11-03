@@ -94,4 +94,6 @@ go test ./contract/validator -count=1
 bash scripts/check-module-boundaries.sh
 ```
 
-go-playground를 사용하는 별도 구현은 이 패키지와 `github.com/go-playground/validator/v10`을 import하고, 라이브러리의 오류를 공통 `FieldError`로 변환하면 됩니다. 기존 HTTP 계약과 마찬가지로 공통 계약을 위한 별도 Go 모듈은 필요하지 않습니다.
+[spine-validator-playground](https://github.com/NARUBROWN/spine-validator-playground)는 이 계약의 실제 go-playground 구현입니다. `playground.New()`로 생성한 검증기를 `spine.WithValidator`에 전달합니다. 현재 구현의 go-playground v10.30.6은 Go 1.26 이상이 필요하며 Spine 코어의 최소 버전과 별도로 관리됩니다.
+
+새 구현은 이 패키지를 import하고 라이브러리 오류를 공통 `FieldError`로 변환하면 됩니다. 공통 계약을 위한 별도 Go 모듈은 필요하지 않습니다. [플랫폼 계약 E2E](../../test/platform-e2e/README.md)에서 실제 요청과 브로커 메시지의 처리 결과를 확인할 수 있습니다.

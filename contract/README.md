@@ -14,3 +14,5 @@ Spine과 외부 구현이 공유하는 공개 계약은 `contract/` 아래에서
 go test ./contract/... -count=1
 bash scripts/check-module-boundaries.sh
 ```
+
+실제 구현체 조합은 [플랫폼 계약 E2E](../test/platform-e2e/README.md)에서 확인합니다. HTTP·폼·WebSocket 검증과 Kafka·RabbitMQ의 발행·컨슈머 검증·ACK/NACK를 함께 검사합니다.

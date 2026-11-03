@@ -73,7 +73,7 @@ jobs:
 
       - name: Run go vet
         run: |
-          for module in . test cmd/demo cmd/reference examples/security-config; do
+          for module in . test test/platform-e2e cmd/demo cmd/reference examples/security-config; do
             go -C "$module" vet ./...
           done
           GOWORK="$RUNNER_TEMP/spine-platform/go.work" go -C ../spine-echo-platform vet ./...
@@ -81,7 +81,7 @@ jobs:
 
       - name: Check module files
         run: |
-          for module in . ../spine-echo-platform test cmd/demo cmd/reference examples/security-config; do
+          for module in . ../spine-echo-platform test test/platform-e2e cmd/demo cmd/reference examples/security-config; do
             go -C "$module" mod verify
             go -C "$module" mod tidy
           done
@@ -268,7 +268,7 @@ jobs:
           GOWORK="$RUNNER_TEMP/spine-platform/go.work" go -C ../spine-echo-platform test -race ./... -count=1 -shuffle=on -timeout=12m
 
   event-platform-e2e:
-    name: Event Platform App E2E
+    name: HTTP, Event, and Validator Platform E2E
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
@@ -294,7 +294,7 @@ jobs:
           path: spine-echo-platform
       - uses: actions/setup-go@v5
         with:
-          go-version-file: spine/go.mod
+          go-version: '1.27.3'
           cache-dependency-path: "**/go.sum"
       - name: Start Redpanda
         run: |
@@ -310,3 +310,8 @@ jobs:
           SPINE_TEST_KAFKA_BROKER: 127.0.0.1:19092
           SPINE_TEST_RABBITMQ_URL: amqp://guest:guest@127.0.0.1:5672/
         run: go -C test test -race . -run '^TestAppEventLive_' -count=1 -timeout=2m
+      - name: Validator, HTTP, WebSocket and broker contracts together
+        env:
+          SPINE_TEST_KAFKA_BROKER: 127.0.0.1:19092
+          SPINE_TEST_RABBITMQ_URL: amqp://guest:guest@127.0.0.1:5672/
+        run: go -C test/platform-e2e test -race -v ./... -count=1 -timeout=3m
