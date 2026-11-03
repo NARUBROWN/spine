@@ -1,12 +1,31 @@
 # Spine 릴리스 운영
 
-출시 채널은 `main → Preview → RC → Stable`입니다. main에 병합해도 릴리스를 자동 발행하지 않습니다. GitHub Actions의 **Run workflow**로 단계를 실행하며, 정식 발행은 승인한 RC의 커밋으로 고정합니다.
+브랜치 흐름은 **작업 브랜치 → `preview` → `rc` → `main`**입니다. 기본 브랜치는 `preview`이며, 일반 작업 PR은 이 브랜치를 대상으로 합니다. 브랜치에 병합하는 작업과 버전 태그를 발행하는 작업은 분리합니다. 태그 발행은 GitHub Actions의 **Run workflow**로 실행합니다.
+
+## PR 방향과 브랜치 보호
+
+| PR 출발 브랜치 | 허용 대상 |
+| --- | --- |
+| 일반 작업 브랜치·외부 fork | `preview` |
+| 같은 저장소의 `preview` | `rc` |
+| 같은 저장소의 `rc` | `main` |
+| 같은 저장소의 `main` | 없음 |
+
+잘못된 방향의 PR은 `Branch Flow / <대상>` 필수 상태를 실패로 표시하고 자동으로 닫습니다. 대상을 바꾼 뒤 다시 열 수 있습니다. 다른 fork의 `preview`·`rc`라는 이름으로 승격 권한을 얻을 수는 없습니다.
+
+세 채널 브랜치는 직접 push·강제 push·삭제를 금지하고 PR, `Verified Source`, 대상별 `Branch Flow` 검사를 요구합니다. 관리자도 우회할 수 없습니다. 현재 단일 관리자가 자신의 PR을 처리할 수 있도록 승인 리뷰 개수는 0으로 두고, CI와 방향 검사로 병합을 보호합니다. 정식 발행의 별도 사용자 승인은 그대로 유지합니다.
+
+GitHub 설정은 [configure_branches.py](scripts/release/configure_branches.py)로 재현합니다. `python3 scripts/release/configure_branches.py`는 현재 설정을 읽어 검사하고, `--apply`를 붙이면 채널 ruleset·기본 브랜치·Preview/RC 실행 환경을 적용합니다. 적용 전 `preview`에 PR 방향 workflow가 있어야 하며, 기존 main 보호 설정은 `.git/branch-flow-setup/`에 백업합니다. 정식 발행 승인 환경은 이 명령으로 변경하지 않습니다.
+
+`rc`와 `main` 승격은 merge commit만 사용합니다. squash·rebase 승격은 허용하지 않습니다. RC에서 수정이 필요해도 작업 PR을 RC로 바로 넣지 않고, 수정 브랜치 → `preview` → `rc` 순서로 다시 검증합니다.
+
+승격 merge 때문에 SHA가 달라질 수 있습니다. 릴리스 코드는 병합된 PR의 출발·대상, merge commit의 두 번째 부모, 이전 후보와 소스 트리의 동일성을 확인하고 새 SHA에서 전체 CI·공개 설치 검증을 다시 수행합니다. 승인 대기 중 채널 HEAD가 바뀌면 발행을 중단합니다.
 
 | 단계 | 버전 예시 | 조건 |
 | --- | --- | --- |
-| Preview | `v0.6.6-preview.1` | main에 포함된 전체 커밋 SHA, 전체 CI와 공개 설치 검증 통과 |
-| RC | `v0.6.6-rc.1` | 같은 대상 버전의 성공한 Preview, 공개 후 최소 72시간 |
-| Stable | `v0.6.6` | 성공한 RC, 공개 후 최소 24시간, 이전 정식 발행 후 최소 168시간, 지정 리뷰어 승인 |
+| Preview | `v0.6.6-preview.1` | `preview` HEAD, 전체 CI와 공개 설치 검증 통과 |
+| RC | `v0.6.6-rc.1` | `preview → rc` 병합, 성공한 Preview, 최소 72시간 |
+| Stable | `v0.6.6` | `rc → main` 병합, 성공한 RC 24시간, 정식 간격 168시간, 지정 리뷰어 승인 |
 
 기본 정책과 검증할 CLI·플랫폼·예제 버전은 [release-policy.json](.github/release-policy.json)에 기록합니다. 한 번 발행한 태그는 이동하거나 재사용하지 않습니다. 같은 채널에서는 기존보다 큰 번호를 사용합니다.
 
@@ -21,41 +40,41 @@
 
 ## Preview 발행
 
-GitHub 저장소의 **Actions → Publish Preview → Run workflow**에서 브랜치는 `main`을 선택합니다.
+GitHub 저장소의 **Actions → Publish Preview → Run workflow**에서 브랜치는 `preview`를 선택합니다.
 
 - `version`: `v0.6.6-preview.1`
-- `source_sha`: main 이력에 포함된 전체 40자리 커밋 SHA
+- `source_sha`: `preview` HEAD의 전체 40자리 커밋 SHA
 
 workflow는 다음 순서로 실행합니다.
 
-1. 버전 형식, 대상 버전, main 포함 여부, 태그 미존재를 확인합니다.
+1. 버전 형식, 대상 버전, `preview` HEAD 일치, 태그 미존재를 확인합니다.
 2. 해당 SHA를 checkout한 기존 전체 CI와 공개 설치 검증을 실행합니다.
 3. 두 검사가 성공하면 태그를 생성합니다.
 4. 새 태그를 Go 모듈로 다시 설치해 같은 공개 검증을 실행합니다.
 5. 성공하면 GitHub 사전 릴리스를 발행하고 `release-manifest.json`을 첨부합니다.
 
-Preview 수정은 새 커밋과 새 번호로 발행합니다. main의 최신 커밋을 기존 Preview 태그에 덮어쓰지 않습니다.
+Preview 수정은 새 커밋과 새 번호로 발행합니다. preview의 최신 커밋을 기존 Preview 태그에 덮어쓰지 않습니다.
 
 ## RC 발행
 
-**Actions → Publish RC → Run workflow**에서 `main`을 선택합니다.
+먼저 `preview → rc` PR을 merge commit으로 병합합니다. **Actions → Publish RC → Run workflow**에서 `rc`를 선택합니다.
 
 - `version`: `v0.6.6-rc.1`
 - `preview_tag`: 공개 검증을 마친 `v0.6.6-preview.1`
 - `observation_override_reason`: 평소에는 비웁니다.
 
-출처 Preview가 공개된 지 72시간이 지나야 합니다. 태그·manifest·발행 workflow의 성공 여부를 대조하며, Preview와 동일한 커밋과 호환 버전 조합을 다시 검증합니다.
+출처 Preview가 공개된 지 72시간이 지나야 합니다. 태그·manifest·발행 workflow의 성공 여부를 대조하며, Preview와 동일한 소스 트리를 갖는 승격 merge commit과 호환 버전 조합을 다시 검증합니다.
 
-RC에서 수정이 필요하면 변경을 main에 반영하고 새 Preview를 검증한 뒤 새 RC를 발행합니다. API 변경을 RC에 몰래 추가하지 않습니다. 긴급 수정은 아래 관찰 기간 단축 규칙을 사용할 수 있습니다.
+RC에서 수정이 필요하면 변경을 작업 브랜치에서 `preview`에 반영하고 새 Preview를 검증한 뒤 새 RC를 발행합니다. API 변경을 RC에 몰래 추가하지 않습니다. 긴급 수정은 아래 관찰 기간 단축 규칙을 사용할 수 있습니다.
 
 ## Stable 승격
 
-**Actions → Publish Stable → Run workflow**에서 `main`과 `rc_tag`를 지정합니다. 정식 버전은 RC 태그에서 자동으로 결정하므로 별도 대상 SHA나 버전을 입력하지 않습니다.
+먼저 `rc → main` PR을 merge commit으로 병합합니다. **Actions → Publish Stable → Run workflow**에서 `main`과 `rc_tag`를 지정합니다. 정식 버전은 RC 태그에서, 대상 SHA는 `main`의 승격 merge commit에서 결정합니다. 별도 대상 SHA나 버전을 입력하지 않습니다.
 
 1. RC의 출처, 성공 기록, 24시간 관찰과 주 1회 출시 간격을 확인합니다.
-2. RC와 동일한 커밋의 전체 CI와 공개 설치 검증을 다시 실행합니다.
+2. RC와 소스 트리가 같은 `main` 승격 merge commit의 전체 CI와 공개 설치 검증을 다시 실행합니다.
 3. `release-stable` 환경에서 지정 리뷰어의 승인을 기다립니다.
-4. 승인 대기 중 정책·출처·태그가 바뀌었는지 다시 확인한 뒤 정식 태그를 생성합니다.
+4. 승인 대기 중 채널 HEAD·정책·출처·태그가 바뀌었는지 다시 확인한 뒤 정식 태그를 생성합니다.
 5. 정식 태그의 공개 설치까지 성공하면 일반 GitHub 릴리스를 발행합니다.
 
 Go의 정식 태그는 GitHub 릴리스 글을 발행하기 전에도 모듈로 조회될 수 있습니다. 따라서 태그 생성 전에 검증과 승인을 끝냅니다. GitHub의 사전 릴리스 체크박스만으로 채널을 나누지 않으며 버전에도 `-preview.N`, `-rc.N`을 사용합니다.
@@ -99,6 +118,7 @@ GitHub 기본 토큰으로 생성한 태그는 후속 push workflow를 자동으
 
 ```sh
 python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
+node --test scripts/release/branch_flow.test.cjs
 python3 scripts/release/release.py validate-policy
 actionlint -shellcheck= -pyflakes=
 ```

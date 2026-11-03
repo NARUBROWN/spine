@@ -13,13 +13,12 @@ on:
         description: 모든 검사를 통과한 커밋
         value: ${{ jobs.verified.outputs.sha }}
   push:
-    branches:
-      - main
+    branches: [preview, rc, main]
     tags:
       - "v*"
   pull_request:
-    branches:
-      - main
+    branches: [preview, rc, main]
+    types: [opened, reopened, synchronize, edited, ready_for_review]
 
 permissions:
   contents: read
@@ -37,7 +36,19 @@ defaults:
     working-directory: spine
 
 jobs:
+  branch-direction:
+    name: Branch Direction
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - run: node scripts/release/branch_flow.cjs
+        working-directory: .
+
   quality:
+    needs: branch-direction
     name: Formatting, Vet, and Modules
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -105,6 +116,7 @@ jobs:
           test -z "$(go -C ../spine-echo-platform list -m -f '{{if .Replace}}{{.Path}}{{end}}' all)"
 
   unit:
+    needs: branch-direction
     name: Unit Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
@@ -157,6 +169,7 @@ jobs:
           go -C cmd/demo test ./... -run '^TestBuildApplication$' -count=1 -shuffle=on -timeout=8m
 
   integration:
+    needs: branch-direction
     name: Integration Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
@@ -194,6 +207,7 @@ jobs:
         run: go -C test test ./... -run '^TestAppIntegration_' -count=1 -shuffle=on -timeout=8m
 
   e2e:
+    needs: branch-direction
     name: End-to-End Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
@@ -244,6 +258,7 @@ jobs:
         run: go -C cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=8m
 
   race:
+    needs: branch-direction
     name: Race Detector (Go 1.27.3)
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -290,6 +305,7 @@ jobs:
           GOWORK="$RUNNER_TEMP/spine-platform/go.work" go -C ../spine-echo-platform test -race ./... -count=1 -shuffle=on -timeout=12m
 
   event-platform-e2e:
+    needs: branch-direction
     name: HTTP, WS, Event, and Validator Platform E2E
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -341,6 +357,7 @@ jobs:
         run: go -C test/platform-e2e test -race -v ./... -count=1 -timeout=3m
 
   release-policy:
+    needs: branch-direction
     name: Release Policy and Workflows
     runs-on: ubuntu-latest
     steps:
@@ -363,12 +380,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       - run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
         working-directory: .
+      - run: node --test scripts/release/branch_flow.test.cjs
+        working-directory: .
 
   verified:
     name: Verified Source
     runs-on: ubuntu-latest
     if: ${{ always() }}
-    needs: [quality, unit, integration, e2e, race, event-platform-e2e, release-policy]
+    needs: [branch-direction, quality, unit, integration, e2e, race, event-platform-e2e, release-policy]
     outputs:
       sha: ${{ steps.source.outputs.sha }}
     steps:

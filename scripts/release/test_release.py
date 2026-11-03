@@ -17,6 +17,9 @@ import verify_public
 
 NOW = dt.datetime(2026, 11, 10, tzinfo=dt.timezone.utc)
 SOURCE = "a" * 40
+RC_SOURCE = "b" * 40
+MAIN_SOURCE = "c" * 40
+TREE = "d" * 40
 POLICY = json.loads((Path(__file__).resolve().parents[2] / ".github/release-policy.json").read_text())
 
 
@@ -29,6 +32,10 @@ class FakeGitHub:
         self.manifests = {}
         self.writes = []
         self.comparison = "ahead"
+        self.heads = {"preview": SOURCE, "rc": RC_SOURCE, "main": MAIN_SOURCE}
+        self.promotion_head = None
+        self.changed_tree = False
+        self.pull_direction = None
         self.run_conclusion = "success"
         self.run_path = ".github/workflows/preview.yml"
         self.policy = copy.deepcopy(POLICY)
@@ -49,6 +56,19 @@ class FakeGitHub:
         if method != "GET":
             self.writes.append((path, data))
             return {}
+        if path.startswith("git/ref/heads/"):
+            return {"object": {"sha": self.heads[path.removeprefix("git/ref/heads/")]}}
+        if path.startswith("git/commits/"):
+            sha = path.removeprefix("git/commits/")
+            parents = [{"sha": "e"*40}]
+            if sha in [RC_SOURCE, MAIN_SOURCE]:
+                parents.append({"sha": self.promotion_head or (SOURCE if sha == RC_SOURCE else RC_SOURCE)})
+            return {"tree": {"sha": "f"*40 if self.changed_tree and sha == RC_SOURCE else TREE}, "parents": parents}
+        if path.startswith("commits/") and "/pulls" in path:
+            sha = path.split("/")[1]
+            head, base = self.pull_direction or (("preview", "rc") if sha == RC_SOURCE else ("rc", "main"))
+            return [{"number": 1, "merged_at": NOW.isoformat(), "merge_commit_sha": sha,
+                     "head": {"ref": head, "repo": {"full_name": self.repository}}, "base": {"ref": base}}]
         if path.startswith("compare/"):
             return {"status": self.comparison}
         if path.startswith("git/matching-refs/"):
@@ -57,7 +77,7 @@ class FakeGitHub:
         if path.startswith("releases/tags/"):
             return self.release_data[path.removeprefix("releases/tags/")]
         if path.startswith("actions/runs/"):
-            return {"conclusion": self.run_conclusion, "status": "completed", "event": "workflow_dispatch", "path": self.run_path}
+            return {"conclusion": self.run_conclusion, "status": "completed", "event": "workflow_dispatch", "path": self.run_path, "head_branch": self.run_branch, "head_sha": self.run_sha}
         if path.endswith("deployment-branch-policies"):
             return {"branch_policies": [{"name": "main", "type": "branch"}]}
         if path.startswith("environments/"):
@@ -71,15 +91,17 @@ class FakeGitHub:
 
     def candidate(self, channel="preview", age=73):
         tag = f"{POLICY['next_version']}-{channel}.1"
-        self.tags[tag] = SOURCE
+        sha = SOURCE if channel == "preview" else RC_SOURCE
+        self.tags[tag] = sha
         self.release_data[tag] = {"tag_name": tag, "draft": False, "prerelease": True,
                                   "published_at": (NOW-dt.timedelta(hours=age)).isoformat()}
         self.manifests[tag] = {"schema_version": "spine.release-manifest/v1", "channel": channel,
-                               "version": tag, "source_sha": SOURCE, "workflow_run_id": "1",
+                               "version": tag, "source_sha": sha, "branch": POLICY["branches"][channel], "source_tree": TREE, "workflow_run_id": "1",
                                "components": release.components(POLICY)}
-        self.manifests[tag]["validation"] = {"result": "passed", "version": tag, "source_sha": SOURCE,
+        self.manifests[tag]["validation"] = {"result": "passed", "version": tag, "source_sha": sha,
                                              "components": release.components(POLICY)}
         self.run_path = ".github/workflows/"+release.WORKFLOWS[channel]
+        self.run_branch, self.run_sha = POLICY["branches"][channel], sha
         return tag
 
 
@@ -91,13 +113,13 @@ class ReleasePolicyTests(unittest.TestCase):
     def plan(self, channel="preview", version=None, source=SOURCE, reason=""):
         return release.make_plan(self.github, POLICY, channel, version or self.base+"-preview.1", source, reason, NOW)
 
-    def test_preview_requires_immutable_main_commit(self):
+    def test_preview_requires_immutable_preview_head(self):
         plan = self.plan()
         self.assertEqual(plan["source_sha"], SOURCE)
         for source in ["main", "HEAD", "--help", SOURCE[:12]]:
             with self.subTest(source=source), self.assertRaises(release.ReleaseError):
                 self.plan(source=source)
-        self.github.comparison = "behind"
+        self.github.heads["preview"] = "f"*40
         with self.assertRaises(release.ReleaseError):
             self.plan()
 
@@ -122,10 +144,32 @@ class ReleasePolicyTests(unittest.TestCase):
     def test_rc_preserves_preview_commit_and_version_set(self):
         source = self.github.candidate()
         plan = self.plan("rc", self.base+"-rc.1", source)
-        self.assertEqual(plan["source_sha"], SOURCE)
+        self.assertEqual(plan["source_sha"], RC_SOURCE)
+        self.assertEqual(plan["upstream_source_sha"], SOURCE)
         self.github.manifests[source]["components"] = {"wrong": "versions"}
         with self.assertRaises(release.ReleaseError):
             self.plan("rc", self.base+"-rc.1", source)
+
+    def test_promotion_requires_correct_pr_parent_and_unchanged_source_tree(self):
+        source = self.github.candidate()
+        for condition in ("wrong_parent", "changed_tree", "wrong_direction", "wrong_workflow_branch"):
+            with self.subTest(condition=condition):
+                github = copy.deepcopy(self.github)
+                if condition == "wrong_parent": github.promotion_head = "f"*40
+                if condition == "changed_tree": github.changed_tree = True
+                if condition == "wrong_direction": github.pull_direction = ("feat/bypass", "rc")
+                if condition == "wrong_workflow_branch": github.run_branch = "main"
+                with self.assertRaises(release.ReleaseError):
+                    release.make_plan(github, POLICY, "rc", self.base+"-rc.1", source, now=NOW)
+
+    def test_branch_movement_or_wrong_dispatch_branch_stops_tag_creation(self):
+        plan = self.plan()
+        with patch.dict(os.environ, {"GITHUB_REF": "refs/heads/main"}):
+            with self.assertRaises(release.ReleaseError): release.publish(self.github, POLICY, plan, SOURCE)
+        self.github.heads["preview"] = "f"*40
+        with patch.dict(os.environ, {"GITHUB_REF": "refs/heads/preview"}):
+            with self.assertRaises(release.ReleaseError): release.publish(self.github, POLICY, plan, SOURCE)
+        self.assertEqual(self.github.writes, [])
 
     def test_rc_waits_three_days_and_records_explicit_emergency(self):
         source = self.github.candidate(age=71)
@@ -154,7 +198,7 @@ class ReleasePolicyTests(unittest.TestCase):
         with self.assertRaises(release.ReleaseError):
             self.plan("stable", self.base, source)
         self.github.release_data[source]["published_at"] = (NOW-dt.timedelta(hours=25)).isoformat()
-        self.assertEqual(self.plan("stable", self.base, source)["source_sha"], SOURCE)
+        self.assertEqual(self.plan("stable", self.base, source)["source_sha"], MAIN_SOURCE)
 
     def test_stable_cannot_skip_rc_or_downgrade(self):
         source = self.github.candidate("preview")
@@ -179,7 +223,7 @@ class ReleasePolicyTests(unittest.TestCase):
 
     def test_tag_write_requires_verified_sha_and_unchanged_policy(self):
         plan = self.plan()
-        with patch.dict(os.environ, {"GITHUB_REF": "refs/heads/main"}), patch.object(release.dt, "datetime", wraps=dt.datetime) as clock:
+        with patch.dict(os.environ, {"GITHUB_REF": "refs/heads/preview"}), patch.object(release.dt, "datetime", wraps=dt.datetime) as clock:
             clock.now.return_value = NOW
             with self.assertRaises(release.ReleaseError): release.publish(self.github, POLICY, plan, "b"*40)
             self.assertEqual(self.github.writes, [])
@@ -204,7 +248,7 @@ class ReleasePolicyTests(unittest.TestCase):
             with self.subTest(channel=channel):
                 version = self.base if channel == "stable" else self.base+"-"+channel+".1"
                 plan = {"version": version, "channel": channel, "source_sha": SOURCE,
-                        "source_tag": "", "components": release.components(POLICY), "observation_override_reason": ""}
+                        "source_tag": "", "branch": POLICY["branches"][channel], "components": release.components(POLICY), "observation_override_reason": ""}
                 report = {"result": "passed", "version": version, "source_sha": SOURCE, "components": plan["components"]}
                 self.github.tags[version] = SOURCE
                 with patch.object(release, "run") as command:
