@@ -268,7 +268,7 @@ jobs:
           GOWORK="$RUNNER_TEMP/spine-platform/go.work" go -C ../spine-echo-platform test -race ./... -count=1 -shuffle=on -timeout=12m
 
   event-platform-e2e:
-    name: HTTP, Event, and Validator Platform E2E
+    name: HTTP, WS, Event, and Validator Platform E2E
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:

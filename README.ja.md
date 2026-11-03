@@ -6,6 +6,8 @@
 >
 > 開発ソースのイベント連携は `spine.WithEventAdapter` と Kafka/RabbitMQ プラットフォームを使用します。旧 boot 設定からの移行は [イベントプラットフォーム移行ガイド](docs/migration/event-platforms.en.md)を参照してください。
 
+> 開発ソースの WebSocket は `contract/websocket` と [Gorilla プラットフォーム](https://github.com/NARUBROWN/spine-gorilla-platform)に分離しました。`spine.New(echoPlatform.Option(), gorillaPlatform.Option())` で両方を選択します。[WS 移行ガイド](docs/migration/websocket-platforms.en.md)を参照してください。
+
 # 🦴 Spine
 <p align="center">
   <img src="assets/spine-logo.png" alt="Spine" width="420" />

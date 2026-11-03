@@ -14,6 +14,7 @@ import (
 
 	"github.com/NARUBROWN/spine"
 	echo "github.com/NARUBROWN/spine-echo-platform"
+	gorillaplatform "github.com/NARUBROWN/spine-gorilla-platform"
 	platform "github.com/NARUBROWN/spine-validator-playground"
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/pkg/boot"
@@ -62,7 +63,7 @@ func server(t *testing.T, c *controller, options ...platform.Option) *httptest.S
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := spine.New(echo.Option(), spine.WithValidator(v))
+	app := spine.New(echo.Option(), gorillaplatform.Option(), spine.WithValidator(v))
 	app.Constructor(func() *controller { return c })
 	app.Route(http.MethodPost, "/json", (*controller).JSON)
 	app.Route(http.MethodPost, "/form", (*controller).Form)

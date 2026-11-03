@@ -13,6 +13,7 @@ export GOMODCACHE="$workspace/modules"
 export GOFLAGS=-modcacherw
 
 spine_version=$(awk '$1 == "github.com/NARUBROWN/spine" { print $2; exit }' go.mod)
+gorilla_version=$(awk '$1 == "github.com/NARUBROWN/spine-gorilla-platform" { print $2; exit }' go.mod)
 platform_version=$(awk '$1 == "github.com/NARUBROWN/spine-echo-platform" { print $2; exit }' go.mod)
 go mod edit -dropreplace=github.com/NARUBROWN/spine
 go mod edit -dropreplace=github.com/NARUBROWN/spine-echo-platform
@@ -27,10 +28,11 @@ if [ -n "$replacements" ]; then
   exit 1
 fi
 
-for module in github.com/NARUBROWN/spine github.com/NARUBROWN/spine-echo-platform; do
+for module in github.com/NARUBROWN/spine github.com/NARUBROWN/spine-echo-platform github.com/NARUBROWN/spine-gorilla-platform; do
   case "$module" in
     github.com/NARUBROWN/spine) expected="$spine_version" ;;
     github.com/NARUBROWN/spine-echo-platform) expected="$platform_version" ;;
+    github.com/NARUBROWN/spine-gorilla-platform) expected="$gorilla_version" ;;
   esac
   actual=$(go list -m -f '{{.Version}}' "$module")
   if [ -z "$expected" ] || [ "$actual" != "$expected" ]; then

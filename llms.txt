@@ -43,9 +43,9 @@ the error handler takes `(ctx *echo.Context, err error)`, and logging uses `log/
 provide `Unwrap() http.ResponseWriter` on native middleware wrappers. Controller registration is unchanged;
 the v2 adapter and preparation API changes are described in the migration guide.
 
-New projects start with `spine new`; generated applications use `platform.New()`.
+New projects start with `spine new`; the development CLI PR #28 composes applications with `spine.New(...)`; inspect the installed CLI schema before using new selection flags.
 This is equivalent to `spine.New(platform.Option())` when wiring an existing application manually.
-The cmd/demo fixture composes the factory explicitly with `spine.New(platform.Option())`. The CLI recognizes both this form and `platform.New()`.
+The cmd/demo fixture selects HTTP and WS explicitly with `spine.New(platform.Option(), gorillaplatform.Option())`. The CLI recognizes both this form and `platform.New()`.
 The installed CLI selects a compatible Spine, Echo platform, and Echo combination through its bundled recipe.
 Use `spine new` and inspect the generated go.mod instead of assuming a fixed version combination.
 A custom implementation uses `spine.New(spine.WithHTTPAdapter(factory))`.
@@ -57,6 +57,21 @@ The kernel wraps the HTTP scope to add request store, routing results and EventB
 is separate; use standard request context to share values. Contract RequestError is converted to the
 kernel's httperr.HTTPError while preserving causes. Response staging remains in the kernel.
 ASGI informs the boundary and lifetime design. This does not provide Python ASGI compatibility.
+
+## WebSocket platform contract
+
+`contract/websocket` defines `spine.websocket-adapter/v1` using the standard library. Select the external
+`github.com/NARUBROWN/spine-gorilla-platform` with `gorillaplatform.Option()` or
+`spine.WithWebSocketAdapter(gorillaplatform.NewFactory())` alongside the HTTP option. WS routes require both
+an HTTP adapter with WebSocketUpgrade and an explicit WS factory. HTTP-only applications need no WS platform.
+The kernel retains authentication, origin/trusted-proxy policy, connection limits, write serialization,
+ping scheduling, validator classification (1008/1011) and orderly shutdown (1000). The platform owns native
+upgrade, message limits, read deadlines and ping/pong/close frames. Handler execution time does not consume
+the next read timeout. The core module now has no external dependencies. See contract/websocket/README.md
+and docs/migration/websocket-platforms.md. The initial wsadapter import is a compatibility alias.
+Spine public pseudo-version v0.6.1-0.20261103040400-9b1321410211 and Gorilla platform
+v0.0.0-20261103040512-36ad41dff88f provide this API. These are development versions, not final release tags.
+CLI PR #28 adds --websocket-platform none|gorilla; new recipes require explicit selection before WS routes.
 
 ## Event adapter contract
 
@@ -81,7 +96,7 @@ Local fake-platform tests cover lifecycle and execution boundaries; separate rea
 See contract/event/README.md for payload lifetimes, cancellation, shutdown and error semantics.
 The current CLI does not reconcile event factory selection/capabilities or broker readiness. Its static consumer registrations and partial registry probe do not replace the real-broker App E2E tests.
 
-The `contract/http`, `contract/event` and `contract/validator` packages define public execution and validation contracts. Concrete integrations
+The `contract/http`, `contract/event`, `contract/websocket` and `contract/validator` packages define public execution and validation contracts. Concrete integrations
 use `spine-XXX-platform` module names: spine-echo-platform, spine-kafka-platform and spine-rabbitmq-platform.
 A platform implements a Spine contract and owns native settings and resource lifetimes. This term covers
 both HTTP execution and broker readers/publishers; it does not require identical constructors across transports.

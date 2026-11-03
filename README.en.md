@@ -6,6 +6,8 @@
 >
 > The development source uses `spine.WithEventAdapter` with Kafka/RabbitMQ platforms. Replace the old broker boot options using the [event platform migration guide](docs/migration/event-platforms.en.md).
 
+> The development source separates WebSocket through `contract/websocket` and the [Gorilla platform](https://github.com/NARUBROWN/spine-gorilla-platform). Select both implementations with `spine.New(echoPlatform.Option(), gorillaPlatform.Option())`. See the [WebSocket migration guide](docs/migration/websocket-platforms.en.md).
+
 # 🦴 Spine
 <p align="center">
   <img src="assets/spine-logo.png" alt="Spine" width="420" />

@@ -1,3 +1,5 @@
+github.com/NARUBROWN/spine-gorilla-platform v0.0.0-20261103040512-36ad41dff88f h1:x2sFDyjOHE1vnyKkaifAYQaNfMrvz3ekSa7bhOJzZKo=
+github.com/NARUBROWN/spine-gorilla-platform v0.0.0-20261103040512-36ad41dff88f/go.mod h1:CIRLgxv/yQy1nAEsevmkRcJ7TLMNi9oQ/9hXPTurF9Q=
 github.com/NARUBROWN/spine-kafka-platform v0.0.0-20261102223502-7b4626c6f222 h1:G4H+V2vBUZU0BPuySjpcgUxj6eFyY6lFgPhJcWZUfPI=
 github.com/NARUBROWN/spine-kafka-platform v0.0.0-20261102223502-7b4626c6f222/go.mod h1:QUDgjIv9i9kYs1yaRZBIW8buCKibea0AQsltWYGLH/o=
 github.com/NARUBROWN/spine-rabbitmq-platform v0.0.0-20261102223515-967e684aff1c h1:W71H5PYGD/y8ScW/5nMIFLKDLMPnF//qkWyAMNk7Rek=

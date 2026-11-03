@@ -14,6 +14,7 @@ import (
 
 	"github.com/NARUBROWN/spine"
 	platform "github.com/NARUBROWN/spine-echo-platform"
+	gorillaplatform "github.com/NARUBROWN/spine-gorilla-platform"
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	"github.com/gorilla/websocket"
@@ -143,7 +144,7 @@ func TestAppIntegration_ValidatorWebSocket(t *testing.T) {
 	for _, processingFailure := range []bool{false, true} {
 		controller := &validationController{}
 		validated := make(chan wsEchoRequest, 1)
-		app := spine.New(platform.Option(), spine.WithValidator(appValidationFunc(func(_ context.Context, value any) error {
+		app := spine.New(platform.Option(), gorillaplatform.Option(), spine.WithValidator(appValidationFunc(func(_ context.Context, value any) error {
 			validated <- value.(wsEchoRequest)
 			if processingFailure {
 				return errors.New("private validation failure")

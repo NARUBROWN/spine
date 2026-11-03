@@ -1,5 +1,7 @@
 github.com/NARUBROWN/spine-echo-platform v0.1.0 h1:2ca5eudam0k0dsX1bToo0SG90HnHIodU6LZW2VdA5WQ=
 github.com/NARUBROWN/spine-echo-platform v0.1.0/go.mod h1:qf9ub1FlTfIpsOxTG9DfDw6sKqv7bZvssUFhDJ+wJVk=
+github.com/NARUBROWN/spine-gorilla-platform v0.0.0-20261103040512-36ad41dff88f h1:x2sFDyjOHE1vnyKkaifAYQaNfMrvz3ekSa7bhOJzZKo=
+github.com/NARUBROWN/spine-gorilla-platform v0.0.0-20261103040512-36ad41dff88f/go.mod h1:CIRLgxv/yQy1nAEsevmkRcJ7TLMNi9oQ/9hXPTurF9Q=
 github.com/NARUBROWN/spine-kafka-platform v0.0.0-20261103001523-e4b87708f841 h1:IeW9r2ikUTJIXP6NWl31T8jhZkkoHVkc/Rkt4VfXJ3U=
 github.com/NARUBROWN/spine-kafka-platform v0.0.0-20261103001523-e4b87708f841/go.mod h1:T59RGVdgvKfa+oQrW6aKCx5DCbOnVqVplJgc6dIMaco=
 github.com/NARUBROWN/spine-rabbitmq-platform v0.0.0-20261103001525-b2be17ee8a11 h1:YLvAkV/5EGFlJZfBqPljfoSnfI+6Kf5oNL1vGWRd+7w=

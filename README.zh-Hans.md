@@ -6,6 +6,8 @@
 >
 > 开发源码通过 `spine.WithEventAdapter` 接入 Kafka/RabbitMQ 平台。旧 broker boot 配置请按[事件平台迁移指南](docs/migration/event-platforms.en.md)迁移。
 
+> 开发源码通过 `contract/websocket` 和 [Gorilla 平台](https://github.com/NARUBROWN/spine-gorilla-platform)分离 WebSocket。使用 `spine.New(echoPlatform.Option(), gorillaPlatform.Option())` 选择两种实现。请参阅 [WS 迁移指南](docs/migration/websocket-platforms.en.md)。
+
 # 🦴 Spine
 <p align="center">
   <img src="assets/spine-logo.png" alt="Spine" width="420" />

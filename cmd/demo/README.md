@@ -1,6 +1,7 @@
 # CLI 계약과 E2E를 공유하는 최소 예제
 
 `cmd/demo`는 브로커 없이 실행하는 HTTP/WS 예제입니다. CLI와 서버, E2E는 `application.BuildApplication()`을 함께 사용합니다.
+HTTP는 Echo 플랫폼, WS는 Gorilla 플랫폼을 `spine.New(platform.Option(), gorillaplatform.Option())`로 각각 선택합니다. 코어는 Gorilla에 의존하지 않습니다.
 파일 업로드와 브로커 설정을 포함한 기존 예제는 [cmd/reference](../reference/README.md)에 보관합니다.
 
 | 경로 | 확인할 동작 |

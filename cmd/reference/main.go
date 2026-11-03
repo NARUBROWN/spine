@@ -9,6 +9,7 @@ import (
 
 	"github.com/NARUBROWN/spine"
 	platform "github.com/NARUBROWN/spine-echo-platform"
+	gorillaplatform "github.com/NARUBROWN/spine-gorilla-platform"
 	kafkaplatform "github.com/NARUBROWN/spine-kafka-platform"
 	rabbitmqplatform "github.com/NARUBROWN/spine-rabbitmq-platform"
 	"github.com/NARUBROWN/spine/interceptor/cors"
@@ -21,7 +22,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("[Demo] invalid environment configuration: %v", err)
 	}
-	appOptions := []spine.Option{platform.Option()}
+	appOptions := []spine.Option{platform.Option(), gorillaplatform.Option()}
 	if config.Kafka != nil {
 		factory, err := kafkaplatform.NewFactory(*config.Kafka)
 		if err != nil {
