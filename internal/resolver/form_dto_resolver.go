@@ -6,6 +6,7 @@ import (
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/input"
 )
 
 type FormDTOResolver struct {
@@ -14,6 +15,10 @@ type FormDTOResolver struct {
 
 func (r *FormDTOResolver) Supports(pm ParameterMeta) bool {
 	if pm.Type.Kind() != reflect.Ptr {
+		return false
+	}
+
+	if _, _, ok := input.DTO(pm.Type); ok {
 		return false
 	}
 

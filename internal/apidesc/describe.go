@@ -11,6 +11,7 @@ import (
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/internal/handler"
 	"github.com/NARUBROWN/spine/internal/httpplan"
+	inputbinding "github.com/NARUBROWN/spine/internal/input"
 	"github.com/NARUBROWN/spine/internal/resolver"
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/pkg/boot"
@@ -67,6 +68,25 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 				}
 				matched = true
 				switch candidate.(type) {
+				case *resolver.InputDTOResolver:
+					payload, source, _ := inputbinding.DTO(parameter.Type)
+					if _, err := inputbinding.Fields(payload, source); err != nil {
+						return result, err
+					}
+					if !c.inputSchemaAvailable(payload) {
+						input.Binding, input.Validation = source, validator != nil
+						break
+					}
+					structure := c.structure(payload, "request/"+source).(map[string]any)
+					required := map[string]bool{}
+					if names, ok := structure["required"].([]string); ok {
+						for _, name := range names {
+							required[name] = true
+						}
+					}
+					for name, schema := range structure["properties"].(map[string]any) {
+						route.Inputs = append(route.Inputs, description.Input{Index: parameter.Index, Binding: source, Name: name, Type: payload.String(), Required: required[name], Schema: raw(schema), Validation: true})
+					}
 				case *resolver.StdContextResolver, *resolver.ControllerContextResolver:
 					input.Binding = "context"
 				case *resolver.PathIntResolver, *resolver.PathStringResolver, *resolver.PathBooleanResolver:
@@ -94,11 +114,11 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 						route.Inputs = append(route.Inputs, description.Input{Index: parameter.Index, Binding: "query", Name: pagination.name, Type: parameter.Type.String(), Schema: raw(map[string]any{"type": "integer", "default": pagination.value})})
 					}
 					continue
-				case *resolver.QueryValuesResolver, *resolver.HeaderResolver:
-					input.Binding = "unresolved"
-					c.diagnostic("DYNAMIC_PARAMETERS_UNRESOLVED", route.Handler, "Dynamic query/header keys are not inferred from handler bodies.")
 				case *resolver.DTOResolver, *resolver.FormDTOResolver:
 					input.Binding, input.Validation = "body", validator != nil
+					if !c.inputSchemaAvailable(parameter.Type.Elem()) {
+						break
+					}
 					input.Content = map[string]json.RawMessage{"application/json": raw(c.schema(parameter.Type.Elem(), "request/json"))}
 					if id, ok := c.ids[schemaKey{parameter.Type.Elem(), "request/json"}]; ok {
 						if schema, ok := c.schemas[id].(map[string]any); ok {
@@ -115,12 +135,6 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 								input.Content = map[string]json.RawMessage{"multipart/form-data": form}
 								break
 							}
-						}
-					}
-					for i := 0; i < parameter.Type.Elem().NumField(); i++ {
-						if parameter.Type.Elem().Field(i).Tag.Get("query") != "" {
-							input.Required = false
-							c.diagnostic("DTO_QUERY_BINDING_UNRESOLVED", route.Handler, "Adapter-dependent query DTO binding is not represented as a JSON-only contract.")
 						}
 					}
 				case *resolver.UploadedFilesResolver:

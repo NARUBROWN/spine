@@ -20,7 +20,7 @@ func newApplication(engine validation.Validator) spine.App {
 
 옵션을 생략하면 기존처럼 DTO 바인딩만 수행합니다. `WithValidator(nil)`이나 타입 정보가 있는 nil을 등록하면 `App.Validate`, `Prepare`, `Run`에서 `ErrInvalidValidator`로 실패합니다. 사전 검사는 `CheckValidator`로 등록 여부만 확인하며 DTO 검증을 실행하지 않습니다. 준비 결과는 같은 검증기 인스턴스를 공유합니다.
 
-HTTP는 JSON·폼 DTO의 포인터를, WebSocket과 컨슈머는 핸들러에 전달할 구조체 값을 검증기에 전달합니다. 바인딩 실패 시 검증기를 호출하지 않으며, DTO가 아닌 컨텍스트·경로·쿼리 래퍼 등도 검증하지 않습니다. 기존 인증 인터셉터는 바인딩과 검증보다 먼저 실행합니다.
+HTTP는 JSON, 폼, 별도 쿼리와 헤더 DTO의 포인터를, WebSocket과 컨슈머는 핸들러에 전달할 구조체 값을 검증기에 전달합니다. 바인딩 실패 시 검증기를 호출하지 않으며 DTO가 아닌 컨텍스트, 경로 인자와 query.Pagination 등은 검증하지 않습니다. 기존 인증 인터셉터는 바인딩과 검증보다 먼저 실행합니다.
 
 | 경로 | 규칙 위반 처리 | 검증기 처리 오류 |
 | --- | --- | --- |

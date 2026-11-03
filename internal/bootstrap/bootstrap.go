@@ -18,6 +18,7 @@ import (
 	eventResolver "github.com/NARUBROWN/spine/internal/event/consumer/resolver"
 	"github.com/NARUBROWN/spine/internal/event/hook"
 	"github.com/NARUBROWN/spine/internal/httpplan"
+	"github.com/NARUBROWN/spine/internal/input"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/internal/resolver"
@@ -148,6 +149,20 @@ func Validate(config Config) error {
 		issues = append(issues, openAPICollisionIssues(config)...)
 	}
 	for i, route := range config.Routes {
+		if meta, err := spineRouter.NewHandlerMeta(route.Handler); err == nil {
+			for index := 1; index < meta.Method.Type.NumIn(); index++ {
+				parameter := meta.Method.Type.In(index)
+				if payload, source, ok := input.DTO(parameter); ok {
+					_, fieldErr := input.Fields(payload, source)
+					if parameter.Kind() != reflect.Pointer {
+						fieldErr = fmt.Errorf("%s DTO must be a pointer to a struct", source)
+					}
+					if fieldErr != nil {
+						issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("Routes[%d].Parameters[%d]", i, index-1), Code: "HTTP_INPUT_CONTRACT_INVALID", Message: fieldErr.Error(), Hint: "Use a pointer DTO with fields from one input source."})
+					}
+				}
+			}
+		}
 		if _, err := spineRouter.NewHandlerMeta(route.Handler); err != nil {
 			issues = append(issues, boot.ConfigIssue{
 				Path:    fmt.Sprintf("Routes[%d].Handler", i),

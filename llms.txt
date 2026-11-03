@@ -279,7 +279,7 @@ Use this map instead of searching the entire repository blindly:
 - `app.go`: public `spine.App` assembly API.
 - `application.go`: optional preparation API and listener-free Handler/Close ownership.
 - `pkg/boot`: HTTP, WebSocket, common event retry/settlement, lifecycle, and validation options.
-- `pkg/path`, `pkg/query`, `pkg/header`, `pkg/multipart`: supported HTTP handler inputs.
+- `pkg/path`, `pkg/query`, `pkg/multipart`: built-in HTTP inputs; ordinary pointer DTOs use query/header tags for source-specific binding.
 - `pkg/httpx`, `pkg/httperr`: supported HTTP outputs and expected HTTP errors.
 - `pkg/ws`: WebSocket connection identity and sending.
 - `pkg/event/publish`: domain-event contract and request-scoped publishing.
@@ -498,10 +498,10 @@ app.Route(
 | `path.Int` | Parsed `int64` from the next `:segment` | Read `.Value`; malformed input returns HTTP 400. |
 | `path.String` | Raw string from the next `:segment` | Read `.Value`. |
 | `path.Boolean` | Parsed boolean from the next `:segment` | Accepts true/false forms supported by Spine; malformed input returns HTTP 400. |
-| `query.Values` | All query values | `Int(key, default)` falls back on missing or invalid input; validate business ranges yourself. |
+| `*QueryDTO` with query tags | Query-only fields | Direct field access; conversion errors return 400; selected validator runs before the handler. |
 | `query.Pagination` | `page` and `size` | Defaults to page 1 and size 20; validate non-positive or excessive values yourself. |
-| `header.Values` | HTTP headers | Use `Get` and `Has`. |
-| `*SomeDTO` with no `form` tags | Bound request DTO | HTTP DTOs must be pointers to structs; the Echo binder and request `Content-Type` select the body format. Malformed input returns HTTP 400. |
+| `*HeadersDTO` with header tags | Header-only fields | Direct field access; header names are case-insensitive; keep this DTO separate from query and body. |
+| `*SomeDTO` without query/header/form tags | Bound request DTO | HTTP DTOs must be pointers to structs; the Echo binder and request `Content-Type` select the body format. Malformed input returns HTTP 400. |
 | `*SomeForm` with at least one `form` tag | Bound form DTO | The presence of a form tag selects form binding. |
 | `multipart.UploadedFiles` | Uploaded file descriptors | Call each file's `Open` and close the returned stream. |
 | `pkg/spine.Ctx` or `core.ControllerContext` | Read-only view of values set by interceptors | Only `Get` is exposed; custom interfaces with extra methods are unsupported. |
@@ -625,7 +625,8 @@ explicit diagnostics. See contract/description/README.md for supported types and
 
 Keep existing *DTO parameters, direct field access and httpx.Response[T] returns. Documentation does not
 require input wrappers or duplicate response declarations. Native DTO Bind remains platform-dependent;
-query-tagged DTOs, dynamic query.Values/header.Values and runtime status/media retain explicit diagnostics.
+Separate query/header pointer DTOs bind only their declared source and validate before the handler. Input schema details require a configured SchemaDescriber; runtime status/media retain diagnostics.
+query.Values/header.Values are removed. Migrate using docs/migration/structured-inputs.md; preserve missing values with pointer fields and handle defaults explicitly.
 Form-tagged standard mime/multipart.FileHeader pointers and slices describe named file uploads; file DTOs
 advertise multipart/form-data. Dynamic UploadedFiles keeps an unresolved-field diagnostic.
 Managed Run prints the OpenAPI URL using the bound listener port. The companion CLI's

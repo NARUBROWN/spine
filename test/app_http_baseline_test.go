@@ -21,8 +21,8 @@ import (
 )
 
 type httpBaselineDTO struct {
-	Name  string `json:"name" xml:"name" query:"name" validate:"required"`
-	Count int    `json:"count" xml:"count" query:"count"`
+	Name  string `json:"name" xml:"name" validate:"required"`
+	Count int    `json:"count" xml:"count"`
 }
 
 type httpBaselineForm struct {
@@ -129,9 +129,9 @@ func TestAppIntegration_HTTPBindingBaseline(t *testing.T) {
 		{name: "json", method: "POST", target: "/body", contentType: "application/json; charset=utf-8", body: `{"name":"json","count":2}`, status: 200, want: httpBaselineDTO{Name: "json", Count: 2}},
 		{name: "xml", method: "POST", target: "/body", contentType: "application/xml", body: `<item><name>xml</name><count>3</count></item>`, status: 200, want: httpBaselineDTO{Name: "xml", Count: 3}},
 		{name: "text_xml", method: "POST", target: "/body", contentType: "text/xml", body: `<item><name>xml</name><count>4</count></item>`, status: 200, want: httpBaselineDTO{Name: "xml", Count: 4}},
-		{name: "get_query", method: "GET", target: "/body?name=query&count=5", status: 200, want: httpBaselineDTO{Name: "query", Count: 5}},
-		{name: "delete_query", method: "DELETE", target: "/body?name=query&count=6", status: 200, want: httpBaselineDTO{Name: "query", Count: 6}},
-		{name: "get_body_overrides_query", method: "GET", target: "/body?name=query&count=7", contentType: "application/json", body: `{"name":"body","count":8}`, status: 200, want: httpBaselineDTO{Name: "body", Count: 8}},
+		{name: "body_dto_does_not_bind_get_query", method: "GET", target: "/body?name=query&count=5", status: 200},
+		{name: "body_dto_does_not_bind_delete_query", method: "DELETE", target: "/body?name=query&count=6", status: 200},
+		{name: "get_body_dto_uses_body_only", method: "GET", target: "/body?name=query&count=7", contentType: "application/json", body: `{"name":"body","count":8}`, status: 200, want: httpBaselineDTO{Name: "body", Count: 8}},
 		{name: "post_does_not_bind_query", method: "POST", target: "/body?name=query&count=9", status: 200},
 		{name: "post_body", method: "POST", target: "/body?name=query&count=9", contentType: "application/json", body: `{"name":"body","count":10}`, status: 200, want: httpBaselineDTO{Name: "body", Count: 10}},
 		{name: "required_tag_is_not_validation", method: "POST", target: "/body", contentType: "application/json", body: `{}`, status: 200},

@@ -12,7 +12,6 @@ import (
 
 	"github.com/NARUBROWN/spine/core"
 	eventpublish "github.com/NARUBROWN/spine/pkg/event/publish"
-	"github.com/NARUBROWN/spine/pkg/header"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	pkgmultipart "github.com/NARUBROWN/spine/pkg/multipart"
 	"github.com/NARUBROWN/spine/pkg/path"
@@ -256,41 +255,6 @@ func TestFormDTOResolver_SupportsAndResolve(t *testing.T) {
 	dto := val.(*formTagged)
 	if dto.Name != "kim" {
 		t.Fatalf("폼 DTO 값이 잘못되었습니다: %+v", dto)
-	}
-}
-
-func TestHeaderResolver_Resolve(t *testing.T) {
-	r := &HeaderResolver{}
-	pm := ParameterMeta{Type: reflect.TypeFor[header.Values]()}
-	ctx := newFakeHttpCtx()
-	ctx.headers["X-Trace-Id"] = []string{"abc"}
-
-	val, err := r.Resolve(ctx, pm)
-	if err != nil {
-		t.Fatalf("HeaderResolver Resolve 실패: %v", err)
-	}
-
-	headers := val.(header.Values)
-	if !headers.Has("X-Trace-Id") || headers.Get("X-Trace-Id") != "abc" {
-		t.Fatalf("헤더 조회 결과가 잘못되었습니다")
-	}
-}
-
-func TestQueryValuesResolver_Resolve(t *testing.T) {
-	r := &QueryValuesResolver{}
-	pm := ParameterMeta{Type: reflect.TypeFor[query.Values]()}
-	ctx := newFakeHttpCtx()
-	ctx.queries["page"] = []string{"3"}
-	ctx.queries["enabled"] = []string{"yes"}
-
-	val, err := r.Resolve(ctx, pm)
-	if err != nil {
-		t.Fatalf("QueryValuesResolver Resolve 실패: %v", err)
-	}
-
-	values := val.(query.Values)
-	if values.Int("page", 0) != 3 || !values.GetBoolByKey("enabled", false) {
-		t.Fatalf("쿼리 조회 결과가 잘못되었습니다")
 	}
 }
 

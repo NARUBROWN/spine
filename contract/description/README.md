@@ -60,9 +60,9 @@ return err
 
 ## 검증 규칙
 
-등록된 validator만 검증 제약을 설명할 수 있습니다. DTO에 `validate` 태그가 있어도 validator를 등록하지 않았다면 명세 생성기는 그 태그를 검증 규칙으로 해석하지 않습니다. `json:",omitempty"`도 입력 필수값 판정에 사용하지 않습니다.
+등록된 validator만 검증 제약을 설명할 수 있습니다. validator가 없거나 설명 계약을 지원하지 않으면 DTO 상세 입력을 제공하지 않고 `INPUT_SCHEMA_DESCRIPTION_UNAVAILABLE`로 이유를 남깁니다. `json:",omitempty"`도 입력 필수값 판정에 사용하지 않습니다.
 
-`contract/validator.SchemaDescriber`는 Go 필드 인덱스와 JSON Schema 2020-12 제약을 연결합니다. 기존 `Validator` 인터페이스는 유지됩니다. 설명 기능이 없는 validator도 정상 동작하며, 명세에는 `VALIDATION_DESCRIPTION_UNAVAILABLE` 진단을 남깁니다. 지원하지 않는 사용자 규칙, 태그 이름 변경과 규칙 덮어쓰기는 실제 validator 구현이 판단해야 합니다. 명세를 얻으려고 `Validate`에 빈 DTO를 넣지 않습니다.
+`contract/validator.SchemaDescriber`는 Go 필드 인덱스와 JSON Schema 2020-12 제약을 연결합니다. 기존 `Validator` 인터페이스는 유지됩니다. 설명 기능이 없는 validator도 요청 검증은 정상 동작하지만 상세 입력 명세는 생략합니다. 지원하지 않는 사용자 규칙, 태그 이름 변경과 규칙 덮어쓰기는 실제 validator 구현이 판단해야 합니다. 명세를 얻으려고 `Validate`에 빈 DTO를 넣지 않습니다.
 
 검증기의 숫자 `required`는 0, bool `required`는 false도 거부할 수 있습니다. 이런 제약은 OpenAPI의 `required` 배열 외에 값 제약으로도 표현해야 합니다. 포인터의 필수값은 null과 필드 누락을 구분해 설명합니다. HTTP 400에는 바인딩 오류의 `message`와 DTO 검증 오류의 선택적 `fields`를 기술합니다.
 
@@ -83,7 +83,7 @@ app.Route("POST", "/users", (*UserController).Create)
 
 위 코드는 앱이 정의한 `UserController`, `UserDTO`와 `pkg/httpx`를 사용하는 예입니다. 입력 필드는 `input.Name`으로 직접 읽습니다. 명세는 등록된 메서드와 경로, JSON 필드, 반환형의 본문 타입을 추출합니다. 검증기를 등록하면 설명 가능한 `validate` 규칙도 반영합니다.
 
-기존 일반 `*DTO`의 바인딩은 플랫폼 `Bind`에 위임합니다. `query` 태그가 있는 DTO는 플랫폼과 HTTP 메서드에 따라 바인딩이 달라질 수 있어 부분 명세 진단을 유지합니다. `query.Values`와 `header.Values`가 읽을 키는 핸들러 본문을 실행하거나 분석하지 않으므로 추론하지 않습니다. 이번 변경은 기존 입력의 바인딩 순서와 값 접근 방식을 바꾸지 않습니다.
+쿼리와 헤더는 각각 별도 구조체 포인터로 받습니다. `query` 필드 태그가 있는 DTO는 쿼리에서, `header` 필드 태그가 있는 DTO는 헤더에서만 읽습니다. 함수 안에서는 일반 필드로 직접 접근하며 본문이 값을 덮어쓰지 않습니다. 서로 다른 출처의 필드는 한 DTO에 섞지 않습니다. query.Values와 header.Values는 제거했습니다. [구조체 입력 전환 안내](../../docs/migration/structured-inputs.md)를 참고하세요.
 
 파일은 기존 `form` 태그와 표준 라이브러리의 `*mime/multipart.FileHeader`, `[]*mime/multipart.FileHeader`, `[]mime/multipart.FileHeader`에서 필드 이름과 개수를 추출합니다. 파일 필드가 있는 DTO는 multipart/form-data로만 기술합니다. 현재 Echo 기본 바인더와 대조했으며 다른 플랫폼은 자체 바인더의 지원 여부를 확인해야 합니다. 동적인 `multipart.UploadedFiles`는 필드 이름을 추측하지 않습니다.
 
@@ -111,7 +111,7 @@ runtime은 import할 수 있는 composition 패키지의 BuildApplication() (spi
 
 같은 메서드의 경로가 충돌하면 기존 앱 준비 단계처럼 거부합니다. 같은 URL 형태에서 메서드별 경로 인자 이름이 다르면 하나의 OpenAPI Path Item으로 묶습니다.
 
-명세에 표현되지 않은 동작은 `x-spine-diagnostics`로 구분합니다. 동적 query/header 키, adapter별 쿼리 DTO 바인딩, 업로드 필드 이름, 사용자 정의 JSON/text 직렬화와 동적 status, Content-Type은 완전히 추론하지 않습니다. `ResponseOptions.Status`나 서비스 내부 오류를 얻으려고 핸들러를 실행하지 않습니다. 응답 상태는 `default`로 남기며 본문은 선언된 반환형과 프레임워크 오류 형식을 함께 설명합니다.
+명세에 표현되지 않은 동작은 `x-spine-diagnostics`로 구분합니다. 동적 업로드 필드 이름, 사용자 정의 JSON/text 직렬화와 동적 status, Content-Type은 완전히 추론하지 않습니다. `ResponseOptions.Status`나 서비스 내부 오류를 얻으려고 핸들러를 실행하지 않습니다. 응답 상태는 `default`로 남기며 본문은 선언된 반환형과 프레임워크 오류 형식을 함께 설명합니다.
 
 HTTP 플랫폼에 직접 등록한 native 경로, WS 메시지와 event payload는 이번 OpenAPI 대상에 포함하지 않습니다. Swagger UI와 ReDoc은 이 JSON을 읽는 별도 표시 계층으로 추가할 수 있습니다.
 

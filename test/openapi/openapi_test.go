@@ -19,7 +19,6 @@ import (
 	platform "github.com/NARUBROWN/spine-echo-platform"
 	playground "github.com/NARUBROWN/spine-validator-playground"
 	"github.com/NARUBROWN/spine/pkg/boot"
-	"github.com/NARUBROWN/spine/pkg/header"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
@@ -44,6 +43,14 @@ type queryDTO struct {
 	Age  int      `json:"age" query:"min_age" validate:"gte=18"`
 	Tags []string `json:"tags" query:"tag" validate:"omitempty,dive,required"`
 }
+type headerDTO struct {
+	ID string `header:"X-Request-ID" validate:"required"`
+}
+
+type bodyDTO struct {
+	Name string `json:"name" validate:"required"`
+}
+
 type uploadDTO struct {
 	Avatar      *multipart.FileHeader   `json:"avatar" form:"avatar" validate:"required"`
 	Attachments []*multipart.FileHeader `json:"attachments" form:"attachments"`
@@ -65,8 +72,11 @@ func (*controller) Create(value *payload) httpx.Response[payload] {
 func (*controller) Form(value *formDTO) httpx.Response[formDTO] {
 	return httpx.Response[formDTO]{Body: *value}
 }
-func (*controller) Search(values *queryDTO, headers header.Values) httpx.Response[searchResult] {
-	return httpx.Response[searchResult]{Body: searchResult{Age: values.Age, Tags: values.Tags, ID: headers.Get("X-Request-ID")}}
+func (*controller) Search(values *queryDTO, headers *headerDTO) httpx.Response[searchResult] {
+	return httpx.Response[searchResult]{Body: searchResult{Age: values.Age, Tags: values.Tags, ID: headers.ID}}
+}
+func (*controller) Combined(values *queryDTO, headers *headerDTO, body *bodyDTO) httpx.Response[map[string]any] {
+	return httpx.Response[map[string]any]{Body: map[string]any{"age": values.Age, "id": headers.ID, "name": body.Name}}
 }
 func (*controller) Upload(value *uploadDTO) httpx.Response[uploadResult] {
 	return httpx.Response[uploadResult]{Body: uploadResult{Name: value.Avatar.Filename, Count: len(value.Attachments)}}
@@ -82,7 +92,7 @@ func (*controller) Conflict() error { return &httperr.HTTPError{Status: 409, Mes
 
 func application(t *testing.T) (http.Handler, map[string]any) {
 	t.Helper()
-	v, err := playground.New()
+	v, err := playground.New(playground.WithFieldTags("json", "form", "query", "header"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,6 +101,8 @@ func application(t *testing.T) (http.Handler, map[string]any) {
 	app.Route("POST", "/users", (*controller).Create)
 	app.Route("POST", "/form", (*controller).Form)
 	app.Route("GET", "/search", (*controller).Search)
+	app.Route("POST", "/search", (*controller).Search)
+	app.Route("POST", "/combined", (*controller).Combined)
 	app.Route("POST", "/upload", (*controller).Upload)
 	app.Route("GET", "/nullable", (*controller).Nullable)
 	app.Route("GET", "/string", (*controller).String)
@@ -256,31 +268,42 @@ func clone(source map[string]any) map[string]any {
 	return result
 }
 
-func TestExistingQueryDTOAndHeaderValuesKeepPlatformBinding(t *testing.T) {
+func TestSeparateQueryAndHeaderDTOsBindValidateAndDescribeTheirFields(t *testing.T) {
 	h, doc := application(t)
-	codes := map[string]bool{}
-	for _, raw := range doc["x-spine-diagnostics"].([]any) {
-		codes[raw.(map[string]any)["code"].(string)] = true
-	}
-	if !codes["DTO_QUERY_BINDING_UNRESOLVED"] || !codes["DYNAMIC_PARAMETERS_UNRESOLVED"] {
-		t.Fatal("플랫폼 쿼리 바인딩과 동적 헤더의 한계를 설명해야 합니다")
-	}
-	for _, test := range []struct {
-		age, id string
-		status  int
-	}{{"18", "request-1", 200}, {"17", "request-1", 400}, {"invalid", "request-1", 400}, {"18", "", 200}} {
-		req := httptest.NewRequest("GET", "/search?min_age="+url.QueryEscape(test.age)+"&tag=a&tag=b", nil)
-		if test.id != "" {
-			req.Header.Set("X-Request-ID", test.id)
+	for _, method := range []string{"GET", "POST"} {
+		op := operation(doc, "/search", strings.ToLower(method))
+		if op["requestBody"] != nil {
+			t.Fatal("분리한 쿼리와 헤더는 본문이 아닙니다")
 		}
-		w := httptest.NewRecorder()
-		h.ServeHTTP(w, req)
-		if w.Code != test.status {
-			t.Fatalf("기존 DTO와 헤더 바인딩: %d %s", w.Code, w.Body)
+		parameters := map[string]map[string]any{}
+		for _, raw := range op["parameters"].([]any) {
+			item := raw.(map[string]any)
+			parameters[item["name"].(string)] = item
 		}
-		assertJSONResponse(t, doc, "/search", "get", w)
-		if w.Code == 200 && (!strings.Contains(w.Body.String(), `"age":18`) || !strings.Contains(w.Body.String(), `"tags":["a","b"]`) || !strings.Contains(w.Body.String(), `"id":"`+test.id+`"`)) {
-			t.Fatalf("기존 입력의 직접 접근을 유지해야 합니다: %s", w.Body)
+		if len(parameters) != 3 || parameters["X-Request-Id"]["in"] != "header" || parameters["X-Request-Id"]["required"] != true || parameters["min_age"]["required"] != true {
+			t.Fatalf("입력 명세: %+v", parameters)
+		}
+		for _, test := range []struct {
+			age, id string
+			status  int
+		}{{"18", "request-1", 200}, {"17", "request-1", 400}, {"invalid", "request-1", 400}, {"18", "", 400}} {
+			req := httptest.NewRequest(method, "/search?min_age="+url.QueryEscape(test.age)+"&tag=a&tag=b", strings.NewReader(`{"age":999,"request_id":"body"}`))
+			req.Header.Set("Content-Type", "application/json")
+			if test.id != "" {
+				req.Header.Set("x-request-id", test.id)
+			}
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, req)
+			if w.Code != test.status {
+				t.Fatalf("입력 바인딩과 검증: %s %d %s", method, w.Code, w.Body)
+			}
+			assertJSONResponse(t, doc, "/search", strings.ToLower(method), w)
+			if w.Code == 200 && (!strings.Contains(w.Body.String(), `"age":18`) || !strings.Contains(w.Body.String(), `"tags":["a","b"]`) || !strings.Contains(w.Body.String(), `"id":"request-1"`)) {
+				t.Fatalf("본문이 별도 입력을 덮어쓰면 안 됩니다: %s", w.Body)
+			}
+			if test.id == "" && !strings.Contains(w.Body.String(), "X-Request-ID") {
+				t.Fatalf("검증 오류는 헤더 필드를 가리켜야 합니다: %s", w.Body)
+			}
 		}
 	}
 }
@@ -351,5 +374,50 @@ func TestRuntimeStatusAndMediaAreNotGuessedFromHandlers(t *testing.T) {
 	content := operation(doc, "/binary", "get")["responses"].(map[string]any)["default"].(map[string]any)["content"].(map[string]any)
 	if len(content) != 1 || content["*/*"] == nil {
 		t.Fatalf("동적 바이너리 미디어를 추측하면 안 됩니다: %+v", content)
+	}
+}
+
+func TestQueryHeadersAndBodyRemainSeparateHandlerArguments(t *testing.T) {
+	h, doc := application(t)
+	req := httptest.NewRequest("POST", "/combined?min_age=18", strings.NewReader(`{"name":"alice","age":999,"request_id":"body-spoof"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Request-ID", "request-1")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"age":18`) || !strings.Contains(w.Body.String(), `"id":"request-1"`) || !strings.Contains(w.Body.String(), `"name":"alice"`) {
+		t.Fatalf("출처별 인자 분리: %d %s", w.Code, w.Body)
+	}
+	assertJSONResponse(t, doc, "/combined", "post", w)
+	op := operation(doc, "/combined", "post")
+	if op["requestBody"] == nil || len(op["parameters"].([]any)) != 3 {
+		t.Fatalf("입력 종류별 명세: %+v", op)
+	}
+}
+
+func TestUnconfiguredValidatorSkipsRequiredRulesButStillRejectsConversionErrors(t *testing.T) {
+	app := spine.New(platform.Option())
+	app.Constructor(func() *controller { return &controller{} })
+	app.Route("POST", "/search", (*controller).Search)
+	prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := prepared.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
+	for _, test := range []struct {
+		path   string
+		status int
+	}{{"/search", 200}, {"/search?min_age=invalid", 400}} {
+		w := serve(prepared.Handler(), "POST", test.path, "", nil)
+		if w.Code != test.status {
+			t.Fatalf("검증기 생략과 변환 오류 구분: %d %s", w.Code, w.Body)
+		}
+	}
+	doc := serve(prepared.Handler(), "GET", "/openapi.json", "", nil)
+	if !strings.Contains(doc.Body.String(), "INPUT_SCHEMA_DESCRIPTION_UNAVAILABLE") || strings.Contains(doc.Body.String(), `"parameters"`) {
+		t.Fatalf("상세 명세는 선택한 검증 설명 계약이 필요합니다: %s", doc.Body)
 	}
 }

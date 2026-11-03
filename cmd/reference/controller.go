@@ -8,12 +8,10 @@ import (
 	"time"
 
 	"github.com/NARUBROWN/spine/pkg/event/publish"
-	"github.com/NARUBROWN/spine/pkg/header"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	"github.com/NARUBROWN/spine/pkg/multipart"
 	"github.com/NARUBROWN/spine/pkg/path"
-	"github.com/NARUBROWN/spine/pkg/query"
 	"github.com/NARUBROWN/spine/pkg/spine"
 	"github.com/NARUBROWN/spine/pkg/ws"
 )
@@ -60,7 +58,11 @@ func (c *UserController) CreateUser(ctx context.Context, req *CreateUserRequest)
 	}
 }
 
-func (c *UserController) GetUserQuery(ctx context.Context, q query.Values) httpx.Response[string] {
+type UserQuery struct {
+	Name string `query:"name"`
+}
+
+func (c *UserController) GetUserQuery(ctx context.Context, q *UserQuery) httpx.Response[string] {
 	return httpx.Response[string]{
 		Body: "OK",
 	}
@@ -132,10 +134,15 @@ type Headers struct {
 }
 
 // CheckHeader는 HTTP 요청 헤더의 User-Agent와 Content-Type 정보를 반환합니다.
-func (c *CommonController) CheckHeader(headers header.Values) Headers {
+type RequestHeaders struct {
+	UserAgent   string `header:"User-Agent"`
+	ContentType string `header:"Content-Type"`
+}
+
+func (c *CommonController) CheckHeader(headers *RequestHeaders) Headers {
 	return Headers{
-		UserAgent:   headers.Get("User-Agent"),
-		ContentType: headers.Get("Content-Type"),
+		UserAgent:   headers.UserAgent,
+		ContentType: headers.ContentType,
 	}
 }
 

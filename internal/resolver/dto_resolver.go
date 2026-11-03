@@ -6,6 +6,7 @@ import (
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/input"
 )
 
 type DTOResolver struct {
@@ -20,6 +21,10 @@ func (r *DTOResolver) Supports(pm ParameterMeta) bool {
 
 	// 반드시 포인터
 	if pm.Type.Kind() != reflect.Ptr {
+		return false
+	}
+
+	if _, _, ok := input.DTO(pm.Type); ok {
 		return false
 	}
 

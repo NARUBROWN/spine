@@ -16,6 +16,7 @@ import (
 
 	"github.com/NARUBROWN/spine/contract/description"
 	validation "github.com/NARUBROWN/spine/contract/validator"
+	"github.com/NARUBROWN/spine/internal/input"
 )
 
 type schemaKey struct {
@@ -118,7 +119,7 @@ func (c *catalog) schemaValue(t reflect.Type, mode string) any {
 		c.diagnostic("DYNAMIC_TYPE_UNRESOLVED", t.String(), "An interface does not describe its runtime JSON representation.")
 		return map[string]any{}
 	case reflect.Slice:
-		if t.Elem().Kind() == reflect.Uint8 {
+		if t.Elem().Kind() == reflect.Uint8 && !strings.HasSuffix(mode, "/query") && !strings.HasSuffix(mode, "/header") {
 			return nullable(map[string]any{"type": "string", "contentEncoding": "base64"})
 		}
 		return nullable(map[string]any{"type": "array", "items": c.schema(t.Elem(), mode)})
@@ -192,6 +193,18 @@ func customCodec(t reflect.Type) bool {
 
 func (c *catalog) structure(t reflect.Type, mode string) any {
 	fields := wireFields(t, strings.HasSuffix(mode, "/form"))
+	for _, source := range []string{"query", "header"} {
+		if strings.HasSuffix(mode, "/"+source) {
+			selected, err := input.Fields(t, source)
+			if err != nil {
+				c.diagnostic("INPUT_FIELDS_UNRESOLVED", t.String(), err.Error())
+			}
+			fields = nil
+			for _, field := range selected {
+				fields = append(fields, wireField{name: field.Name, index: field.Index, typeOf: field.Type})
+			}
+		}
+	}
 	constraints := map[string]validation.FieldSchema{}
 	if strings.HasPrefix(mode, "request/") && c.validator != nil {
 		if describer, ok := c.validator.(validation.SchemaDescriber); ok {
@@ -359,3 +372,12 @@ func validName(name string) bool {
 }
 
 func raw(value any) json.RawMessage { contents, _ := json.Marshal(value); return contents }
+
+// 입력 DTO 상세 명세는 실제 선택한 검증기의 설명 계약이 있을 때만 제공합니다.
+func (c *catalog) inputSchemaAvailable(t reflect.Type) bool {
+	if _, ok := c.validator.(validation.SchemaDescriber); ok {
+		return true
+	}
+	c.diagnostic("INPUT_SCHEMA_DESCRIPTION_UNAVAILABLE", t.String(), "Input DTO schemas require a configured validator with schema description support.")
+	return false
+}
