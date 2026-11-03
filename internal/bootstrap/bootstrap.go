@@ -18,6 +18,7 @@ import (
 	eventResolver "github.com/NARUBROWN/spine/internal/event/consumer/resolver"
 	"github.com/NARUBROWN/spine/internal/event/hook"
 	"github.com/NARUBROWN/spine/internal/httpplan"
+	"github.com/NARUBROWN/spine/internal/input"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/internal/resolver"
@@ -148,6 +149,18 @@ func Validate(config Config) error {
 		issues = append(issues, openAPICollisionIssues(config)...)
 	}
 	for i, route := range config.Routes {
+		if meta, err := spineRouter.NewHandlerMeta(route.Handler); err == nil {
+			for index := 1; index < meta.Method.Type.NumIn(); index++ {
+				if payload, source, ok := input.DTO(meta.Method.Type.In(index)); ok {
+					if _, err := input.Fields(payload, source); err != nil {
+						issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("Routes[%d].Parameters[%d]", i, index-1), Code: "HTTP_INPUT_CONTRACT_INVALID", Message: err.Error(), Hint: "Use tagged scalar fields in a source DTO."})
+					}
+				}
+			}
+		}
+		if err := spineRouter.ValidateResponses(route.Responses); err != nil {
+			issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("Routes[%d].Responses", i), Code: "HTTP_RESPONSE_CONTRACT_INVALID", Message: err.Error(), Hint: "Declare a valid status, media type and body."})
+		}
 		if _, err := spineRouter.NewHandlerMeta(route.Handler); err != nil {
 			issues = append(issues, boot.ConfigIssue{
 				Path:    fmt.Sprintf("Routes[%d].Handler", i),

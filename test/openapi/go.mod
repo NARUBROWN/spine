@@ -1,0 +1,24 @@
+module github.com/NARUBROWN/spine/test/openapi
+
+go 1.26.0
+
+replace github.com/NARUBROWN/spine => ../..
+
+require (
+	github.com/NARUBROWN/spine v0.6.6-0.20261103094217-e4dd8f07ce83
+	github.com/NARUBROWN/spine-echo-platform v0.1.0
+	github.com/NARUBROWN/spine-validator-playground v0.1.1-0.20261103094358-5a664f41943b
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
+)
+
+require (
+	github.com/gabriel-vasile/mimetype v1.4.16 // indirect
+	github.com/go-playground/locales v0.14.2 // indirect
+	github.com/go-playground/universal-translator v0.18.2 // indirect
+	github.com/go-playground/validator/v10 v10.30.6 // indirect
+	github.com/labstack/echo/v5 v5.4.4 // indirect
+	github.com/leodido/go-urn v1.5.0 // indirect
+	golang.org/x/crypto v0.58.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
+)

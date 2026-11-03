@@ -31,13 +31,13 @@ func openAPICollisionIssues(config Config) []boot.ConfigIssue {
 	}
 	for _, route := range config.Routes {
 		fullPath, err := joinPath(prefix, route.Path)
-		if err == nil && strings.Trim(fullPath, "/") == strings.Trim(documentPath, "/") && (route.Method == "GET" || route.Method == "HEAD") {
+		if err == nil && (route.Method == "GET" || route.Method == "HEAD") && assertNoAmbiguousRoute(route.Method, documentPath, []string{fullPath}) != nil {
 			return collision()
 		}
 	}
 	if config.WebSocketRegistry != nil {
 		for _, route := range config.WebSocketRegistry.Registrations() {
-			if strings.Trim(route.Path, "/") == strings.Trim(documentPath, "/") {
+			if assertNoAmbiguousRoute("GET", documentPath, []string{route.Path}) != nil {
 				return collision()
 			}
 		}

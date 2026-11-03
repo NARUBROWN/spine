@@ -3,6 +3,7 @@ package apidesc
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"reflect"
 	"sort"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/internal/handler"
 	"github.com/NARUBROWN/spine/internal/httpplan"
+	inputbinding "github.com/NARUBROWN/spine/internal/input"
 	"github.com/NARUBROWN/spine/internal/resolver"
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/pkg/boot"
@@ -32,6 +34,9 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 	c := newCatalog(validator)
 	seen := map[string]bool{}
 	for _, spec := range routes {
+		if err := router.ValidateResponses(spec.Responses); err != nil {
+			return result, err
+		}
 		meta, err := router.NewHandlerMeta(spec.Handler)
 		if err != nil {
 			return result, err
@@ -67,6 +72,22 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 				}
 				matched = true
 				switch candidate.(type) {
+				case *resolver.SourceDTOResolver:
+					t, source, _ := inputbinding.DTO(parameter.Type)
+					if _, err := inputbinding.Fields(t, source); err != nil {
+						return result, err
+					}
+					// 구조체를 먼저 기술해 같은 필드 선택과 검증 제약을 재사용합니다.
+					structure := c.structure(t, "request/"+source).(map[string]any)
+					required := map[string]bool{}
+					if names, ok := structure["required"].([]string); ok {
+						for _, name := range names {
+							required[name] = true
+						}
+					}
+					for name, schema := range structure["properties"].(map[string]any) {
+						route.Inputs = append(route.Inputs, description.Input{Index: parameter.Index, Binding: source, Name: name, Type: t.String(), Required: required[name], Schema: raw(schema), Validation: validator != nil})
+					}
 				case *resolver.StdContextResolver, *resolver.ControllerContextResolver:
 					input.Binding = "context"
 				case *resolver.PathIntResolver, *resolver.PathStringResolver, *resolver.PathBooleanResolver:
@@ -100,12 +121,26 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 				case *resolver.DTOResolver, *resolver.FormDTOResolver:
 					input.Binding, input.Validation = "body", validator != nil
 					input.Content = map[string]json.RawMessage{"application/json": raw(c.schema(parameter.Type.Elem(), "request/json"))}
+					if id, ok := c.ids[schemaKey{parameter.Type.Elem(), "request/json"}]; ok {
+						if schema, ok := c.schemas[id].(map[string]any); ok {
+							if names, ok := schema["required"].([]string); ok {
+								input.Required = len(names) > 0
+							}
+						}
+					}
 					if _, ok := candidate.(*resolver.FormDTOResolver); ok {
 						form := raw(c.schema(parameter.Type.Elem(), "request/form"))
 						input.Content["application/x-www-form-urlencoded"], input.Content["multipart/form-data"] = form, append(json.RawMessage(nil), form...)
+						for _, field := range wireFields(parameter.Type.Elem(), true) {
+							if fileField(field.typeOf) {
+								input.Content = map[string]json.RawMessage{"multipart/form-data": form}
+								break
+							}
+						}
 					}
 					for i := 0; i < parameter.Type.Elem().NumField(); i++ {
 						if parameter.Type.Elem().Field(i).Tag.Get("query") != "" {
+							input.Required = false
 							c.diagnostic("DTO_QUERY_BINDING_UNRESOLVED", route.Handler, "Adapter-dependent query DTO binding is not represented as a JSON-only contract.")
 						}
 					}
@@ -172,6 +207,29 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 			route.Returns = append(route.Returns, output)
 		}
 		c.diagnostic("RESPONSE_STATUS_DYNAMIC", route.Handler, "ResponseOptions and application errors select status codes at runtime.")
+		for _, declaration := range spec.Responses {
+			response := description.Response{Status: declaration.Status}
+			if declaration.Status != http.StatusNoContent && declaration.Status != http.StatusNotModified {
+				var schema any
+				if declaration.Error {
+					schema = errorSchema(false)
+				} else {
+					schema = c.schema(declaration.Body, "response/json")
+					if declaration.Body.Kind() == reflect.Slice && declaration.Body.Elem().Kind() == reflect.Uint8 && declaration.ContentType != "application/json" {
+						schema = map[string]any{"type": "string", "format": "binary"}
+					}
+				}
+				response.Content = map[string]json.RawMessage{declaration.ContentType: raw(schema)}
+			}
+			route.Responses = append(route.Responses, response)
+		}
+		sort.SliceStable(route.Inputs, func(i, j int) bool {
+			a, b := route.Inputs[i], route.Inputs[j]
+			if a.Index != b.Index {
+				return a.Index < b.Index
+			}
+			return a.Name < b.Name
+		})
 		result.Routes = append(result.Routes, route)
 	}
 	for name, schema := range c.schemas {

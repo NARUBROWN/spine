@@ -4,7 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/NARUBROWN/spine/contract/description"
@@ -75,12 +77,21 @@ func OpenAPI(contract description.HTTP, options boot.OpenAPIOptions) (json.RawMe
 		parameters := []any{}
 		seenParameters := map[string]bool{}
 		body := map[string]any{}
+		bodyRequired := false
 		validation := false
 		for _, input := range route.Inputs {
+			validation = validation || input.Validation
 			switch input.Binding {
-			case "path", "query":
+			case "path", "query", "header":
 				if input.Name != "" {
 					name := input.Name
+					if input.Binding == "header" {
+						switch strings.ToLower(name) {
+						case "accept", "content-type", "authorization":
+							diagnostics = append(diagnostics, description.Diagnostic{Code: "RESERVED_HEADER_PARAMETER", Target: route.Handler, Message: "OpenAPI reserves this header for media selection or security schemes; the input remains bound at runtime."})
+							continue
+						}
+					}
 					if canonical := parameterNames[name]; input.Binding == "path" && canonical != "" {
 						name = canonical
 					}
@@ -90,7 +101,14 @@ func OpenAPI(contract description.HTTP, options boot.OpenAPIOptions) (json.RawMe
 						continue
 					}
 					seenParameters[key] = true
-					parameters = append(parameters, map[string]any{"name": name, "in": input.Binding, "required": input.Required, "schema": input.Schema})
+					parameter := map[string]any{"name": name, "in": input.Binding, "required": input.Required, "schema": input.Schema}
+					if input.Binding == "query" {
+						parameter["style"], parameter["explode"] = "form", true
+					}
+					if input.Binding == "header" {
+						parameter["style"], parameter["explode"] = "simple", false
+					}
+					parameters = append(parameters, parameter)
 				}
 			case "body":
 				if len(body) > 0 {
@@ -100,6 +118,7 @@ func OpenAPI(contract description.HTTP, options boot.OpenAPIOptions) (json.RawMe
 				for media, schema := range input.Content {
 					body[media] = map[string]any{"schema": schema}
 				}
+				bodyRequired = input.Required
 				validation = validation || input.Validation
 			}
 		}
@@ -107,7 +126,7 @@ func OpenAPI(contract description.HTTP, options boot.OpenAPIOptions) (json.RawMe
 			op["parameters"] = parameters
 		}
 		if len(body) > 0 {
-			op["requestBody"] = map[string]any{"content": body}
+			op["requestBody"] = map[string]any{"content": body, "required": bodyRequired}
 		}
 		content := map[string]any{}
 		for _, output := range route.Returns {
@@ -132,6 +151,24 @@ func OpenAPI(contract description.HTTP, options boot.OpenAPIOptions) (json.RawMe
 		responses := map[string]any{"default": response}
 		if len(body) > 0 || len(parameters) > 0 {
 			responses["400"] = map[string]any{"description": "Request binding or DTO validation failed.", "content": map[string]any{"application/json": map[string]any{"schema": errorSchema(validation)}}}
+		}
+		for _, declared := range route.Responses {
+			key := strconv.Itoa(declared.Status)
+			item, exists := responses[key].(map[string]any)
+			if !exists {
+				item = map[string]any{"description": http.StatusText(declared.Status), "x-spine-evidence": "declared"}
+				responses[key] = item
+			}
+			declaredContent, _ := item["content"].(map[string]any)
+			if declaredContent == nil {
+				declaredContent = map[string]any{}
+			}
+			for media, schema := range declared.Content {
+				declaredContent[media] = map[string]any{"schema": schema}
+			}
+			if len(declaredContent) > 0 {
+				item["content"] = declaredContent
+			}
 		}
 		op["responses"] = responses
 		item[method] = op

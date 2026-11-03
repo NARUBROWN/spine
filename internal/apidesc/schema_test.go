@@ -122,3 +122,12 @@ func TestValidationConstraintsPreserveIntegerPrecision(t *testing.T) {
 		t.Fatalf("검증 제약의 정수 정밀도를 보존해야 합니다: %s", encoded)
 	}
 }
+
+func TestValidationConstraintOnPointerCycleRemainsUnresolved(t *testing.T) {
+	type payload struct{ Value pointerCycle }
+	c := newCatalog(exactIntegerValidator{})
+	c.schema(reflect.TypeFor[payload](), "request/json")
+	if len(c.diagnostics) != 2 {
+		t.Fatalf("포인터 순환과 검증 제약을 미해결로 구분해야 합니다: %+v", c.diagnostics)
+	}
+}

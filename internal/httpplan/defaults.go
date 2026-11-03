@@ -13,6 +13,7 @@ func Resolvers(validator validation.Validator) []resolver.ArgumentResolver {
 		&resolver.HeaderResolver{}, &resolver.PathIntResolver{},
 		&resolver.PathStringResolver{}, &resolver.PathBooleanResolver{},
 		&resolver.PaginationResolver{}, &resolver.QueryValuesResolver{},
+		&resolver.SourceDTOResolver{Validator: validator},
 		&resolver.DTOResolver{Validator: validator}, &resolver.FormDTOResolver{Validator: validator},
 		&resolver.UploadedFilesResolver{},
 	}

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"mime/multipart"
 	"reflect"
 	"sort"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/NARUBROWN/spine/contract/description"
 	validation "github.com/NARUBROWN/spine/contract/validator"
+	"github.com/NARUBROWN/spine/internal/input"
 )
 
 type schemaKey struct {
@@ -68,6 +70,14 @@ func (c *catalog) schema(t reflect.Type, mode string) any {
 }
 
 func (c *catalog) schemaValue(t reflect.Type, mode string) any {
+	if strings.HasSuffix(mode, "/form") {
+		if t == reflect.TypeFor[*multipart.FileHeader]() {
+			return map[string]any{"type": "string", "format": "binary"}
+		}
+		if t == reflect.TypeFor[[]*multipart.FileHeader]() || t == reflect.TypeFor[[]multipart.FileHeader]() {
+			return map[string]any{"type": "array", "items": map[string]any{"type": "string", "format": "binary"}}
+		}
+	}
 	if t == reflect.TypeFor[json.RawMessage]() {
 		return map[string]any{}
 	}
@@ -109,7 +119,7 @@ func (c *catalog) schemaValue(t reflect.Type, mode string) any {
 		c.diagnostic("DYNAMIC_TYPE_UNRESOLVED", t.String(), "An interface does not describe its runtime JSON representation.")
 		return map[string]any{}
 	case reflect.Slice:
-		if t.Elem().Kind() == reflect.Uint8 {
+		if t.Elem().Kind() == reflect.Uint8 && !strings.HasSuffix(mode, "/query") && !strings.HasSuffix(mode, "/header") {
 			return nullable(map[string]any{"type": "string", "contentEncoding": "base64"})
 		}
 		return nullable(map[string]any{"type": "array", "items": c.schema(t.Elem(), mode)})
@@ -148,13 +158,22 @@ func (c *catalog) schemaValue(t reflect.Type, mode string) any {
 }
 
 func integerKind(k reflect.Kind) bool { return k >= reflect.Int && k <= reflect.Uintptr }
+
+func fileField(t reflect.Type) bool {
+	return t == reflect.TypeFor[*multipart.FileHeader]() || t == reflect.TypeFor[[]*multipart.FileHeader]() || t == reflect.TypeFor[[]multipart.FileHeader]()
+}
 func nullable(schema any) any {
 	return map[string]any{"anyOf": []any{schema, map[string]any{"type": "null"}}}
 }
 func reference(id string) any { return map[string]any{"$ref": "#/components/schemas/" + id} }
 
 func customCodecType(t reflect.Type) bool {
+	seen := map[reflect.Type]bool{}
 	for t.Kind() == reflect.Pointer {
+		if seen[t] {
+			return true
+		}
+		seen[t] = true
 		t = t.Elem()
 	}
 	if t == reflect.TypeFor[time.Time]() {
@@ -174,6 +193,18 @@ func customCodec(t reflect.Type) bool {
 
 func (c *catalog) structure(t reflect.Type, mode string) any {
 	fields := wireFields(t, strings.HasSuffix(mode, "/form"))
+	for _, source := range []string{"query", "header"} {
+		if strings.HasSuffix(mode, "/"+source) {
+			selected, err := input.Fields(t, source)
+			if err != nil {
+				c.diagnostic("INPUT_FIELDS_UNRESOLVED", t.String(), err.Error())
+			}
+			fields = nil
+			for _, field := range selected {
+				fields = append(fields, wireField{name: field.Name, index: field.Index, typeOf: field.Type})
+			}
+		}
+	}
 	constraints := map[string]validation.FieldSchema{}
 	if strings.HasPrefix(mode, "request/") && c.validator != nil {
 		if describer, ok := c.validator.(validation.SchemaDescriber); ok {

@@ -111,6 +111,17 @@ func TestOpenAPIPreservesDuplicateRouteRejection(t *testing.T) {
 	}
 }
 
+func TestOpenAPIPathAlsoDetectsParameterRouteOverlap(t *testing.T) {
+	app := setupApp()
+	app.Route("GET", "/:id", (*appCtrl).GetUser)
+	if err := app.Validate(boot.Options{HTTP: &boot.HTTPOptions{}}); err == nil || !strings.Contains(err.Error(), "OPENAPI_PATH_CONFLICT") {
+		t.Fatalf("경로 인자의 명세 리소스 가림을 거부해야 합니다: %v", err)
+	}
+	if err := app.Validate(boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Path: "/internal/openapi.json"}}}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestOpenAPIFromStandaloneExecutableWithoutSourcesOrCLI(t *testing.T) {
 	if testing.Short() {
 		t.Skip("독립 실행 파일 빌드")

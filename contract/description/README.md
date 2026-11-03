@@ -1,6 +1,6 @@
 # 런타임 OpenAPI
 
-HTTP 앱은 `Run`, `RunContext`, `Prepare`에서 기본적으로 `/openapi.json`을 제공합니다. 실제 등록한 라우트와 Go 타입으로 OpenAPI 3.1.2 JSON을 생성합니다. CLI, 소스 파일, 문서 주석과 swaggo가 필요하지 않습니다. 문서 생성과 요청 처리는 같은 기본 리졸버 목록, 반환 처리 목록과 경로 인자 배정 규칙을 사용합니다.
+이 개발 소스의 HTTP 앱은 `Run`, `RunContext`, `Prepare`에서 기본적으로 `/openapi.json`을 제공합니다. 실제 등록한 라우트와 Go 타입으로 OpenAPI 3.1.2 JSON을 생성합니다. CLI, 소스 파일, 문서 주석과 swaggo는 필요하지 않습니다. 문서 생성과 요청 처리는 같은 기본 리졸버 목록, 반환 처리 목록과 경로 인자 배정 규칙을 사용합니다. 정식 공개 여부는 릴리스와 사용하는 코어 버전으로 확인하세요.
 
 ## 기본 동작과 설정
 
@@ -25,13 +25,15 @@ options := boot.Options{
 | 옵션 | 기본값 | 동작 |
 | --- | --- | --- |
 | `Disabled` | `false` | `true`이면 명세 리소스를 제공하지 않음 |
-| `Path` | `/openapi.json` | GET·HEAD를 제공하는 정적 절대 경로 |
+| `Path` | `/openapi.json` | GET, HEAD를 제공하는 정적 절대 경로 |
 | `Title` | `Spine API` | OpenAPI `info.title` |
 | `Version` | `unversioned` | API 문서 버전. OpenAPI 규격 버전과 별개 |
 
-같은 경로의 애플리케이션 GET·HEAD 또는 WebSocket 등록과 충돌하면 사전 검사에서 `OPENAPI_PATH_CONFLICT`로 거부합니다. HTTP 플랫폼에 직접 등록하는 native 경로는 코어가 검사할 수 없으므로 다른 경로를 선택해야 합니다.
+명세 경로에 매칭되는 앱 GET, HEAD 또는 WebSocket 경로는 `OPENAPI_PATH_CONFLICT`로 거부합니다. `/:id`처럼 경로 인자가 겹치는 경우도 포함합니다. 플랫폼에 직접 등록한 native 경로는 코어가 검사할 수 없습니다.
 
 명세는 준비 전에 생성자나 외부 자원을 초기화하지 않고 생성한 뒤, 준비 단위로 고정합니다. 준비가 끝난 뒤 원본 앱의 등록이나 설명 결과를 수정해도 이미 실행 중인 명세는 바뀌지 않습니다.
+
+관리 실행은 실제로 바인딩한 포트의 명세 URL을 앱 로그에 출력합니다. `spine run`, `spine dev`에서도 이 로그를 확인할 수 있습니다.
 
 ## 문서 요청의 실행 정책
 
@@ -64,18 +66,74 @@ return err
 
 검증기의 숫자 `required`는 0, bool `required`는 false도 거부할 수 있습니다. 이런 제약은 OpenAPI의 `required` 배열 외에 값 제약으로도 표현해야 합니다. 포인터의 필수값은 null과 필드 누락을 구분해 설명합니다. HTTP 400에는 바인딩 오류의 `message`와 DTO 검증 오류의 선택적 `fields`를 기술합니다.
 
+## 쿼리와 헤더 DTO, 파일 업로드
+
+```go
+type SearchDTO struct {
+    Age int `query:"min_age" validate:"gte=18"`
+    Tags []string `query:"tag" validate:"omitempty,dive,required"`
+}
+type HeadersDTO struct {
+    ID string `header:"X-Request-ID" validate:"required"`
+}
+func (*UserController) Search(
+    query query.DTO[SearchDTO],
+    headers header.DTO[HeadersDTO],
+) httpx.Response[SearchResult] {
+    return httpx.Response[SearchResult]{Body: SearchResult{
+        Age: query.Value.Age, RequestID: headers.Value.ID,
+    }}
+}
+```
+
+이 예는 `pkg/query`, `pkg/header`, `pkg/httpx`를 import하고 앱에서 컨트롤러와 결과 타입을 정의합니다. `Value`로 바인딩한 DTO를 읽습니다. 포인터 형태인 `*query.DTO[T]`, `*header.DTO[T]`도 지원합니다. 검증 태그는 검증기를 등록했을 때만 적용합니다.
+
+T는 구조체여야 합니다. 해당 출처의 태그가 있는 exported 필드와 exported 익명 구조체의 필드를 선택합니다. 중복 이름, 잘못된 헤더 이름, 지원하지 않는 타입은 사전 검사에서 거부합니다. 스칼라, 포인터, 스칼라 slice, RFC3339의 time.Time, encoding.TextUnmarshaler를 지원합니다. 쿼리 slice는 반복 키로, 헤더 slice는 쉼표 목록으로 읽습니다. 헤더 이름은 대소문자를 구분하지 않습니다. 본문은 이 두 입력 타입의 값을 덮어쓰지 않습니다.
+
+사용자 TextUnmarshaler는 요청 중에만 호출하며 명세 생성에서는 실행하지 않습니다. 사용자 직렬화 형식은 진단으로 남깁니다. OpenAPI가 예약한 Accept, Content-Type, Authorization 헤더도 인자 목록 대신 진단으로 표시하며 실제 바인딩은 유지합니다. 검증 오류의 공개 필드 경로는 등록한 검증기의 이름 선택 정책을 따릅니다.
+
+파일은 form 태그와 표준 라이브러리의 `*mime/multipart.FileHeader`, `[]*mime/multipart.FileHeader`, `[]mime/multipart.FileHeader`로 필드 이름과 개수를 표현합니다. 파일 필드가 있는 DTO는 multipart/form-data로만 기술합니다. 현재 Echo 기본 바인더와 대조했으며, 다른 플랫폼은 자체 바인더의 지원 여부를 확인해야 합니다. 동적인 `multipart.UploadedFiles`는 필드 이름을 추측하지 않습니다.
+
+기존 일반 `*DTO`의 query 태그는 플랫폼 Bind에 위임하므로 부분 명세 진단을 유지합니다. 출처를 고정할 때는 위 입력 타입을 사용합니다.
+
+## 상태별 응답 선언
+
+```go
+app.Route("POST", "/users", (*UserController).Create,
+    route.Response[UserDTO](201), route.ErrorResponse(409),
+)
+app.Route("GET", "/avatar", (*UserController).Avatar,
+    route.ResponseAs[[]byte](200, "image/png"),
+)
+```
+
+이 예는 `pkg/route`를 import한 함수 내부 등록입니다. `app`, 컨트롤러와 DTO는 앱이 정의합니다. Response[T]는 문자열에 text/plain, 나머지에 application/json을 사용합니다. ResponseAs[T]는 Content-Type도 지정하며 ErrorResponse는 프레임워크의 JSON 오류 본문을 기술합니다. 상태는 200에서 599까지 허용하며 오류 선언은 400 이상이어야 합니다. 같은 상태와 미디어 타입의 중복, 잘못된 미디어 타입과 미디어 타입 매개변수는 거부합니다. 204와 304에는 본문을 기술하지 않습니다.
+
+이 옵션들은 문서용 선언이며 실제 응답을 변경하지 않습니다. 핸들러의 ResponseOptions.Status와 Content-Type을 함께 맞춰야 합니다. 문서는 `x-spine-evidence: declared`로 구분하고 동적인 응답의 default와 진단을 유지합니다.
+
+## CLI에서 같은 명세 내보내기
+
+연동 CLI 변경도 현재 개발 범위입니다. 설치한 CLI의 `spine schema --json`으로 지원 여부를 확인하세요.
+
+```sh
+spine contract export --format openapi --source runtime --output openapi.json
+spine contract export --format openapi --source static --output static-openapi.json
+```
+
+runtime은 import할 수 있는 composition 패키지의 BuildApplication() (spine.App, boot.Options, error)를 실행하고 공개 DescribeHTTP와 openapi.Generate를 호출합니다. 리스너나 앱 생성자는 시작하지 않습니다. 구성 함수 자체의 사용자 코드, Go 빌드, 모듈 해석과 캐시는 실행됩니다. 구성 로그는 JSON 출력과 분리하고 숫자 정밀도를 보존합니다. static은 기존 AST 내보내기이며 CLI 기본값입니다. runtime 실패를 static 성공으로 바꾸지 않습니다. 명세 리소스를 Disabled로 꺼도 런타임 내보내기는 사용할 수 있습니다.
+
 ## 현재 지원 범위
 
-- 등록된 메서드·경로·prefix와 경로 인자, `query.Pagination`의 기본값
-- JSON DTO, form 태그가 있는 DTO의 JSON·urlencoded·multipart 입력
+- 등록된 메서드, 경로, prefix와 경로 인자, `query.Pagination`의 기본값
+- JSON DTO, form 태그가 있는 DTO의 JSON, urlencoded, multipart 입력
 - `httpx.Response[T]`의 본문 타입, 문자열 응답, 바이너리와 redirect 구분
-- JSON 이름, 익명 임베딩의 우선순위·충돌, `omitempty`·`omitzero`, 포인터·slice·map의 null
-- `time.Time`, `json.RawMessage`, byte slice, 중첩·재귀·제네릭 타입
+- JSON 이름, 익명 임베딩의 우선순위, 충돌, `omitempty`, `omitzero`, 포인터, slice, map의 null
+- `time.Time`, `json.RawMessage`, byte slice, 중첩, 재귀, 제네릭 타입
 - 등록된 검증기가 설명하는 제약조건
 
 같은 메서드의 경로가 충돌하면 기존 앱 준비 단계처럼 거부합니다. 같은 URL 형태에서 메서드별 경로 인자 이름이 다르면 하나의 OpenAPI Path Item으로 묶습니다.
 
-명세에 표현되지 않은 동작은 `x-spine-diagnostics`로 구분합니다. 동적 query/header 키, adapter별 쿼리 DTO 바인딩, 업로드 필드 이름, 사용자 정의 JSON/text 직렬화와 동적 status·Content-Type은 완전히 추론하지 않습니다. `ResponseOptions.Status`나 서비스 내부 오류를 얻으려고 핸들러를 실행하지 않습니다. 응답 상태는 `default`로 남기며 본문은 선언된 반환형과 프레임워크 오류 형식을 함께 설명합니다.
+명세에 표현되지 않은 동작은 `x-spine-diagnostics`로 구분합니다. 동적 query/header 키, adapter별 쿼리 DTO 바인딩, 업로드 필드 이름, 사용자 정의 JSON/text 직렬화와 동적 status, Content-Type은 완전히 추론하지 않습니다. `ResponseOptions.Status`나 서비스 내부 오류를 얻으려고 핸들러를 실행하지 않습니다. 응답 상태는 `default`로 남기며 본문은 선언된 반환형과 프레임워크 오류 형식을 함께 설명합니다.
 
 HTTP 플랫폼에 직접 등록한 native 경로, WS 메시지와 event payload는 이번 OpenAPI 대상에 포함하지 않습니다. Swagger UI와 ReDoc은 이 JSON을 읽는 별도 표시 계층으로 추가할 수 있습니다.
 
@@ -85,6 +143,7 @@ HTTP 플랫폼에 직접 등록한 native 경로, WS 메시지와 event payload�
 go test ./...
 bash scripts/check-module-boundaries.sh
 go -C test test . -run '^TestOpenAPI' -count=1
+go -C test/openapi test -race ./... -count=1
 ```
 
-마지막 검사는 실제 HTTP 진입점과, Go 소스·CLI가 없는 디렉터리에서 실행 파일만 사용하는 경로를 검증합니다. 코어와 공개 계약은 표준 라이브러리만 사용합니다.
+test 모듈은 실제 HTTP 진입점과 소스, CLI가 없는 디렉터리에서 실행 파일만 사용하는 경로를 검증합니다. test/openapi는 Go 1.26 이상에서 공식 OpenAPI 구조 스키마, 독립 JSON Schema 검사와 실제 Echo 요청을 대조합니다. 35개 경계 입력의 일치는 해당 표본의 증거이며 모든 사용자 규칙의 완전한 변환을 뜻하지 않습니다. 코어와 공개 계약은 표준 라이브러리만 사용하며 외부 검증 의존성은 별도 테스트 모듈에 둡니다.
