@@ -1,13 +1,17 @@
 package bootstrap
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"reflect"
 	"strings"
 	"time"
 
-	"github.com/NARUBROWN/spine/adapter"
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
+	adapter "github.com/NARUBROWN/spine/contract/http"
+	validation "github.com/NARUBROWN/spine/contract/validator"
+	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
@@ -23,20 +27,29 @@ import (
 )
 
 type Config struct {
-	Address                string
-	Constructors           []any
-	Routes                 []spineRouter.RouteSpec
-	Interceptors           []core.Interceptor
-	ScopedInterceptors     []InterceptorBinding
-	CustomTransports       []core.CustomTransport
-	EnableGracefulShutdown bool
-	ShutdownTimeout        time.Duration
-	Kafka                  *boot.KafkaOptions
-	RabbitMQ               *boot.RabbitMqOptions
-	ConsumerRegistry       *consumer.Registry
-	HTTP                   *boot.HTTPOptions
-	HTTPAdapterFactory     adapter.Factory
-	WebSocketRegistry      *ws.Registry
+	Address                 string
+	Constructors            []any
+	Routes                  []spineRouter.RouteSpec
+	Interceptors            []core.Interceptor
+	ScopedInterceptors      []InterceptorBinding
+	CustomTransports        []core.CustomTransport
+	EnableGracefulShutdown  bool
+	ShutdownTimeout         time.Duration
+	EventAdapters           []EventAdapterBinding
+	ConsumerRegistry        *consumer.Registry
+	HTTP                    *boot.HTTPOptions
+	HTTPAdapterFactory      adapter.Factory
+	WebSocketAdapterFactory wsadapter.Factory
+	WebSocketRegistry       *ws.Registry
+	Validator               validation.Validator
+	ValidatorConfigured     bool
+}
+
+// EventAdapterBinding은 구현과 공통 실행 정책을 연결하는 준비 설정입니다.
+type EventAdapterBinding struct {
+	Name    string
+	Factory eventadapter.Factory
+	Options boot.EventOptions
 }
 
 // InterceptorBinding은 글로벌 인터셉터를 기본 제공 전송 방식과 연결합니다.
@@ -76,8 +89,12 @@ func requiresShutdownSignal(config Config) bool {
 	if config.ConsumerRegistry == nil || len(config.ConsumerRegistry.Registrations()) == 0 {
 		return false
 	}
-	return (config.Kafka != nil && config.Kafka.Read != nil) ||
-		(config.RabbitMQ != nil && config.RabbitMQ.Read != nil)
+	for _, binding := range config.EventAdapters {
+		if !isNilHTTPValue(binding.Factory) && binding.Factory.Capabilities().Consume {
+			return true
+		}
+	}
+	return false
 }
 
 // Validate는 네트워크에 접근하지 않고 사전 검증을 수행하며,
@@ -92,11 +109,21 @@ func Validate(config Config) error {
 			Hint:    "Use zero for the default or a positive duration.",
 		})
 	}
-	if config.Kafka != nil {
-		issues = append(issues, config.Kafka.ValidateIssues("Kafka")...)
-	}
-	if config.RabbitMQ != nil {
-		issues = append(issues, config.RabbitMQ.ValidateIssues("RabbitMQ")...)
+	names := make(map[string]bool)
+	var adapterErrors []error
+	for i, binding := range config.EventAdapters {
+		path := fmt.Sprintf("EventAdapters[%d]", i)
+		if strings.TrimSpace(binding.Name) == "" || names[binding.Name] {
+			issues = append(issues, boot.ConfigIssue{Path: path + ".Name", Code: "EVENT_ADAPTER_NAME_INVALID", Message: "Event adapter names must be non-empty and unique.", Hint: "Assign a distinct name to each platform."})
+		}
+		names[binding.Name] = true
+		issues = append(issues, binding.Options.ConsumerRetry.ValidateIssues(path+".ConsumerRetry")...)
+		if binding.Options.SettlementTimeout < 0 {
+			issues = append(issues, boot.ConfigIssue{Path: path + ".SettlementTimeout", Code: "EVENT_SETTLEMENT_TIMEOUT_INVALID", Message: "Settlement timeout cannot be negative.", Hint: "Use zero for the default or a positive duration."})
+		}
+		if err := eventadapter.ValidateFactory(binding.Factory, eventadapter.Requirements{}); err != nil {
+			adapterErrors = append(adapterErrors, fmt.Errorf("%s (%s): %w", path, binding.Name, err))
+		}
 	}
 
 	if config.HTTP == nil {
@@ -146,12 +173,23 @@ func Validate(config Config) error {
 	if err := boot.ValidationError(issues...); err != nil {
 		return err
 	}
-	if config.HTTP != nil {
-		return adapter.ValidateFactory(config.HTTPAdapterFactory, adapter.Requirements{
-			WebSocketUpgrade: config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0,
-		})
+	if config.ValidatorConfigured || config.Validator != nil {
+		if err := validation.CheckValidator(config.Validator); err != nil {
+			return err
+		}
 	}
-	return nil
+	if config.HTTP != nil {
+		hasWebSocketRoutes := config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0
+		if err := adapter.ValidateFactory(config.HTTPAdapterFactory, adapter.Requirements{WebSocketUpgrade: hasWebSocketRoutes}); err != nil {
+			adapterErrors = append(adapterErrors, err)
+		}
+		if hasWebSocketRoutes {
+			if err := wsadapter.ValidateFactory(config.WebSocketAdapterFactory); err != nil {
+				adapterErrors = append(adapterErrors, err)
+			}
+		}
+	}
+	return errors.Join(adapterErrors...)
 }
 
 func serverOptions(options boot.HTTPOptions) adapter.ServerOptions {
@@ -362,7 +400,7 @@ func waitConsumerError(errors <-chan error, done <-chan struct{}) error {
 }
 
 const (
-	spineVersion = "v0.6.0"
+	spineVersion = "v0.6.5"
 	spineBanner  = `
 ________       _____             
 __  ___/__________(_)___________ 
@@ -378,7 +416,7 @@ func printBanner() {
 	log.Printf("[Bootstrap] Spine version: %s", spineVersion)
 }
 
-func buildConsumerPipeline(container *container.Container, registry *consumer.Registry, dispatchHook *hook.EventDispatchHook) *pipeline.Pipeline {
+func buildConsumerPipeline(container *container.Container, registry *consumer.Registry, dispatchHook *hook.EventDispatchHook, validator validation.Validator) *pipeline.Pipeline {
 	consumerRouter := spineRouter.NewRouter()
 	for _, registration := range registry.Registrations() {
 		consumerRouter.Register("EVENT", registration.Topic, registration.Meta)
@@ -395,7 +433,7 @@ func buildConsumerPipeline(container *container.Container, registry *consumer.Re
 		&resolver.StdContextResolver{},
 		&eventResolver.EventNameResolver{},
 		&eventResolver.PayloadResolver{},
-		&eventResolver.DTOResolver{},
+		&eventResolver.DTOResolver{Validator: validator},
 	)
 
 	return consumerPipeline
@@ -406,6 +444,7 @@ func buildWSPipeline(
 	registry *ws.Registry,
 	dispatchHook *hook.EventDispatchHook,
 	interceptors []core.Interceptor,
+	validator validation.Validator,
 ) *pipeline.Pipeline {
 	wsRouter := spineRouter.NewRouter()
 	for _, reg := range registry.Registrations() {
@@ -426,7 +465,7 @@ func buildWSPipeline(
 		&resolver.StdContextResolver{},
 		&wsResolver.ConnectionIDResolver{},
 		&wsResolver.PayloadResolver{},
-		&wsResolver.DTOResolver{},
+		&wsResolver.DTOResolver{Validator: validator},
 	)
 
 	return wsPipeline

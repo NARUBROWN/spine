@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	adapter "github.com/NARUBROWN/spine/adapter"
+	adapter "github.com/NARUBROWN/spine/contract/http"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/pkg/boot"
 )

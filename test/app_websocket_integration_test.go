@@ -10,6 +10,7 @@ import (
 
 	"github.com/NARUBROWN/spine"
 	platform "github.com/NARUBROWN/spine-echo-platform"
+	gorillaplatform "github.com/NARUBROWN/spine-gorilla-platform"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	pkgws "github.com/NARUBROWN/spine/pkg/ws"
@@ -42,7 +43,7 @@ func (c *wsIntegrationController) Echo(ctx context.Context, connID pkgws.Connect
 }
 
 func setupWebSocketApp(options ...platform.EchoOption) spine.App {
-	app := platform.New(options...)
+	app := spine.New(platform.Option(options...), gorillaplatform.Option())
 	app.Constructor(func() *wsIntegrationController { return &wsIntegrationController{} })
 	app.Route("GET", "/hello", (*wsIntegrationController).Hello)
 	if err := app.WebSocket().Register("/ws/echo", (*wsIntegrationController).Echo); err != nil {
@@ -172,8 +173,8 @@ func TestAppIntegration_WebSocketMessageSizeLimit(t *testing.T) {
 		t.Fatalf("메시지 전송 실패: %v", err)
 	}
 
-	if _, _, err := conn.ReadMessage(); err == nil {
-		t.Fatal("메시지 크기 초과 시 연결이 종료되어야 합니다")
+	if _, _, err := conn.ReadMessage(); !websocket.IsCloseError(err, websocket.CloseMessageTooBig) {
+		t.Fatalf("메시지 크기 초과 시 1009 close 코드를 전달해야 합니다: %v", err)
 	}
 }
 

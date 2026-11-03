@@ -1,6 +1,7 @@
-# Spine v0.5 참고 애플리케이션
+# Spine 플랫폼 참고 애플리케이션
 
-`cmd/reference`는 기존 종합 demo의 기능과 v0.5의 안전한 기본 설정 계약을 보여 줍니다.
+`cmd/reference`는 기존 종합 demo의 기능과 외부 플랫폼의 안전한 기본 설정을 보여 줍니다.
+Kafka·RabbitMQ는 각각 `spine-kafka-platform`, `spine-rabbitmq-platform`의 factory를 만들고 `spine.WithEventAdapter`로 등록합니다. 연결 설정은 플랫폼이, 공통 소비 재연결은 코어가 소유합니다.
 CLI 계약과 최소 E2E 예제는 [cmd/demo](../demo/README.md)를 사용합니다.
 
 - `Run` 전에 네트워크 연결 없이 수행하는 `App.Validate` 사전 검증

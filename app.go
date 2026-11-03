@@ -3,8 +3,12 @@ package spine
 import (
 	"context"
 	"strings"
+	"time"
 
-	adapter "github.com/NARUBROWN/spine/adapter"
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
+	adapter "github.com/NARUBROWN/spine/contract/http"
+	validation "github.com/NARUBROWN/spine/contract/validator"
+	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/bootstrap"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
@@ -39,13 +43,17 @@ type App interface {
 }
 
 type app struct {
-	constructors       []any
-	routes             []router.RouteSpec
-	interceptors       []bootstrap.InterceptorBinding
-	customTransports   []core.CustomTransport
-	consumerRegistry   *consumer.Registry
-	websocketRegistry  *ws.Registry
-	httpAdapterFactory adapter.Factory
+	constructors            []any
+	routes                  []router.RouteSpec
+	interceptors            []bootstrap.InterceptorBinding
+	customTransports        []core.CustomTransport
+	consumerRegistry        *consumer.Registry
+	websocketRegistry       *ws.Registry
+	httpAdapterFactory      adapter.Factory
+	websocketAdapterFactory wsadapter.Factory
+	eventAdapters           []bootstrap.EventAdapterBinding
+	validator               validation.Validator
+	validatorConfigured     bool
 }
 
 // Option은 애플리케이션의 통합 구현을 명시적으로 선택하는 생성 옵션입니다.
@@ -54,6 +62,48 @@ type Option func(*app)
 // WithHTTPAdapter는 HTTP 실행에 사용할 독립 계약의 factory를 지정합니다.
 func WithHTTPAdapter(factory adapter.Factory) Option {
 	return func(a *app) { a.httpAdapterFactory = factory }
+}
+
+// WithWebSocketAdapter는 HTTP 플랫폼과 독립적으로 WebSocket 구현을 선택합니다.
+// WS 경로를 등록한 앱은 factory를 명시해야 합니다.
+func WithWebSocketAdapter(factory wsadapter.Factory) Option {
+	return func(a *app) { a.websocketAdapterFactory = factory }
+}
+
+// EventAdapterOption은 브로커 공통 실행 정책을 설정합니다.
+type EventAdapterOption func(*boot.EventOptions)
+
+// WithEventAdapter는 이름으로 식별하는 이벤트 플랫폼 factory를 등록합니다.
+// 읽기와 발행 역할은 factory의 불변 Capabilities 선언을 따릅니다.
+func WithEventAdapter(name string, factory eventadapter.Factory, options ...EventAdapterOption) Option {
+	settings := boot.EventOptions{}
+	for _, option := range options {
+		if option != nil {
+			option(&settings)
+		}
+	}
+	return func(a *app) {
+		a.eventAdapters = append(a.eventAdapters, bootstrap.EventAdapterBinding{Name: name, Factory: factory, Options: settings})
+	}
+}
+
+// WithEventConsumerRetry는 Reader 생성과 재연결의 공통 backoff를 설정합니다.
+func WithEventConsumerRetry(policy boot.ConsumerRetryOptions) EventAdapterOption {
+	return func(options *boot.EventOptions) { options.ConsumerRetry = policy }
+}
+
+// WithEventSettlementTimeout은 Ack/Nack 완료를 기다릴 최대 시간을 설정합니다.
+func WithEventSettlementTimeout(timeout time.Duration) EventAdapterOption {
+	return func(options *boot.EventOptions) { options.SettlementTimeout = timeout }
+}
+
+// WithValidator는 모든 기본 DTO 리졸버가 사용할 검증기를 등록합니다.
+// 생략하면 검증하지 않으며, 명시적으로 등록한 nil은 앱 사전 검사에서 거부합니다.
+func WithValidator(validator validation.Validator) Option {
+	return func(a *app) {
+		a.validator = validator
+		a.validatorConfigured = true
+	}
 }
 
 // New는 특정 HTTP 서버 구현을 선택하지 않는 Spine 커널 앱을 생성합니다.
@@ -109,19 +159,21 @@ func (a *app) RegisterTransport(t core.CustomTransport) {
 
 func (a *app) bootstrapConfig(opts boot.Options) bootstrap.Config {
 	return bootstrap.Config{
-		Address:                opts.Address,
-		Constructors:           a.constructors,
-		Routes:                 a.routes,
-		ScopedInterceptors:     a.interceptors,
-		CustomTransports:       a.customTransports,
-		EnableGracefulShutdown: opts.EnableGracefulShutdown,
-		ShutdownTimeout:        opts.ShutdownTimeout,
-		Kafka:                  opts.Kafka,
-		RabbitMQ:               opts.RabbitMQ,
-		ConsumerRegistry:       a.consumerRegistry,
-		WebSocketRegistry:      a.websocketRegistry,
-		HTTP:                   opts.HTTP,
-		HTTPAdapterFactory:     a.httpAdapterFactory,
+		Address:                 opts.Address,
+		Constructors:            a.constructors,
+		Routes:                  a.routes,
+		ScopedInterceptors:      a.interceptors,
+		CustomTransports:        a.customTransports,
+		EnableGracefulShutdown:  opts.EnableGracefulShutdown,
+		ShutdownTimeout:         opts.ShutdownTimeout,
+		EventAdapters:           a.eventAdapters,
+		ConsumerRegistry:        a.consumerRegistry,
+		WebSocketRegistry:       a.websocketRegistry,
+		HTTP:                    opts.HTTP,
+		HTTPAdapterFactory:      a.httpAdapterFactory,
+		WebSocketAdapterFactory: a.websocketAdapterFactory,
+		Validator:               a.validator,
+		ValidatorConfigured:     a.validatorConfigured,
 	}
 }
 

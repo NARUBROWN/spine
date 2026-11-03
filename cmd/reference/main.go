@@ -7,18 +7,37 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/NARUBROWN/spine"
 	platform "github.com/NARUBROWN/spine-echo-platform"
+	gorillaplatform "github.com/NARUBROWN/spine-gorilla-platform"
+	kafkaplatform "github.com/NARUBROWN/spine-kafka-platform"
+	rabbitmqplatform "github.com/NARUBROWN/spine-rabbitmq-platform"
 	"github.com/NARUBROWN/spine/interceptor/cors"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/route"
 )
 
 func main() {
-	app := platform.New()
 	config, err := buildDemoConfig()
 	if err != nil {
 		log.Fatalf("[Demo] invalid environment configuration: %v", err)
 	}
+	appOptions := []spine.Option{platform.Option(), gorillaplatform.Option()}
+	if config.Kafka != nil {
+		factory, err := kafkaplatform.NewFactory(*config.Kafka)
+		if err != nil {
+			log.Fatal(err)
+		}
+		appOptions = append(appOptions, spine.WithEventAdapter("kafka", factory))
+	}
+	if config.RabbitMQ != nil {
+		factory, err := rabbitmqplatform.NewFactory(*config.RabbitMQ)
+		if err != nil {
+			log.Fatal(err)
+		}
+		appOptions = append(appOptions, spine.WithEventAdapter("rabbitmq", factory))
+	}
+	app := spine.New(appOptions...)
 
 	// 생성자 등록
 	app.Constructor(
@@ -112,6 +131,8 @@ func main() {
 type demoConfig struct {
 	Options       boot.Options
 	AllowedOrigin string
+	Kafka         *kafkaplatform.Config
+	RabbitMQ      *rabbitmqplatform.Config
 }
 
 func buildDemoConfig() (demoConfig, error) {
@@ -145,64 +166,32 @@ func buildDemoConfig() (demoConfig, error) {
 		// 정상 종료 제한 시간 설정 예시: ShutdownTimeout: 20 * time.Second,
 	}
 
-	options.Kafka = demoKafkaOptions(allowInsecure)
-	options.RabbitMQ = demoRabbitMqOptions(allowInsecure)
-
-	return demoConfig{Options: options, AllowedOrigin: allowedOrigin}, nil
+	kafka := demoKafkaOptions(allowInsecure)
+	rabbit := demoRabbitMqOptions(allowInsecure)
+	return demoConfig{Options: options, AllowedOrigin: allowedOrigin, Kafka: kafka, RabbitMQ: rabbit}, nil
 }
 
-func demoKafkaOptions(allowInsecure bool) *boot.KafkaOptions {
+func demoKafkaOptions(allowInsecure bool) *kafkaplatform.Config {
 	brokers := splitListEnv("SPINE_DEMO_KAFKA_BROKERS")
 	if len(brokers) == 0 {
 		return nil
 	}
-	return &boot.KafkaOptions{
-		Brokers:                brokers,
-		AllowInsecureTransport: allowInsecure,
-		Read: &boot.KafkaReadOptions{
-			GroupID: envOrDefault("SPINE_DEMO_KAFKA_GROUP_ID", "spine-demo-consumer"),
-		},
-		Write: &boot.KafkaWriteOptions{
-			TopicPrefix: strings.TrimSpace(os.Getenv("SPINE_DEMO_KAFKA_TOPIC_PREFIX")),
-		},
-
-		// 선택 사항: TLS가 nil이면 Spine의 TLS 1.2 이상 기본 설정을 사용합니다.
-		// 사용자 정의 CA, mTLS, SASL 또는 연결 방식을 쓸 때만 TLS, Dialer, Transport를 설정하세요.
-		// 선택 사항: ConsumerRetry를 지정하지 않으면 100ms~5s 지수 백오프,
-		// 배수 2, 지터 20%, 무제한 재시도를 사용합니다.
-		// 최대 재시도 횟수 설정 예시: ConsumerRetry: boot.ConsumerRetryOptions{MaxAttempts: 20},
-	}
+	return &kafkaplatform.Config{Brokers: brokers, Consume: true, Publish: true,
+		GroupID:     envOrDefault("SPINE_DEMO_KAFKA_GROUP_ID", "spine-demo-consumer"),
+		TopicPrefix: strings.TrimSpace(os.Getenv("SPINE_DEMO_KAFKA_TOPIC_PREFIX")), AllowInsecureTransport: allowInsecure}
 }
 
-func demoRabbitMqOptions(allowInsecure bool) *boot.RabbitMqOptions {
-	rabbitURL := strings.TrimSpace(os.Getenv("SPINE_DEMO_RABBITMQ_URL"))
-	if rabbitURL == "" {
+func demoRabbitMqOptions(allowInsecure bool) *rabbitmqplatform.Config {
+	address := strings.TrimSpace(os.Getenv("SPINE_DEMO_RABBITMQ_URL"))
+	if address == "" {
 		return nil
 	}
-	exchange := envOrDefault("SPINE_DEMO_RABBITMQ_EXCHANGE", "stock-exchange")
-	read := &boot.RabbitMqReadOptions{
-		Exchange: exchange,
-
-		// 선택 사항: FailurePolicy를 지정하지 않으면 재큐잉하지 않고 안전하게 거부합니다.
-		// 실패 메시지 재큐잉 설정 예시: FailurePolicy: boot.RabbitMqFailureRequeue,
-	}
+	config := &rabbitmqplatform.Config{URL: address, Exchange: envOrDefault("SPINE_DEMO_RABBITMQ_EXCHANGE", "stock-exchange"), Consume: true, Publish: true,
+		AllowInsecureTransport: allowInsecure, FailurePolicy: rabbitmqplatform.FailureReject}
 	if dlx := strings.TrimSpace(os.Getenv("SPINE_DEMO_RABBITMQ_DLX")); dlx != "" {
-		read.DeadLetter = &boot.RabbitMqDeadLetterOptions{
-			Exchange:   dlx,
-			RoutingKey: strings.TrimSpace(os.Getenv("SPINE_DEMO_RABBITMQ_DLX_ROUTING_KEY")),
-		}
+		config.DeadLetter = &rabbitmqplatform.DeadLetter{Exchange: dlx, RoutingKey: strings.TrimSpace(os.Getenv("SPINE_DEMO_RABBITMQ_DLX_ROUTING_KEY"))}
 	}
-	return &boot.RabbitMqOptions{
-		URL:                    rabbitURL,
-		AllowInsecureTransport: allowInsecure,
-		Read:                   read,
-		Write:                  &boot.RabbitMqWriteOptions{Exchange: exchange},
-
-		// 선택 사항: ConsumerRetry를 지정하지 않으면 Kafka와 동일한 제한 범위의 재시도 기본값을 사용합니다.
-		// 최대 재시도 횟수 설정 예시: ConsumerRetry: boot.ConsumerRetryOptions{MaxAttempts: 20},
-		// 선택 사항: FailurePolicy를 지정하지 않으면 RabbitMqFailureReject를 사용합니다.
-		// 반복 전달이 의도된 경우에만 RabbitMqFailureRequeue를 설정하세요.
-	}
+	return config
 }
 
 func optionalBoolEnv(name string) (bool, error) {

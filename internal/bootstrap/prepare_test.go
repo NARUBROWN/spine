@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NARUBROWN/spine/adapter"
+	adapter "github.com/NARUBROWN/spine/contract/http"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/pkg/boot"
 )
@@ -198,7 +198,7 @@ func TestPreparedCloseDeadlineAndConcurrentWaitsPreserveActiveRequest(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared.publishers = append(prepared.publishers, publisherCloser{name: "test", close: func() error { publishers.Add(1); return nil }})
+	prepared.publishers = append(prepared.publishers, publisherCloser{name: "test", close: func(context.Context) error { publishers.Add(1); return nil }})
 	t.Cleanup(func() {
 		releaseOnce.Do(func() { close(release) })
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -262,8 +262,8 @@ func TestPreparedCloseContinuesAfterCleanupPanicAndPreservesErrors(t *testing.T)
 		t.Fatal(err)
 	}
 	prepared.publishers = []publisherCloser{
-		{name: "first", close: func() error { order = append(order, "publisher-first"); return nil }},
-		{name: "second", close: func() error { order = append(order, "publisher-second"); return want }},
+		{name: "first", close: func(context.Context) error { order = append(order, "publisher-first"); return nil }},
+		{name: "second", close: func(context.Context) error { order = append(order, "publisher-second"); return want }},
 	}
 	err = prepared.Close(context.Background())
 	if !errors.Is(err, want) || !strings.Contains(err.Error(), "stop panic") || strings.Join(order, ",") != "second,first,publisher-second,publisher-first" {

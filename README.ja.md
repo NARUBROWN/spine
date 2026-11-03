@@ -2,7 +2,13 @@
   <a href="README.md">한국어</a> | <a href="README.en.md">English</a> | 日本語 | <a href="README.zh-Hans.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a>
 </p>
 
+> **v0.6.5** は HTTP・WebSocket・event・validator の公開契約と独立した実装選択を統合します。コアは標準ライブラリのみを使用します。[v0.6.5 移行ガイド](docs/migration/v0.6.5.md)を参照してください。
+
 > Spine `v0.6.0` 以降、新しいプロジェクトは [Spine CLI の `new`](https://github.com/NARUBROWN/spine-cli#빠른-시작) で作成します。CLI が Echo プラットフォームと依存関係を設定します。既存アプリは[移行ガイド](docs/migration/http-adapter-modules.md)を参照してください。
+>
+> 開発ソースのイベント連携は `spine.WithEventAdapter` と Kafka/RabbitMQ プラットフォームを使用します。旧 boot 設定からの移行は [イベントプラットフォーム移行ガイド](docs/migration/event-platforms.en.md)を参照してください。
+
+> 開発ソースの WebSocket は `contract/websocket` と [Gorilla プラットフォーム](https://github.com/NARUBROWN/spine-gorilla-platform)に分離しました。`spine.New(echoPlatform.Option(), gorillaPlatform.Option())` で両方を選択します。[WS 移行ガイド](docs/migration/websocket-platforms.en.md)を参照してください。
 
 # 🦴 Spine
 <p align="center">

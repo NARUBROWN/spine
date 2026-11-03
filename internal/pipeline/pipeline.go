@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -447,6 +448,7 @@ func (p *Pipeline) handleExecutionError(ctx core.ExecutionContext, err error) er
 	status := http.StatusInternalServerError
 	message := "Internal server error"
 	var responseErr error
+	var body json.RawMessage
 	var httpErr *httperr.HTTPError
 	if errors.As(err, &httpErr) {
 		if httpErr.Status < 400 || httpErr.Status > 599 {
@@ -455,6 +457,9 @@ func (p *Pipeline) handleExecutionError(ctx core.ExecutionContext, err error) er
 			status = httpErr.Status
 			message = httpErr.Message
 		}
+	} else if validationBody, ok := handler.ValidationErrorJSON(err); ok {
+		status = http.StatusBadRequest
+		body = validationBody
 	} else {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
@@ -463,7 +468,10 @@ func (p *Pipeline) handleExecutionError(ctx core.ExecutionContext, err error) er
 		}
 	}
 
-	if writeErr := rw.WriteJSON(status, handler.ErrorJSON(message)); writeErr != nil {
+	if body == nil {
+		body = handler.ErrorJSON(message)
+	}
+	if writeErr := rw.WriteJSON(status, body); writeErr != nil {
 		responseErr = errors.Join(responseErr, fmt.Errorf("write execution error response: %w", writeErr))
 	}
 	return responseErr

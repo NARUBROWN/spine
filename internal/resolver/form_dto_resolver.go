@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"reflect"
 
+	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/core"
 )
 
-type FormDTOResolver struct{}
+type FormDTOResolver struct {
+	Validator validation.Validator
+}
 
 func (r *FormDTOResolver) Supports(pm ParameterMeta) bool {
 	if pm.Type.Kind() != reflect.Ptr {
@@ -41,5 +44,8 @@ func (r *FormDTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta Param
 		return nil, err
 	}
 
+	if err := ValidateDTO(ctx.Context(), r.Validator, dto); err != nil {
+		return nil, err
+	}
 	return dto, nil
 }

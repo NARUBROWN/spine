@@ -2,16 +2,30 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# 공개 계약 패키지는 표준 라이브러리만 사용하고 커널은 구체 HTTP 구현을 참조하지 않습니다.
-external=$(go list -deps -test -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./adapter)
-unexpected=$(printf '%s\n' "$external" | awk 'NF && index($0, "github.com/NARUBROWN/spine/adapter") != 1')
-if [ -n "$unexpected" ]; then
-  printf 'Contract has external dependencies:\n%s\n' "$unexpected" >&2
-  exit 1
-fi
+# 각 공개 계약 패키지는 표준 라이브러리만 사용하며 서로와 커널 구현에도 의존하지 않습니다.
+for contract in contract/http contract/event contract/validator contract/websocket adapter/http adapter/event adapter wsadapter; do
+  contract_path="github.com/NARUBROWN/spine/$contract"
+  external=$(go list -deps -test -f '{{if not .Standard}}{{.ImportPath}}{{end}}' "./$contract")
+  unexpected=$(printf '%s\n' "$external" | awk -v contract_path="$contract_path" -v legacy="$contract" '
+    (legacy == "adapter" || legacy == "adapter/http") && $0 == "github.com/NARUBROWN/spine/contract/http" { next }
+    legacy == "adapter" && $0 == "github.com/NARUBROWN/spine/adapter/http" { next }
+    legacy == "adapter/event" && $0 == "github.com/NARUBROWN/spine/contract/event" { next }
+    legacy == "wsadapter" && $0 == "github.com/NARUBROWN/spine/contract/websocket" { next }
+    NF && $0 != contract_path && $0 != contract_path ".test" &&
+      $0 != contract_path " [" contract_path ".test]" &&
+      $0 != contract_path "_test [" contract_path ".test]"
+  ')
+  if [ -n "$unexpected" ]; then
+    printf '%s contract has external dependencies:\n%s\n' "$contract" "$unexpected" >&2
+    exit 1
+  fi
+done
 
-kernel=$(go list -deps -test ./...)
-if printf '%s\n' "$kernel" | grep -E '^(github.com/labstack/|github.com/NARUBROWN/spine-echo-platform)' ; then
-  printf 'Kernel depends on an HTTP implementation.\n' >&2
+# 커널과 계약은 외부 모듈 없이 표준 라이브러리만 사용합니다.
+kernel=$(go list -deps -test -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./...)
+unexpected=$(printf '%s\n' "$kernel" | awk 'NF && $0 !~ /^github.com\/NARUBROWN\/spine([\/._ ]|$)/')
+if [ -n "$unexpected" ]; then
+  printf '%s\n' "$unexpected" >&2
+  printf 'Kernel depends on an external module.\n' >&2
   exit 1
 fi

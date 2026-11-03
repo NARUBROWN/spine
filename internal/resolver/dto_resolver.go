@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"reflect"
 
+	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/core"
 )
 
-type DTOResolver struct{}
+type DTOResolver struct {
+	Validator validation.Validator
+}
 
 func (r *DTOResolver) Supports(pm ParameterMeta) bool {
 	// 실행 컨텍스트 제외
@@ -53,5 +56,8 @@ func (r *DTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta Parameter
 	}
 
 	// 포인터로 전달
+	if err := ValidateDTO(ctx.Context(), r.Validator, valuePtr.Interface()); err != nil {
+		return nil, err
+	}
 	return valuePtr.Interface(), nil
 }

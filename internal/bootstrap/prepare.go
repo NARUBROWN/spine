@@ -9,13 +9,13 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/NARUBROWN/spine/adapter"
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
+	adapter "github.com/NARUBROWN/spine/contract/http"
+	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	"github.com/NARUBROWN/spine/internal/event/hook"
-	"github.com/NARUBROWN/spine/internal/event/infra/kafka"
-	"github.com/NARUBROWN/spine/internal/event/infra/rabbitmq"
 	eventPublish "github.com/NARUBROWN/spine/internal/event/publish"
 	"github.com/NARUBROWN/spine/internal/handler"
 	"github.com/NARUBROWN/spine/internal/invoker"
@@ -24,7 +24,6 @@ import (
 	spineRouter "github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/transport"
 	"github.com/NARUBROWN/spine/internal/ws"
-	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 // Prepare는 실행 작업이나 리스너를 시작하지 않고 앱 자원을 준비합니다.
@@ -65,49 +64,27 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 		}
 	}
 
-	// 이벤트 발행기 모음(Kafka/RabbitMQ 등의 설정에 따라 채워짐)
 	var eventPublishers []eventPublish.EventPublisher
-
-	// Kafka 쓰기 설정이 있으면 퍼블리셔 구성
-	if config.Kafka != nil && config.Kafka.Write != nil {
-		log.Println("[Bootstrap] Configuring Kafka publisher")
-
-		kafkaPublisher, err := kafka.NewKafkaPublisher(&boot.KafkaOptions{
-			Brokers:                config.Kafka.Brokers,
-			TLS:                    config.Kafka.TLS,
-			Dialer:                 config.Kafka.Dialer,
-			Transport:              config.Kafka.Transport,
-			AllowInsecureTransport: config.Kafka.AllowInsecureTransport,
-			ConsumerRetry:          config.Kafka.ConsumerRetry,
-			Write: &boot.KafkaWriteOptions{
-				TopicPrefix: config.Kafka.Write.TopicPrefix,
-			},
-		})
-		if err != nil {
-			return nil, fmt.Errorf("[Bootstrap] failed to initialize Kafka publisher: %w", err)
+	for _, binding := range config.EventAdapters {
+		if !binding.Factory.Capabilities().Publish {
+			continue
 		}
-		eventPublishers = append(eventPublishers, kafkaPublisher)
-		application.publishers = append(application.publishers, publisherCloser{name: "Kafka", close: kafkaPublisher.Close})
-	}
-
-	// RabbitMQ 쓰기 설정이 있으면 퍼블리셔 구성
-	if config.RabbitMQ != nil && config.RabbitMQ.Write != nil {
-		log.Println("[Bootstrap] Configuring RabbitMQ publisher")
-
-		rabbitmqWriter, err := rabbitmq.NewRabbitMqWriter(boot.RabbitMqOptions{
-			URL:                    config.RabbitMQ.URL,
-			AllowInsecureTransport: config.RabbitMQ.AllowInsecureTransport,
-			ConsumerRetry:          config.RabbitMQ.ConsumerRetry,
-			PublisherRetry:         config.RabbitMQ.PublisherRetry,
-			Write: &boot.RabbitMqWriteOptions{
-				Exchange: config.RabbitMQ.Write.Exchange,
-			},
-		})
-		if err != nil {
-			return nil, fmt.Errorf("[Bootstrap] failed to initialize RabbitMQ writer: %w", err)
+		publisher, err := binding.Factory.NewPublisher(ctx)
+		var managed *eventPublish.PlatformPublisher
+		if !isNilHTTPValue(publisher) {
+			managed = eventPublish.NewPlatformPublisher(binding.Factory, publisher)
+			application.publishers = append(application.publishers, publisherCloser{name: binding.Name, close: managed.Close})
 		}
-		eventPublishers = append(eventPublishers, rabbitmqWriter)
-		application.publishers = append(application.publishers, publisherCloser{name: "RabbitMQ", close: rabbitmqWriter.Close})
+		if err != nil {
+			if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
+				return nil, ctx.Err()
+			}
+			return nil, fmt.Errorf("[Bootstrap] %s publisher initialization failed: %w", binding.Name, err)
+		}
+		if isNilHTTPValue(publisher) {
+			return nil, fmt.Errorf("%w: %s returned a nil publisher", eventadapter.ErrInvalidAdapter, binding.Name)
+		}
+		eventPublishers = append(eventPublishers, managed)
 	}
 
 	// 실행 후 훅에서 사용할 공통 디스패처(퍼블리셔가 없으면 nil 유지)
@@ -261,10 +238,10 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 			&resolver.QueryValuesResolver{},
 
 			// 요청 본문 리졸버
-			&resolver.DTOResolver{},
+			&resolver.DTOResolver{Validator: config.Validator},
 
 			// 폼 DTO(멀티파트/폼)
-			&resolver.FormDTOResolver{},
+			&resolver.FormDTOResolver{Validator: config.Validator},
 
 			// 멀티파트 파일
 			&resolver.UploadedFilesResolver{},
@@ -302,10 +279,18 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 			log.Printf("[Bootstrap] Configuring WebSocket routes (%d routes)", len(wsRegistrations))
 
 			// WS 전용 인자 리졸버 등록
-			wsPipeline := buildWSPipeline(container, config.WebSocketRegistry, dispatchHook, resolvedWSInterceptors)
+			wsPipeline := buildWSPipeline(container, config.WebSocketRegistry, dispatchHook, resolvedWSInterceptors, config.Validator)
 
+			wsAdapter, err := config.WebSocketAdapterFactory.New(ws.AdapterOptions(config.HTTP.WebSocket))
+			if err != nil {
+				return nil, fmt.Errorf("[Bootstrap] failed to configure WebSocket adapter: %w", err)
+			}
+			if err := wsadapter.ValidateAdapter(wsAdapter); err != nil {
+				return nil, err
+			}
 			application.wsRuntime = ws.NewRuntime(
 				wsPipeline,
+				wsAdapter,
 				config.HTTP.WebSocket,
 				webSocketHandshakeInterceptors(resolvedWSInterceptors)...,
 			)
@@ -363,79 +348,21 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 		}
 	}
 
-	// Kafka 읽기 설정이 있으면 읽기 작업을 부트 절차에 포함
-	if config.Kafka != nil && config.Kafka.Read != nil && config.ConsumerRegistry != nil && len(config.ConsumerRegistry.Registrations()) > 0 {
-		log.Println("[Bootstrap] Configuring Kafka consumer")
-
-		factory := kafka.NewRunnerFactory(boot.KafkaOptions{
-			Brokers:                config.Kafka.Brokers,
-			TLS:                    config.Kafka.TLS,
-			Dialer:                 config.Kafka.Dialer,
-			Transport:              config.Kafka.Transport,
-			AllowInsecureTransport: config.Kafka.AllowInsecureTransport,
-			ConsumerRetry:          config.Kafka.ConsumerRetry,
-			Read: &boot.KafkaReadOptions{
-				GroupID: config.Kafka.Read.GroupID,
-			},
-		})
-
-		consumerPipeline := buildConsumerPipeline(container, config.ConsumerRegistry, dispatchHook)
-
-		runtime := consumer.NewRuntime(
-			config.ConsumerRegistry,
-			factory,
-			consumerPipeline,
-		)
-
-		application.consumers = append(application.consumers, consumerRuntime{name: "Kafka", runtime: runtime})
-
-		if err := runtime.ValidateWithRetry(ctx); err != nil {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
+	if config.ConsumerRegistry != nil && len(config.ConsumerRegistry.Registrations()) > 0 {
+		for _, binding := range config.EventAdapters {
+			if !binding.Factory.Capabilities().Consume {
+				continue
 			}
-			return nil, fmt.Errorf("[Bootstrap] Kafka consumer validation failed: %w", err)
-		}
-	}
-
-	// RabbitMQ 읽기 설정이 존재하면, 컨슈머 구성
-	if config.RabbitMQ != nil && config.RabbitMQ.Read != nil && config.ConsumerRegistry != nil && len(config.ConsumerRegistry.Registrations()) > 0 {
-		log.Println("[Bootstrap] Configuring RabbitMQ consumer")
-		failurePolicy := config.RabbitMQ.Read.EffectiveFailurePolicy()
-		log.Printf("[Bootstrap] RabbitMQ consumer failure policy: %s", failurePolicy)
-		if config.RabbitMQ.Read.DeadLetter != nil {
-			log.Printf("[Bootstrap] RabbitMQ dead-letter exchange: %s", config.RabbitMQ.Read.DeadLetter.Exchange)
-		} else if failurePolicy == boot.RabbitMqFailureReject {
-			log.Println("[Bootstrap] Warning: rejected RabbitMQ messages may be discarded because no dead-letter exchange is configured")
-		}
-
-		factory := rabbitmq.NewRunnerFactory(boot.RabbitMqOptions{
-			URL:                    config.RabbitMQ.URL,
-			AllowInsecureTransport: config.RabbitMQ.AllowInsecureTransport,
-			ConsumerRetry:          config.RabbitMQ.ConsumerRetry,
-			Read: &boot.RabbitMqReadOptions{
-				Exchange:       config.RabbitMQ.Read.Exchange,
-				PrefetchCount:  config.RabbitMQ.Read.PrefetchCount,
-				FailurePolicy:  config.RabbitMQ.Read.FailurePolicy,
-				DeadLetter:     config.RabbitMQ.Read.DeadLetter,
-				RequeueOnError: config.RabbitMQ.Read.RequeueOnError,
-			},
-		})
-
-		consumerPipeline := buildConsumerPipeline(container, config.ConsumerRegistry, dispatchHook)
-
-		runtime := consumer.NewRuntime(
-			config.ConsumerRegistry,
-			factory,
-			consumerPipeline,
-		)
-
-		application.consumers = append(application.consumers, consumerRuntime{name: "RabbitMQ", runtime: runtime})
-
-		if err := runtime.ValidateWithRetry(ctx); err != nil {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
+			runtime := consumer.NewRuntime(config.ConsumerRegistry,
+				consumer.NewPlatformFactory(binding.Factory, binding.Options),
+				buildConsumerPipeline(container, config.ConsumerRegistry, dispatchHook, config.Validator))
+			application.consumers = append(application.consumers, consumerRuntime{name: binding.Name, runtime: runtime})
+			if err := runtime.PrepareWithRetry(ctx); err != nil {
+				if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
+					return nil, ctx.Err()
+				}
+				return nil, fmt.Errorf("[Bootstrap] %s consumer validation failed: %w", binding.Name, err)
 			}
-			return nil, fmt.Errorf("[Bootstrap] RabbitMQ consumer validation failed: %w", err)
 		}
 	}
 

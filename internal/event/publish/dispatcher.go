@@ -2,12 +2,14 @@ package publish
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"reflect"
 	"sync"
 
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
 	"github.com/NARUBROWN/spine/pkg/event/publish"
 )
 
@@ -50,6 +52,12 @@ func (d *DefaultEventDispatcher) Dispatch(ctx context.Context, events []publish.
 
 	for _, e := range events {
 		eventName := e.Name()
+		payload, err := json.Marshal(e)
+		if err != nil {
+			dispatchErrs = append(dispatchErrs, fmt.Errorf("serialize event (%s): %w", eventName, err))
+			continue
+		}
+		message := eventadapter.Message{EventName: eventName, OccurredAt: e.OccurredAt(), Payload: payload}
 		var wg sync.WaitGroup
 		publisherErrs := make([]error, len(d.publishers))
 		for i, p := range d.publishers {
@@ -62,7 +70,7 @@ func (d *DefaultEventDispatcher) Dispatch(ctx context.Context, events []publish.
 						log.Printf("[EventDispatcher] Publisher panic recovered (%s, publisher=%d): %v", eventName, index, recovered)
 					}
 				}()
-				if err := p.Publish(ctx, e); err != nil {
+				if err := p.Publish(ctx, message); err != nil {
 					log.Printf("[EventDispatcher] Failed to publish event (%s): %v", eventName, err)
 					publisherErrs[index] = fmt.Errorf("failed to publish event (%s): %w", eventName, err)
 				}

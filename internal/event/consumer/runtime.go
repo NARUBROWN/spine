@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 )
 
@@ -16,11 +17,19 @@ type runnerFactory interface {
 	Build(reg Registration) (Reader, error)
 }
 
+type contextRunnerFactory interface {
+	BuildContext(context.Context, Registration) (Reader, error)
+}
+
 type Runtime struct {
 	registry    *Registry
 	factory     runnerFactory
 	pipeline    *pipeline.Pipeline
 	lifecycleMu sync.Mutex
+	prepared    map[string]Reader
+	cleanupMu   sync.Mutex
+	cleanupOnce sync.Once
+	cleanupErr  error
 	workers     sync.WaitGroup
 	started     bool
 	stopped     bool
@@ -132,8 +141,16 @@ func (r *Runtime) Start(ctx context.Context) {
 	r.workers.Add(len(registrations))
 	for _, registration := range registrations {
 		log.Printf("[Event Consumer] Starting consumer for topic '%s'", registration.Topic)
-		go func(reg Registration) {
+		initial := r.prepared[registration.Topic]
+		delete(r.prepared, registration.Topic)
+		go func(reg Registration, initial Reader) {
 			defer r.workers.Done()
+			reader := initial
+			defer func() {
+				if reader != nil {
+					_ = r.closeReader(reader)
+				}
+			}()
 			select {
 			case <-ctx.Done():
 				return
@@ -141,15 +158,14 @@ func (r *Runtime) Start(ctx context.Context) {
 			}
 
 			retryPolicy := r.retryPolicy()
-			reader, ok := r.acquireReader(ctx, reg, retryPolicy, nil, true, "initialization")
-			if !ok {
-				return
-			}
-			defer func() {
-				if reader != nil {
-					_ = reader.Close()
+			if reader == nil {
+				var ok bool
+				reader, ok = r.acquireReader(ctx, reg, retryPolicy, nil, true, "initialization")
+				if !ok {
+					return
 				}
-			}()
+			}
+			var ok bool
 
 			for {
 				select {
@@ -162,7 +178,7 @@ func (r *Runtime) Start(ctx context.Context) {
 							return
 						}
 						log.Printf("[Event Consumer] Transport read failed (topic=%s): %v", reg.Topic, err)
-						_ = reader.Close()
+						_ = r.closeReader(reader)
 						reader = nil
 						reader, ok = r.acquireReader(ctx, reg, retryPolicy, err, false, "reconnect")
 						if !ok {
@@ -190,7 +206,7 @@ func (r *Runtime) Start(ctx context.Context) {
 									nackErr,
 								)
 							}
-							_ = reader.Close()
+							_ = r.closeReader(reader)
 							reader = nil
 							// 실패한 전달을 다시 읽기 위해 reader를 폐기한 경우에도 즉시
 							// 재생성하지 않습니다. 영구적으로 실패하는 메시지가 consumer group
@@ -211,7 +227,7 @@ func (r *Runtime) Start(ctx context.Context) {
 							reg.Topic,
 							ackErr,
 						)
-						_ = reader.Close()
+						_ = r.closeReader(reader)
 						reader = nil
 						// ACK 실패도 같은 offset을 다시 읽게 되므로 즉시 재가입하지 않고
 						// 동일한 backoff 경계를 적용합니다.
@@ -222,7 +238,7 @@ func (r *Runtime) Start(ctx context.Context) {
 					}
 				}
 			}
-		}(registration)
+		}(registration, initial)
 	}
 	r.lifecycleMu.Unlock()
 	go func() {
@@ -245,9 +261,14 @@ func (r *Runtime) acquireReader(
 	default:
 	}
 	if buildImmediately {
-		reader, err := r.buildReader(reg)
+		reader, err := r.buildReader(ctx, reg)
 		if err == nil {
 			return reader, true
+		}
+		if permanentFactoryError(err) {
+			r.forwardError(err)
+			r.initiateStop()
+			return nil, false
 		}
 		lastErr = err
 		log.Printf("[Event Consumer] Transport %s failed (topic=%s): %v", stage, reg.Topic, err)
@@ -264,23 +285,34 @@ func (r *Runtime) acquireReader(
 		if !r.waitRetry(ctx, r.jitterDelay(delay, policy.Jitter)) {
 			return nil, false
 		}
-		reader, err := r.buildReader(reg)
+		reader, err := r.buildReader(ctx, reg)
 		delay = nextRetryDelay(delay, policy)
 		if err == nil {
 			return reader, true
+		}
+		if permanentFactoryError(err) {
+			r.forwardError(err)
+			r.initiateStop()
+			return nil, false
 		}
 		lastErr = err
 		log.Printf("[Event Consumer] Transport %s failed (topic=%s attempt=%d): %v", stage, reg.Topic, attempts, err)
 	}
 }
 
-func (r *Runtime) buildReader(reg Registration) (Reader, error) {
-	reader, err := r.factory.Build(reg)
+func (r *Runtime) buildReader(ctx context.Context, reg Registration) (Reader, error) {
+	var reader Reader
+	var err error
+	if factory, ok := r.factory.(contextRunnerFactory); ok {
+		reader, err = factory.BuildContext(ctx, reg)
+	} else {
+		reader, err = r.factory.Build(reg)
+	}
 	if err == nil && reader == nil {
 		err = errors.New("consumer factory returned a nil reader")
 	}
 	if err != nil && reader != nil {
-		_ = reader.Close()
+		_ = r.closeReader(reader)
 	}
 	return reader, err
 }
@@ -336,6 +368,28 @@ func (r *Runtime) Validate() error {
 // an ingress listener is exposed. Unlike Validate, transient build failures use
 // the configured ConsumerRetry policy and can be interrupted by ctx.
 func (r *Runtime) ValidateWithRetry(ctx context.Context) error {
+	return r.validateWithRetry(ctx, false)
+}
+
+// PrepareWithRetry는 준비한 Reader를 보관하며 Start가 같은 연결을 이어받습니다.
+func (r *Runtime) PrepareWithRetry(ctx context.Context) error { return r.validateWithRetry(ctx, true) }
+
+func (r *Runtime) validateWithRetry(ctx context.Context, retain bool) (resultErr error) {
+	if retain {
+		r.lifecycleMu.Lock()
+		defer r.lifecycleMu.Unlock()
+		if r.started || r.stopped || len(r.prepared) > 0 {
+			return eventadapter.ErrInvalidState
+		}
+	}
+	acquired := make(map[string]Reader)
+	defer func() {
+		if resultErr != nil {
+			for _, reader := range acquired {
+				resultErr = errors.Join(resultErr, r.closeReader(reader))
+			}
+		}
+	}()
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -344,6 +398,9 @@ func (r *Runtime) ValidateWithRetry(ctx context.Context) error {
 		reader, err := r.buildValidationReader(ctx, reg)
 		delay := policy.InitialDelay
 		for retries := 1; err != nil; retries++ {
+			if permanentFactoryError(err) {
+				return err
+			}
 			if policy.MaxAttempts > 0 && retries > policy.MaxAttempts {
 				return fmt.Errorf("Consumer initialization retries exhausted (%s retries=%d): %w", reg.Topic, policy.MaxAttempts, err)
 			}
@@ -356,9 +413,14 @@ func (r *Runtime) ValidateWithRetry(ctx context.Context) error {
 			reader, err = r.buildValidationReader(ctx, reg)
 			delay = nextRetryDelay(delay, policy)
 		}
-		if err := reader.Close(); err != nil {
+		if retain {
+			acquired[reg.Topic] = reader
+		} else if err := r.closeReader(reader); err != nil {
 			return fmt.Errorf("Consumer shutdown failed (%s): %w", reg.Topic, err)
 		}
+	}
+	if retain {
+		r.prepared = acquired
 	}
 	return nil
 }
@@ -369,13 +431,47 @@ func (r *Runtime) buildValidationReader(ctx context.Context, reg Registration) (
 			return nil, err
 		}
 	}
-	return r.buildReader(reg)
+	return r.buildReader(ctx, reg)
 }
 
-func (r *Runtime) Stop() {
+func (r *Runtime) Stop() error {
 	r.initiateStop()
 	r.workers.Wait()
-	r.finish()
+	r.cleanupOnce.Do(func() {
+		r.lifecycleMu.Lock()
+		prepared := r.prepared
+		r.prepared = nil
+		r.lifecycleMu.Unlock()
+		for _, reader := range prepared {
+			_ = r.closeReader(reader)
+		}
+		r.finish()
+	})
+	r.cleanupMu.Lock()
+	defer r.cleanupMu.Unlock()
+	return r.cleanupErr
+}
+
+func permanentFactoryError(err error) bool {
+	return errors.Is(err, eventadapter.ErrInvalidAdapter) || errors.Is(err, eventadapter.ErrUnsupportedCapability) || errors.Is(err, eventadapter.ErrInvalidState)
+}
+
+func (r *Runtime) closeReader(reader Reader) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			if cause, ok := recovered.(error); ok {
+				err = fmt.Errorf("consumer reader cleanup panicked: %w", cause)
+			} else {
+				err = fmt.Errorf("consumer reader cleanup panicked: %v", recovered)
+			}
+		}
+		if err != nil {
+			r.cleanupMu.Lock()
+			r.cleanupErr = errors.Join(r.cleanupErr, err)
+			r.cleanupMu.Unlock()
+		}
+	}()
+	return reader.Close()
 }
 
 func (r *Runtime) initiateStop() {

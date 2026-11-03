@@ -2,7 +2,13 @@
   <a href="README.md">한국어</a> | <a href="README.en.md">English</a> | <a href="README.ja.md">日本語</a> | 简体中文 | <a href="README.zh-Hant.md">繁體中文</a>
 </p>
 
+> **v0.6.5** 统一 HTTP、WebSocket、event、validator 的公开契约与独立实现选择。核心仅使用标准库。请参阅 [v0.6.5 迁移指南](docs/migration/v0.6.5.md)。
+
 > 从 Spine `v0.6.0` 开始，使用 [Spine CLI 的 `new`](https://github.com/NARUBROWN/spine-cli#빠른-시작) 创建新项目。CLI 会配置 Echo 平台和依赖。现有应用请参阅[迁移指南](docs/migration/http-adapter-modules.md)。
+>
+> 开发源码通过 `spine.WithEventAdapter` 接入 Kafka/RabbitMQ 平台。旧 broker boot 配置请按[事件平台迁移指南](docs/migration/event-platforms.en.md)迁移。
+
+> 开发源码通过 `contract/websocket` 和 [Gorilla 平台](https://github.com/NARUBROWN/spine-gorilla-platform)分离 WebSocket。使用 `spine.New(echoPlatform.Option(), gorillaPlatform.Option())` 选择两种实现。请参阅 [WS 迁移指南](docs/migration/websocket-platforms.en.md)。
 
 # 🦴 Spine
 <p align="center">

@@ -1,6 +1,6 @@
 package core
 
-import adapter "github.com/NARUBROWN/spine/adapter"
+import adapter "github.com/NARUBROWN/spine/contract/http"
 
 // ResponseWriter는 전송 구현(Echo, net/http 등)에 의존하지 않는
 // Spine의 응답 출력 계약이다.

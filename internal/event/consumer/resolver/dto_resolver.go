@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"reflect"
 
+	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/resolver"
 )
 
-type DTOResolver struct{}
+type DTOResolver struct {
+	Validator validation.Validator
+}
 
 func (r *DTOResolver) Supports(meta resolver.ParameterMeta) bool {
 	return meta.Type.Kind() == reflect.Struct
@@ -33,5 +36,9 @@ func (r *DTOResolver) Resolve(ctx core.ExecutionContext, meta resolver.Parameter
 		return nil, fmt.Errorf("DTO deserialization failed: %w", err)
 	}
 
-	return dtoPtr.Elem().Interface(), nil
+	dto := dtoPtr.Elem().Interface()
+	if err := resolver.ValidateDTO(ctx.Context(), r.Validator, dto); err != nil {
+		return nil, err
+	}
+	return dto, nil
 }

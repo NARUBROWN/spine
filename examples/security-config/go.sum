@@ -1,7 +1,9 @@
+github.com/NARUBROWN/spine-kafka-platform v0.0.0-20261102223502-7b4626c6f222 h1:G4H+V2vBUZU0BPuySjpcgUxj6eFyY6lFgPhJcWZUfPI=
+github.com/NARUBROWN/spine-kafka-platform v0.0.0-20261102223502-7b4626c6f222/go.mod h1:QUDgjIv9i9kYs1yaRZBIW8buCKibea0AQsltWYGLH/o=
+github.com/NARUBROWN/spine-rabbitmq-platform v0.0.0-20261102223515-967e684aff1c h1:W71H5PYGD/y8ScW/5nMIFLKDLMPnF//qkWyAMNk7Rek=
+github.com/NARUBROWN/spine-rabbitmq-platform v0.0.0-20261102223515-967e684aff1c/go.mod h1:Bxt3rhbu2cpHpctuQ6ux/yCfTLKDL3W1wjJ+LlrlZl8=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
-github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/klauspost/compress v1.15.9 h1:wKRjX6JRtDdrE9qwa4b/Cip7ACOshUI4smpCQanqjSY=
 github.com/klauspost/compress v1.15.9/go.mod h1:PhcZ0MbTNciWF3rruxRgKxI5NkcHHrHUDtV4Yw2GlzU=
 github.com/labstack/echo/v5 v5.4.4 h1:Nag9Mee0M9sOcKjProYuDNiw60QisysgfbIgz5US5Cw=
