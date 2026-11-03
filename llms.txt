@@ -7,6 +7,7 @@
 This guide describes Spine v0.6.0 and Echo platform v0.1.0. From v0.6.0, the official way to create a new
 project is Spine CLI `new`; the CLI configures the platform and dependencies. The public HTTP contract lives
 in the Spine module, and the Echo integration is a separate platform module.
+The HTTP examples retain that released baseline. Event App integration below describes the development source and its breaking broker-option removal; it is not retroactive to Spine v0.6.0.
 Local fixtures use replace directives to exercise the current checkouts. Go 1.27.3 is recommended; the compatibility baseline is 1.25.5.
 External demo snapshots below retain their original released APIs and pins.
 
@@ -59,11 +60,12 @@ ASGI informs the boundary and lifetime design. This does not provide Python ASGI
 
 ## Event adapter contract
 
-`github.com/NARUBROWN/spine/adapter/event` (package eventadapter) defines the initial `spine.event-adapter/v1` contract using only
-the standard library. It is versioned with Spine. This checkout adds declarations and factory validation;
-App, bootstrap and the built-in Kafka/RabbitMQ implementations are not wired to it yet. Existing applications
-continue to configure boot.Options.Kafka and boot.Options.RabbitMQ. Do not infer an App registration API or
-changed dispatch, retry or acknowledgment behavior from the new package.
+`github.com/NARUBROWN/spine/adapter/event` (package eventadapter) defines `spine.event-adapter/v1` using only
+the standard library. Register a named factory with `spine.WithEventAdapter(name, factory)` alongside the HTTP
+platform option. Consume/Publish roles come from the factory's immutable capabilities. App.Validate checks
+names, capabilities and common policies offline. Prepare constructs publishers and retains ready readers;
+Run starts those same readers. The core no longer imports Kafka/RabbitMQ clients or implementations.
+`boot.Options.Kafka`, `boot.Options.RabbitMQ` and broker-specific boot types have been removed.
 
 The contract exposes Message (serialized bytes and metadata), Subscription, Delivery, Reader, Publisher and
 Factory. ValidateFactory checks typed nil, the exact version and Consume/Publish roles without creating
@@ -75,8 +77,9 @@ different handler. A Reader has one unsettled delivery at a time. The kernel cal
 execution and post-processing, or Nack after failure. Settlement errors require closing the Reader before
 reconnecting, including ErrReaderInvalidated for Kafka-style failed-offset protection. Close is idempotent
 and its context bounds waiting only. Publishing is synchronous and concurrency-safe; input bytes are read-only.
-These are requirements for future implementations, not evidence of broker delivery, atomicity or exactly-once.
+Local fake-platform tests cover lifecycle and execution boundaries; separate real-broker App E2E tests cover delivery. Neither implies DB/broker atomicity or exactly-once.
 See adapter/event/README.md for payload lifetimes, cancellation, shutdown and error semantics.
+The current CLI does not reconcile event factory selection/capabilities or broker readiness. Its static consumer registrations and partial registry probe do not replace the real-broker App E2E tests.
 
 The `adapter/http` and `adapter/event` packages classify public contracts by transport. Concrete integrations
 use `spine-XXX-platform` module names: spine-echo-platform, spine-kafka-platform and spine-rabbitmq-platform.
@@ -237,7 +240,7 @@ Use this map instead of searching the entire repository blindly:
 
 - `app.go`: public `spine.App` assembly API.
 - `application.go`: optional preparation API and listener-free Handler/Close ownership.
-- `pkg/boot`: HTTP, WebSocket, Kafka, RabbitMQ, lifecycle, and validation options.
+- `pkg/boot`: HTTP, WebSocket, common event retry/settlement, lifecycle, and validation options.
 - `pkg/path`, `pkg/query`, `pkg/header`, `pkg/multipart`: supported HTTP handler inputs.
 - `pkg/httpx`, `pkg/httperr`: supported HTTP outputs and expected HTTP errors.
 - `pkg/ws`: WebSocket connection identity and sending.
@@ -656,43 +659,37 @@ publish.Event(ctx, OrderCreated{
 })
 ```
 
-`publish.Event` adds the event to the current execution context. Spine dispatches queued events only after the handler succeeds and, for HTTP, after response preparation succeeds. The function returns no error. If no writer is configured, the handler can still succeed while nothing is delivered externally, so every publishing process must enable `Kafka.Write` or `RabbitMQ.Write` deliberately.
+`publish.Event` adds the event to the current execution context. Spine dispatches queued events only after the handler succeeds and, for HTTP, after response preparation succeeds. The function returns no error. If no writer is configured, the handler can still succeed while nothing is delivered externally, so every publishing process must register an event platform factory with Publish enabled deliberately. The core serializes each queued domain event once before fanout. A failed publisher instance is retired after its active calls finish and recreated on the next publication; failed messages are not immediately resent.
 
 Use a consumer signature such as `func (c *OrderConsumer) OnCreated(ctx context.Context, eventName string, event OrderCreated) error`. Register `NewOrderConsumer` with `app.Constructor`, then check the error from `app.Consumers().Register("order.created", (*OrderConsumer).OnCreated)`. Consumer inputs are `context.Context`, event name `string`, raw `[]byte`, and a non-pointer struct decoded from JSON. A topic can have only one registered handler; make it idempotent by stable event ID.
 
 ### Kafka configuration
 
-Producer and consumer in one process:
+Producer and consumer in one process (development source API):
 
 ```go
-Kafka: &boot.KafkaOptions{
-	Brokers: []string{"kafka.example.com:9093"},
-	Read: &boot.KafkaReadOptions{
-		GroupID: "order-service",
-	},
-	Write: &boot.KafkaWriteOptions{
-		TopicPrefix: "prod.",
-	},
-}
+factory, err := kafkaplatform.NewFactory(kafkaplatform.Config{
+    Brokers: []string{"kafka.example.com:9093"},
+    Consume: true, Publish: true, GroupID: "order-service", TopicPrefix: "prod.",
+})
+if err != nil { return err }
+app := spine.New(echoplatform.Option(), spine.WithEventAdapter("kafka", factory,
+    spine.WithEventConsumerRetry(boot.ConsumerRetryOptions{MaxAttempts: 20}),
+    spine.WithEventSettlementTimeout(5*time.Second),
+))
 ```
 
-Spine creates TLS 1.2+ transport by default. `TLS` is shared, `Dialer` configures consumer/read transport, and `Transport` configures publisher/write transport. A process that both reads and writes must secure both directions when using custom SASL/TLS. Use this only for an isolated plaintext development broker:
+Import the two platform modules with aliases kafkaplatform and echoplatform. TLS defaults and native
+configuration belong to the Kafka platform. TopicPrefix maps both publishing and subscription names;
+register the logical name `order.created`, rather than manually adding the prefix.
 
-```go
-AllowInsecureTransport: true
-```
-
-`KafkaWriteOptions.TopicPrefix` is simple string concatenation and adds no separator. If a producer uses `demo.`, register the consumer topic as `demo.order.created` yourself.
-
-Kafka behavior:
-
-- Framework-managed writes require acknowledgements from all in-sync replicas.
-- Consumption is at least once; use a stable event ID and durable deduplication.
-- A handler error causes NACK/reconstruction behavior and can redeliver the event.
-- `ConsumerRetry` controls transport/reader reconstruction, not an application handler retry budget.
-- A permanently failing poison record can block the partition. Spine does not automatically skip it or choose a retry topic/DLQ.
-- A consumer-only process may leave `HTTP` nil and still handles `SIGINT`/`SIGTERM`.
-- Shutdown waits for active handlers, ACK/NACK work, and readers to drain.
+The core keeps the shared consumer execution engine, request EventBus, dispatch and reconnect backoff.
+ACK follows handler and post-hook success; failure NACKs. Kafka-style ErrReaderInvalidated closes and
+recreates the reader before any higher offset can be read. Settlement uses a bounded context independent
+of run cancellation (default 5s), and shutdown waits for readers before publishers. ConsumerRetry controls
+reader creation/reconnection, not a handler retry budget. MaxAttempts zero remains unlimited. Invalid
+factory results fail immediately. HTTP-less consumer workers handle SIGINT/SIGTERM. Registered consumers
+remain dormant unless a registered event factory enables Consume.
 
 ### Transactional outbox boundary
 
@@ -709,18 +706,18 @@ The MSA demo's `scenarios/outbox` illustrates the boundary with a JSON-file stor
 
 ## RabbitMQ variant
 
-The same `publish.Event` and `Consumers().Register` APIs use RabbitMQ when `boot.Options.RabbitMQ` configures `RabbitMqReadOptions` and/or `RabbitMqWriteOptions` with a named exchange.
-
-- `amqps://` is required by default; `amqp://` needs local-only `AllowInsecureTransport: true`.
-- Default prefetch is 1.
-- Default handler failure policy rejects without requeue.
-- Provision the dead-letter exchange before referencing it.
-- Publisher confirms and retries are still at least once; consumers must remain idempotent.
-- If Kafka and RabbitMQ writers are both enabled, a queued event is dispatched to both.
+The same publish.Event and Consumers().Register APIs use a factory from spine-rabbitmq-platform,
+registered with spine.WithEventAdapter("rabbitmq", factory). Config selects AMQPS, exchange, prefetch,
+failure policy and dead-letter topology. FailureReject is the default; provision DLX bindings explicitly.
+The platform uses mandatory routing and publisher confirms. The core retires failed publisher instances
+and lazily recreates them on later calls; it does not automatically resend the failed event. If multiple
+factories enable Publish, each queued event fans out to all. All Consume factories use the same registered
+logical subscriptions. See docs/migration/event-platforms.md and event-platforms.en.md for the breaking
+boot-option removal and executable examples.
 
 ## Runtime and security defaults
 
-Zero values select bounded defaults for HTTP timeouts, header size, request body size, WebSocket size/timeouts/capacity, and shutdown timeout. Broker retry delays are bounded by default, but Kafka/RabbitMQ consumer `MaxAttempts: 0` means unlimited transport retries; RabbitMQ publisher zero values use a bounded three-attempt default.
+Zero values select bounded defaults for HTTP timeouts, header size, request body size, WebSocket size/timeouts/capacity, and shutdown timeout. Event reader retry delays are bounded by default, but consumer `MaxAttempts: 0` means unlimited transport retries. Publisher failure is returned for the current message; a later call creates a replacement publisher.
 
 Important exceptions and rules:
 
