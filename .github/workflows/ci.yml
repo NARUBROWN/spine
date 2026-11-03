@@ -211,7 +211,7 @@ jobs:
         run: go -C cmd/demo mod download all
 
       - name: Install pinned Spine CLI
-        run: go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.0
+        run: go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.2-0.20261103042116-77419ec0a2d2
 
       - name: Verify demo CLI contract
         run: |
