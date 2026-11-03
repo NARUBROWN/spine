@@ -23,25 +23,20 @@ jobs:
         with:
           script: |
             const { evaluate } = require('./scripts/release/branch_flow.cjs');
-            let pr;
-            for (let attempt = 0; attempt < 5; attempt++) {
-              ({ data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: context.issue.number }));
-              if (pr.merge_commit_sha || pr.mergeable === false) break;
-              await new Promise(resolve => setTimeout(resolve, 1000));
-            }
+            const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: context.issue.number });
             const result = evaluate({
               head: pr.head.ref,
               base: pr.base.ref,
               sameRepository: pr.head.repo?.full_name === pr.base.repo.full_name,
             });
             const target_url = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            for (const sha of new Set([pr.head.sha, pr.merge_commit_sha].filter(Boolean))) {
-              await github.rest.repos.createCommitStatus({
-                ...context.repo, sha, context: result.context,
-                state: result.allowed ? 'success' : 'failure',
-                description: result.description.slice(0, 140), target_url,
-              });
-            }
+            // Actions의 PR check run과 같은 head SHA에 기록합니다.
+            // 임시 merge SHA에 상태를 쓰면 GitHub가 그 SHA에서 모든 필수 검사를 찾습니다.
+            await github.rest.repos.createCommitStatus({
+              ...context.repo, sha: pr.head.sha, context: result.context,
+              state: result.allowed ? 'success' : 'failure',
+              description: result.description.slice(0, 140), target_url,
+            });
             if (!result.allowed) {
               await github.rest.pulls.update({ ...context.repo, pull_number: pr.number, state: 'closed' });
               core.setFailed(result.description);
