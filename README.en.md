@@ -3,6 +3,8 @@
 </p>
 
 > From Spine `v0.6.0`, start new projects with [Spine CLI `new`](https://github.com/NARUBROWN/spine-cli#빠른-시작). The CLI configures the Echo platform and dependencies. For existing apps, see the [migration guide](docs/migration/http-adapter-modules.md).
+>
+> The development source uses `spine.WithEventAdapter` with Kafka/RabbitMQ platforms. Replace the old broker boot options using the [event platform migration guide](docs/migration/event-platforms.en.md).
 
 # 🦴 Spine
 <p align="center">

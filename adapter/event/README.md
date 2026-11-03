@@ -2,7 +2,9 @@
 
 `github.com/NARUBROWN/spine/adapter/event`는 브로커 구현자가 사용할 공개 전송 계약입니다. `Reader`로 메시지를 받아 커널에 전달하고, `Publisher`로 직렬화된 이벤트를 발행합니다. 계약 버전은 `spine.event-adapter/v1`이며 Spine 모듈과 함께 관리합니다.
 
-현재 단계에서는 계약과 선언 검증만 제공합니다. `App`, 부트스트랩과 기존 Kafka·RabbitMQ 구현은 아직 이 계약에 연결되지 않았습니다. 기존 앱은 `boot.Options.Kafka`와 `boot.Options.RabbitMQ`를 계속 사용합니다. 이 패키지를 추가해도 런타임의 발행 시점, 재시도나 ACK/NACK 동작은 바뀌지 않습니다.
+App에는 `spine.WithEventAdapter("kafka", factory)`로 연결합니다. factory의 `Consume`·`Publish` 선언으로 역할을 선택하며 여러 플랫폼을 등록할 수 있습니다. `App.Validate`는 선언과 공통 정책만 검사하고, `Prepare`는 publisher와 구독별 reader를 준비합니다. `Run`은 그 실행에서 준비한 reader를 재사용해 소비를 시작합니다.
+
+기존 `boot.Options.Kafka`·`RabbitMQ`와 전용 옵션은 제거했습니다. 연결·인증·토폴로지는 각 플랫폼의 Config로 옮깁니다. 전환 예시는 [이벤트 플랫폼 마이그레이션](../../docs/migration/event-platforms.md)을 참고하세요.
 
 ## 책임과 의존성
 

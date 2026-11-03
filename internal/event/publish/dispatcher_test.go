@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	eventadapter "github.com/NARUBROWN/spine/adapter/event"
 	pkgevent "github.com/NARUBROWN/spine/pkg/event/publish"
 )
 
@@ -25,16 +26,16 @@ type testPublisher struct {
 	err    error
 }
 
-func (p *testPublisher) Publish(ctx context.Context, event pkgevent.DomainEvent) error {
+func (p *testPublisher) Publish(ctx context.Context, event eventadapter.Message) error {
 	p.called.Add(1)
 	return p.err
 }
 
 type funcPublisher struct {
-	publish func(context.Context, pkgevent.DomainEvent) error
+	publish func(context.Context, eventadapter.Message) error
 }
 
-func (p *funcPublisher) Publish(ctx context.Context, event pkgevent.DomainEvent) error {
+func (p *funcPublisher) Publish(ctx context.Context, event eventadapter.Message) error {
 	return p.publish(ctx, event)
 }
 
@@ -89,9 +90,9 @@ func TestDefaultEventDispatcher_ProcessesEventsSequentiallyAndPublishersInParall
 	var secondPublisherCalls atomic.Int32
 
 	newPublisher := func(calls *atomic.Int32) EventPublisher {
-		return &funcPublisher{publish: func(ctx context.Context, event pkgevent.DomainEvent) error {
+		return &funcPublisher{publish: func(ctx context.Context, event eventadapter.Message) error {
 			calls.Add(1)
-			switch event.Name() {
+			switch event.EventName {
 			case "first":
 				if firstStarts.Add(1) == 2 {
 					close(firstEventPublishersStarted)
@@ -162,11 +163,11 @@ func TestDefaultEventDispatcher_PassesCancellationAndJoinsPublisherErrors(t *tes
 	var secondPublisherSawCanceledContext atomic.Bool
 
 	dispatcher, err := NewDefaultEventDispatcher(
-		&funcPublisher{publish: func(ctx context.Context, event pkgevent.DomainEvent) error {
+		&funcPublisher{publish: func(ctx context.Context, event eventadapter.Message) error {
 			firstCalls.Add(1)
 			return ctx.Err()
 		}},
-		&funcPublisher{publish: func(ctx context.Context, event pkgevent.DomainEvent) error {
+		&funcPublisher{publish: func(ctx context.Context, event eventadapter.Message) error {
 			secondCalls.Add(1)
 			secondPublisherSawCanceledContext.Store(ctx.Err() != nil)
 			return sentinel
@@ -196,10 +197,10 @@ func TestDefaultEventDispatcher_PassesCancellationAndJoinsPublisherErrors(t *tes
 func TestDefaultEventDispatcher_RecoversPublisherPanicsAndReturnsInRegistrationOrder(t *testing.T) {
 	firstPanic := errors.New("first panic")
 	dispatcher, err := NewDefaultEventDispatcher(
-		&funcPublisher{publish: func(context.Context, pkgevent.DomainEvent) error {
+		&funcPublisher{publish: func(context.Context, eventadapter.Message) error {
 			panic(firstPanic)
 		}},
-		&funcPublisher{publish: func(context.Context, pkgevent.DomainEvent) error {
+		&funcPublisher{publish: func(context.Context, eventadapter.Message) error {
 			panic("second panic")
 		}},
 		&testPublisher{},
@@ -228,10 +229,10 @@ func TestDefaultEventDispatcher_RecoversPublisherPanicsAndReturnsInRegistrationO
 func TestDefaultEventDispatcher_ContinuesOtherPublishersAfterPanic(t *testing.T) {
 	var healthyCalls atomic.Int32
 	dispatcher, err := NewDefaultEventDispatcher(
-		&funcPublisher{publish: func(context.Context, pkgevent.DomainEvent) error {
+		&funcPublisher{publish: func(context.Context, eventadapter.Message) error {
 			panic("boom")
 		}},
-		&funcPublisher{publish: func(context.Context, pkgevent.DomainEvent) error {
+		&funcPublisher{publish: func(context.Context, eventadapter.Message) error {
 			healthyCalls.Add(1)
 			return nil
 		}},

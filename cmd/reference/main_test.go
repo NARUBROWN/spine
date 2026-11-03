@@ -3,7 +3,8 @@ package main
 import (
 	"testing"
 
-	"github.com/NARUBROWN/spine/pkg/boot"
+	kafkaplatform "github.com/NARUBROWN/spine-kafka-platform"
+	rabbitmqplatform "github.com/NARUBROWN/spine-rabbitmq-platform"
 )
 
 func TestBuildDemoConfig_DefaultsToHTTPAndWebSocketOnly(t *testing.T) {
@@ -12,7 +13,7 @@ func TestBuildDemoConfig_DefaultsToHTTPAndWebSocketOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.Options.Kafka != nil || config.Options.RabbitMQ != nil {
+	if config.Kafka != nil || config.RabbitMQ != nil {
 		t.Fatal("brokers must remain disabled until explicitly configured")
 	}
 	if config.AllowedOrigin != "http://localhost:5173" {
@@ -34,13 +35,13 @@ func TestBuildDemoConfig_ReliesOnSecureKafkaDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.Options.Kafka == nil || config.Options.Kafka.TLS != nil {
+	if config.Kafka == nil || config.Kafka.TLS != nil {
 		t.Fatal("the reference app must leave default TLS policy to Spine")
 	}
-	if config.Options.Kafka.AllowInsecureTransport {
+	if config.Kafka.AllowInsecureTransport {
 		t.Fatal("insecure Kafka must require an explicit opt-in")
 	}
-	if err := config.Options.Kafka.Validate(); err != nil {
+	if _, err := kafkaplatform.NewFactory(*config.Kafka); err != nil {
 		t.Fatalf("secure Kafka demo configuration must pass preflight: %v", err)
 	}
 }
@@ -55,20 +56,20 @@ func TestBuildDemoConfig_RequiresExplicitLocalBrokerOptIn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.Options.Kafka.TLS != nil || !config.Options.Kafka.AllowInsecureTransport {
-		t.Fatalf("unexpected local Kafka configuration: %+v", config.Options.Kafka)
+	if config.Kafka.TLS != nil || !config.Kafka.AllowInsecureTransport {
+		t.Fatalf("unexpected local Kafka configuration: %+v", config.Kafka)
 	}
-	if config.Options.RabbitMQ == nil || !config.Options.RabbitMQ.AllowInsecureTransport {
-		t.Fatalf("unexpected local RabbitMQ configuration: %+v", config.Options.RabbitMQ)
+	if config.RabbitMQ == nil || !config.RabbitMQ.AllowInsecureTransport {
+		t.Fatalf("unexpected local RabbitMQ configuration: %+v", config.RabbitMQ)
 	}
-	read := config.Options.RabbitMQ.Read
-	if read.EffectiveFailurePolicy() != boot.RabbitMqFailureReject || read.DeadLetter == nil || read.DeadLetter.Exchange != "events.dlx" {
+	read := config.RabbitMQ
+	if read.FailurePolicy != rabbitmqplatform.FailureReject || read.DeadLetter == nil || read.DeadLetter.Exchange != "events.dlx" {
 		t.Fatalf("RabbitMQ safe default and optional DLX must be preserved: %+v", read)
 	}
-	if err := config.Options.Kafka.Validate(); err != nil {
+	if _, err := kafkaplatform.NewFactory(*config.Kafka); err != nil {
 		t.Fatal(err)
 	}
-	if err := config.Options.RabbitMQ.Validate(); err != nil {
+	if _, err := rabbitmqplatform.NewFactory(*config.RabbitMQ); err != nil {
 		t.Fatal(err)
 	}
 }

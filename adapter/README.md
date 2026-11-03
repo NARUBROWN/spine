@@ -25,4 +25,4 @@ import httpadapter "github.com/NARUBROWN/spine/adapter/http"
 import eventadapter "github.com/NARUBROWN/spine/adapter/event"
 ```
 
-이 패키지 재배치는 HTTP 계약 `spine.http-adapter/v2`의 메서드나 버전을 바꾸지 않습니다. 이벤트 계약은 `spine.event-adapter/v1`입니다. 이벤트 factory를 App에 등록하는 실행 연결은 별도 단계이며 기존 `boot.Options.Kafka`와 `boot.Options.RabbitMQ`의 동작은 유지됩니다.
+이 패키지 재배치는 HTTP 계약 `spine.http-adapter/v2`의 메서드나 버전을 바꾸지 않습니다. 이벤트 계약은 `spine.event-adapter/v1`입니다. 이벤트 factory는 `spine.WithEventAdapter(name, factory)`로 App에 등록합니다. 기존 `boot.Options.Kafka`·`RabbitMQ`와 코어의 구체 브로커 구현은 제거했으며 [마이그레이션 안내](../docs/migration/event-platforms.md)에 따라 플랫폼 설정으로 옮깁니다.

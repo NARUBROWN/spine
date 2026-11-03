@@ -422,7 +422,7 @@ func TestRuntime_WaitsBeforeRebuildingAfterReaderError(t *testing.T) {
 		return false
 	}
 	runtime.Start(context.Background())
-	t.Cleanup(runtime.Stop)
+	t.Cleanup(func() { _ = runtime.Stop() })
 
 	if delay := <-waitEntered; delay != 100*time.Millisecond {
 		t.Fatalf("unexpected first retry delay: %s", delay)
@@ -460,7 +460,7 @@ func TestRuntime_RetriesInitialBuildWithConfiguredPolicy(t *testing.T) {
 		return ctx.Err() == nil
 	}
 	runtime.Start(context.Background())
-	t.Cleanup(runtime.Stop)
+	t.Cleanup(func() { _ = runtime.Stop() })
 
 	select {
 	case <-acked:
@@ -492,7 +492,7 @@ func TestRuntime_StopsAfterInitialBuildRetriesAreExhausted(t *testing.T) {
 	runtime := NewRuntime(registry, factory, newRuntimePipeline(t, "Handle", nil))
 	runtime.waitRetry = func(ctx context.Context, _ time.Duration) bool { return ctx.Err() == nil }
 	runtime.Start(context.Background())
-	t.Cleanup(runtime.Stop)
+	t.Cleanup(func() { _ = runtime.Stop() })
 
 	select {
 	case err := <-runtime.Errors():
@@ -532,7 +532,7 @@ func TestRuntime_KafkaStyleNackInvalidatesReaderBeforeHigherOffset(t *testing.T)
 	p.AddPostExecutionHook(&failOnceRuntimeTestPostHook{})
 	runtime := NewRuntime(registry, factory, p)
 	runtime.Start(context.Background())
-	t.Cleanup(runtime.Stop)
+	t.Cleanup(func() { _ = runtime.Stop() })
 
 	select {
 	case <-replayed:
@@ -632,7 +632,7 @@ func TestRuntime_AckFailureInvalidatesReaderBeforeHigherOffset(t *testing.T) {
 	factory := &sequenceRuntimeTestFactory{readers: []Reader{first, second}, policy: TransportRetryPolicy{InitialDelay: time.Millisecond, MaxDelay: time.Millisecond, Multiplier: 1}}
 	runtime := NewRuntime(registry, factory, newRuntimePipeline(t, "Handle", nil))
 	runtime.Start(context.Background())
-	t.Cleanup(runtime.Stop)
+	t.Cleanup(func() { _ = runtime.Stop() })
 
 	select {
 	case <-replayed:
@@ -665,7 +665,7 @@ func TestRuntime_RebuildsReaderAfterTransportError(t *testing.T) {
 	}
 	runtime := NewRuntime(registry, factory, newRuntimePipeline(t, "Handle", nil))
 	runtime.Start(context.Background())
-	t.Cleanup(runtime.Stop)
+	t.Cleanup(func() { _ = runtime.Stop() })
 
 	if got := waitSignal(t, signals); got != "ack" {
 		t.Fatalf("rebuilt reader should resume message handling, got %q", got)
@@ -954,7 +954,7 @@ func TestRuntime_StopsAfterTransportReconnectAttemptsAreExhausted(t *testing.T) 
 	runtime := NewRuntime(registry, factory, newRuntimePipeline(t, "Handle", nil))
 	runtime.waitRetry = func(ctx context.Context, _ time.Duration) bool { return ctx.Err() == nil }
 	runtime.Start(context.Background())
-	t.Cleanup(runtime.Stop)
+	t.Cleanup(func() { _ = runtime.Stop() })
 
 	select {
 	case err := <-runtime.Errors():

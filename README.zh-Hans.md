@@ -3,6 +3,8 @@
 </p>
 
 > 从 Spine `v0.6.0` 开始，使用 [Spine CLI 的 `new`](https://github.com/NARUBROWN/spine-cli#빠른-시작) 创建新项目。CLI 会配置 Echo 平台和依赖。现有应用请参阅[迁移指南](docs/migration/http-adapter-modules.md)。
+>
+> 开发源码通过 `spine.WithEventAdapter` 接入 Kafka/RabbitMQ 平台。旧 broker boot 配置请按[事件平台迁移指南](docs/migration/event-platforms.en.md)迁移。
 
 # 🦴 Spine
 <p align="center">

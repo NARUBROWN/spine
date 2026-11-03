@@ -266,3 +266,47 @@ jobs:
             go -C "$module" test -race ./... -count=1 -shuffle=on -timeout=12m
           done
           GOWORK="$RUNNER_TEMP/spine-platform/go.work" go -C ../spine-echo-platform test -race ./... -count=1 -shuffle=on -timeout=12m
+
+  event-platform-e2e:
+    name: Event Platform App E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      rabbitmq:
+        image: rabbitmq:3-management
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q check_port_connectivity"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Checkout Spine
+        uses: actions/checkout@v4
+        with:
+          path: spine
+      - name: Checkout Echo integration
+        uses: actions/checkout@v4
+        with:
+          repository: NARUBROWN/spine-echo-platform
+          ref: v0.1.0
+          path: spine-echo-platform
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: spine/go.mod
+          cache-dependency-path: "**/go.sum"
+      - name: Start Redpanda
+        run: |
+          docker run -d --name event-kafka -p 127.0.0.1:19092:9092 redpandadata/redpanda:v24.3.18 redpanda start --overprovisioned --smp 1 --memory 512M --reserve-memory 0M --node-id 0 --check=false --kafka-addr 0.0.0.0:9092 --advertise-kafka-addr 127.0.0.1:19092
+          for attempt in $(seq 1 60); do
+            if docker exec event-kafka rpk cluster info -X brokers=127.0.0.1:9092 >/dev/null 2>&1; then exit 0; fi
+            sleep 1
+          done
+          docker logs event-kafka
+          exit 1
+      - name: HTTP publication, worker redelivery and result events
+        env:
+          SPINE_TEST_KAFKA_BROKER: 127.0.0.1:19092
+          SPINE_TEST_RABBITMQ_URL: amqp://guest:guest@127.0.0.1:5672/
+        run: go -C test test -race . -run '^TestAppEventLive_' -count=1 -timeout=2m

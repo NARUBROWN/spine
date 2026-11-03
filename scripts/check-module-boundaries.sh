@@ -18,9 +18,9 @@ for contract in adapter/http adapter/event adapter; do
   fi
 done
 
-# 커널은 구체 HTTP 구현을 참조하지 않습니다. 브로커 구현은 계약 연결 후 분리합니다.
+# 커널은 구체 HTTP·이벤트 플랫폼과 브로커 클라이언트를 참조하지 않습니다.
 kernel=$(go list -deps -test ./...)
-if printf '%s\n' "$kernel" | grep -E '^(github.com/labstack/|github.com/NARUBROWN/spine-echo-platform)' ; then
-  printf 'Kernel depends on an HTTP implementation.\n' >&2
+if printf '%s\n' "$kernel" | grep -E '^(github.com/labstack/|github.com/NARUBROWN/spine-(echo|kafka|rabbitmq)-platform|github.com/segmentio/kafka-go|github.com/rabbitmq/amqp091-go)' ; then
+  printf 'Kernel depends on a concrete platform implementation.\n' >&2
   exit 1
 fi

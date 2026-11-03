@@ -1,12 +1,14 @@
 package bootstrap
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"reflect"
 	"strings"
 	"time"
 
+	eventadapter "github.com/NARUBROWN/spine/adapter/event"
 	adapter "github.com/NARUBROWN/spine/adapter/http"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
@@ -31,12 +33,18 @@ type Config struct {
 	CustomTransports       []core.CustomTransport
 	EnableGracefulShutdown bool
 	ShutdownTimeout        time.Duration
-	Kafka                  *boot.KafkaOptions
-	RabbitMQ               *boot.RabbitMqOptions
+	EventAdapters          []EventAdapterBinding
 	ConsumerRegistry       *consumer.Registry
 	HTTP                   *boot.HTTPOptions
 	HTTPAdapterFactory     adapter.Factory
 	WebSocketRegistry      *ws.Registry
+}
+
+// EventAdapterBinding은 구현과 공통 실행 정책을 연결하는 준비 설정입니다.
+type EventAdapterBinding struct {
+	Name    string
+	Factory eventadapter.Factory
+	Options boot.EventOptions
 }
 
 // InterceptorBinding은 글로벌 인터셉터를 기본 제공 전송 방식과 연결합니다.
@@ -76,8 +84,12 @@ func requiresShutdownSignal(config Config) bool {
 	if config.ConsumerRegistry == nil || len(config.ConsumerRegistry.Registrations()) == 0 {
 		return false
 	}
-	return (config.Kafka != nil && config.Kafka.Read != nil) ||
-		(config.RabbitMQ != nil && config.RabbitMQ.Read != nil)
+	for _, binding := range config.EventAdapters {
+		if !isNilHTTPValue(binding.Factory) && binding.Factory.Capabilities().Consume {
+			return true
+		}
+	}
+	return false
 }
 
 // Validate는 네트워크에 접근하지 않고 사전 검증을 수행하며,
@@ -92,11 +104,21 @@ func Validate(config Config) error {
 			Hint:    "Use zero for the default or a positive duration.",
 		})
 	}
-	if config.Kafka != nil {
-		issues = append(issues, config.Kafka.ValidateIssues("Kafka")...)
-	}
-	if config.RabbitMQ != nil {
-		issues = append(issues, config.RabbitMQ.ValidateIssues("RabbitMQ")...)
+	names := make(map[string]bool)
+	var adapterErrors []error
+	for i, binding := range config.EventAdapters {
+		path := fmt.Sprintf("EventAdapters[%d]", i)
+		if strings.TrimSpace(binding.Name) == "" || names[binding.Name] {
+			issues = append(issues, boot.ConfigIssue{Path: path + ".Name", Code: "EVENT_ADAPTER_NAME_INVALID", Message: "Event adapter names must be non-empty and unique.", Hint: "Assign a distinct name to each platform."})
+		}
+		names[binding.Name] = true
+		issues = append(issues, binding.Options.ConsumerRetry.ValidateIssues(path+".ConsumerRetry")...)
+		if binding.Options.SettlementTimeout < 0 {
+			issues = append(issues, boot.ConfigIssue{Path: path + ".SettlementTimeout", Code: "EVENT_SETTLEMENT_TIMEOUT_INVALID", Message: "Settlement timeout cannot be negative.", Hint: "Use zero for the default or a positive duration."})
+		}
+		if err := eventadapter.ValidateFactory(binding.Factory, eventadapter.Requirements{}); err != nil {
+			adapterErrors = append(adapterErrors, fmt.Errorf("%s (%s): %w", path, binding.Name, err))
+		}
 	}
 
 	if config.HTTP == nil {
@@ -147,11 +169,11 @@ func Validate(config Config) error {
 		return err
 	}
 	if config.HTTP != nil {
-		return adapter.ValidateFactory(config.HTTPAdapterFactory, adapter.Requirements{
-			WebSocketUpgrade: config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0,
-		})
+		if err := adapter.ValidateFactory(config.HTTPAdapterFactory, adapter.Requirements{WebSocketUpgrade: config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0}); err != nil {
+			adapterErrors = append(adapterErrors, err)
+		}
 	}
-	return nil
+	return errors.Join(adapterErrors...)
 }
 
 func serverOptions(options boot.HTTPOptions) adapter.ServerOptions {

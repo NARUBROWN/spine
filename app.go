@@ -3,7 +3,9 @@ package spine
 import (
 	"context"
 	"strings"
+	"time"
 
+	eventadapter "github.com/NARUBROWN/spine/adapter/event"
 	adapter "github.com/NARUBROWN/spine/adapter/http"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/bootstrap"
@@ -46,6 +48,7 @@ type app struct {
 	consumerRegistry   *consumer.Registry
 	websocketRegistry  *ws.Registry
 	httpAdapterFactory adapter.Factory
+	eventAdapters      []bootstrap.EventAdapterBinding
 }
 
 // Option은 애플리케이션의 통합 구현을 명시적으로 선택하는 생성 옵션입니다.
@@ -54,6 +57,33 @@ type Option func(*app)
 // WithHTTPAdapter는 HTTP 실행에 사용할 독립 계약의 factory를 지정합니다.
 func WithHTTPAdapter(factory adapter.Factory) Option {
 	return func(a *app) { a.httpAdapterFactory = factory }
+}
+
+// EventAdapterOption은 브로커 공통 실행 정책을 설정합니다.
+type EventAdapterOption func(*boot.EventOptions)
+
+// WithEventAdapter는 이름으로 식별하는 이벤트 플랫폼 factory를 등록합니다.
+// 읽기와 발행 역할은 factory의 불변 Capabilities 선언을 따릅니다.
+func WithEventAdapter(name string, factory eventadapter.Factory, options ...EventAdapterOption) Option {
+	settings := boot.EventOptions{}
+	for _, option := range options {
+		if option != nil {
+			option(&settings)
+		}
+	}
+	return func(a *app) {
+		a.eventAdapters = append(a.eventAdapters, bootstrap.EventAdapterBinding{Name: name, Factory: factory, Options: settings})
+	}
+}
+
+// WithEventConsumerRetry는 Reader 생성과 재연결의 공통 backoff를 설정합니다.
+func WithEventConsumerRetry(policy boot.ConsumerRetryOptions) EventAdapterOption {
+	return func(options *boot.EventOptions) { options.ConsumerRetry = policy }
+}
+
+// WithEventSettlementTimeout은 Ack/Nack 완료를 기다릴 최대 시간을 설정합니다.
+func WithEventSettlementTimeout(timeout time.Duration) EventAdapterOption {
+	return func(options *boot.EventOptions) { options.SettlementTimeout = timeout }
 }
 
 // New는 특정 HTTP 서버 구현을 선택하지 않는 Spine 커널 앱을 생성합니다.
@@ -116,8 +146,7 @@ func (a *app) bootstrapConfig(opts boot.Options) bootstrap.Config {
 		CustomTransports:       a.customTransports,
 		EnableGracefulShutdown: opts.EnableGracefulShutdown,
 		ShutdownTimeout:        opts.ShutdownTimeout,
-		Kafka:                  opts.Kafka,
-		RabbitMQ:               opts.RabbitMQ,
+		EventAdapters:          a.eventAdapters,
 		ConsumerRegistry:       a.consumerRegistry,
 		WebSocketRegistry:      a.websocketRegistry,
 		HTTP:                   opts.HTTP,

@@ -1,3 +1,7 @@
+github.com/NARUBROWN/spine-kafka-platform v0.0.0-20261102223502-7b4626c6f222 h1:G4H+V2vBUZU0BPuySjpcgUxj6eFyY6lFgPhJcWZUfPI=
+github.com/NARUBROWN/spine-kafka-platform v0.0.0-20261102223502-7b4626c6f222/go.mod h1:QUDgjIv9i9kYs1yaRZBIW8buCKibea0AQsltWYGLH/o=
+github.com/NARUBROWN/spine-rabbitmq-platform v0.0.0-20261102223515-967e684aff1c h1:W71H5PYGD/y8ScW/5nMIFLKDLMPnF//qkWyAMNk7Rek=
+github.com/NARUBROWN/spine-rabbitmq-platform v0.0.0-20261102223515-967e684aff1c/go.mod h1:Bxt3rhbu2cpHpctuQ6ux/yCfTLKDL3W1wjJ+LlrlZl8=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=

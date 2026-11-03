@@ -24,7 +24,7 @@ type consumerRuntime struct {
 
 type publisherCloser struct {
 	name  string
-	close func() error
+	close func(context.Context) error
 }
 
 // Application은 준비가 성공한 자원만 보관하고 공통 정리 순서를 관리합니다.
@@ -109,7 +109,7 @@ func (a *Application) closeResources() {
 	}
 	for i := len(a.consumers) - 1; i >= 0; i-- {
 		runtime := a.consumers[i]
-		step(runtime.name+" consumer", func() error { runtime.runtime.Stop(); return nil })
+		step(runtime.name+" consumer", runtime.runtime.Stop)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), a.shutdownTimeout())
 	defer cancel()
@@ -119,7 +119,7 @@ func (a *Application) closeResources() {
 	}
 	for i := len(a.publishers) - 1; i >= 0; i-- {
 		publisher := a.publishers[i]
-		step(publisher.name+" publisher", publisher.close)
+		step(publisher.name+" publisher", func() error { return publisher.close(context.Background()) })
 	}
 }
 

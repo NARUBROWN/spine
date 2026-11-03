@@ -3,9 +3,9 @@ package publish
 import (
 	"context"
 
-	"github.com/NARUBROWN/spine/pkg/event/publish"
+	eventadapter "github.com/NARUBROWN/spine/adapter/event"
 )
 
 type EventPublisher interface {
-	Publish(ctx context.Context, event publish.DomainEvent) error
+	Publish(ctx context.Context, event eventadapter.Message) error
 }

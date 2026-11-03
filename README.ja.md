@@ -3,6 +3,8 @@
 </p>
 
 > Spine `v0.6.0` 以降、新しいプロジェクトは [Spine CLI の `new`](https://github.com/NARUBROWN/spine-cli#빠른-시작) で作成します。CLI が Echo プラットフォームと依存関係を設定します。既存アプリは[移行ガイド](docs/migration/http-adapter-modules.md)を参照してください。
+>
+> 開発ソースのイベント連携は `spine.WithEventAdapter` と Kafka/RabbitMQ プラットフォームを使用します。旧 boot 設定からの移行は [イベントプラットフォーム移行ガイド](docs/migration/event-platforms.en.md)を参照してください。
 
 # 🦴 Spine
 <p align="center">

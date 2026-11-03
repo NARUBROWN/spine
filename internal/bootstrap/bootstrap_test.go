@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	eventadapter "github.com/NARUBROWN/spine/adapter/event"
 	"net"
 	"strings"
 	"sync"
@@ -355,19 +356,13 @@ func TestRun_DoesNotExposeHTTPListenerBeforeConsumerWarmUpSucceeds(t *testing.T)
 	}
 }
 
-func TestRun_DoesNotExposeHTTPListenerWhenKafkaStartupHandshakeFails(t *testing.T) {
+func TestRun_DoesNotExposeHTTPListenerWhenEventReaderStartupFails(t *testing.T) {
 	httpReservation, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("reserve HTTP address: %v", err)
 	}
 	httpAddress := httpReservation.Addr().String()
 	_ = httpReservation.Close()
-	brokerReservation, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("reserve broker address: %v", err)
-	}
-	brokerAddress := brokerReservation.Addr().String()
-	_ = brokerReservation.Close()
 
 	registry := consumer.NewRegistry()
 	if err := registry.Register("orders", (*testController).Handle); err != nil {
@@ -379,26 +374,18 @@ func TestRun_DoesNotExposeHTTPListenerWhenKafkaStartupHandshakeFails(t *testing.
 		HTTP:               &boot.HTTPOptions{},
 		Constructors:       []any{func() *testController { return &testController{} }},
 		ConsumerRegistry:   registry,
-		Kafka: &boot.KafkaOptions{
-			Brokers:                []string{brokerAddress},
-			AllowInsecureTransport: true,
-			ConsumerRetry: boot.ConsumerRetryOptions{
-				InitialDelay: time.Millisecond,
-				MaxDelay:     time.Millisecond,
-				Multiplier:   1,
-				MaxAttempts:  1,
-			},
-			Read: &boot.KafkaReadOptions{GroupID: "startup-validation"},
-		},
+		EventAdapters: []EventAdapterBinding{{Name: "events", Factory: eventFactoryStub{consume: true, reader: func(context.Context, eventadapter.Subscription) (eventadapter.Reader, error) {
+			return nil, errors.New("reader startup failed")
+		}}, Options: boot.EventOptions{ConsumerRetry: boot.ConsumerRetryOptions{InitialDelay: time.Millisecond, MaxDelay: time.Millisecond, Multiplier: 1, MaxAttempts: 1}}}},
 		ShutdownTimeout: time.Second,
 	})
-	if err == nil || !strings.Contains(err.Error(), "Kafka consumer validation failed") {
-		t.Fatalf("Kafka startup handshake failure must abort Run: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "events consumer validation failed") {
+		t.Fatalf("event reader startup failure must abort Run: %v", err)
 	}
 	conn, dialErr := net.DialTimeout("tcp", httpAddress, 50*time.Millisecond)
 	if dialErr == nil {
 		_ = conn.Close()
-		t.Fatal("HTTP listener was exposed despite Kafka startup handshake failure")
+		t.Fatal("HTTP listener was exposed despite event reader startup failure")
 	}
 }
 
@@ -416,8 +403,8 @@ func TestRequiresShutdownSignalForEveryBlockingRuntimeShape(t *testing.T) {
 		{name: "HTTP graceful", config: Config{HTTP: &boot.HTTPOptions{}, EnableGracefulShutdown: true}, want: true},
 		{name: "HTTP non-graceful", config: Config{HTTP: &boot.HTTPOptions{}}, want: false},
 		{name: "custom transport only", config: Config{CustomTransports: []core.CustomTransport{&testTransport{}}}, want: true},
-		{name: "Kafka consumer only", config: Config{ConsumerRegistry: registry, Kafka: &boot.KafkaOptions{Read: &boot.KafkaReadOptions{}}}, want: true},
-		{name: "RabbitMQ consumer only", config: Config{ConsumerRegistry: registry, RabbitMQ: &boot.RabbitMqOptions{Read: &boot.RabbitMqReadOptions{}}}, want: true},
+		{name: "event consumer only", config: Config{ConsumerRegistry: registry, EventAdapters: []EventAdapterBinding{{Name: "events", Factory: eventFactoryStub{consume: true}}}}, want: true},
+		{name: "event publisher only", config: Config{ConsumerRegistry: registry, EventAdapters: []EventAdapterBinding{{Name: "events", Factory: eventFactoryStub{publish: true}}}}, want: false},
 		{name: "registry without runtime", config: Config{ConsumerRegistry: registry}, want: false},
 	}
 
