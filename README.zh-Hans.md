@@ -2,6 +2,8 @@
   <a href="README.md">한국어</a> | <a href="README.en.md">English</a> | <a href="README.ja.md">日本語</a> | 简体中文 | <a href="README.zh-Hant.md">繁體中文</a>
 </p>
 
+> **main 正在准备 v0.6.6。** WebSocket 兼容别名已移至 `adapter/websocket`，尚未发布标签或正式版本。请参阅 [import 迁移指南](docs/migration/v0.6.6.md)。
+
 > **v0.6.5** 统一 HTTP、WebSocket、event、validator 的公开契约与独立实现选择。核心仅使用标准库。请参阅 [v0.6.5 迁移指南](docs/migration/v0.6.5.md)。
 
 > 从 Spine `v0.6.0` 开始，使用 [Spine CLI 的 `new`](https://github.com/NARUBROWN/spine-cli#빠른-시작) 创建新项目。CLI 会配置 Echo 平台和依赖。现有应用请参阅[迁移指南](docs/migration/http-adapter-modules.md)。

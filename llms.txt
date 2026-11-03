@@ -1,4 +1,11 @@
-# Spine v0.6.5 release
+# Spine v0.6.6 development
+
+The current main branch prepares v0.6.6; no v0.6.6 tag or release has been published.
+WebSocket compatibility aliases now live at adapter/websocket alongside adapter/http and adapter/event.
+The old root wsadapter package was removed. Update that import to adapter/websocket or contract/websocket.
+Canonical contract types and contract versions are unchanged. See docs/migration/v0.6.6.md.
+
+## Spine v0.6.5 release baseline
 
 Spine v0.6.5 includes the completed HTTP/WebSocket/event/validator contract separation and App wiring together.
 Use contract/http, contract/websocket, contract/event and contract/validator; the kernel module uses only the standard library.
@@ -77,7 +84,9 @@ The kernel retains authentication, origin/trusted-proxy policy, connection limit
 ping scheduling, validator classification (1008/1011) and orderly shutdown (1000). The platform owns native
 upgrade, message limits, read deadlines and ping/pong/close frames. Handler execution time does not consume
 the next read timeout. The core module now has no external dependencies. See contract/websocket/README.md
-and docs/migration/websocket-platforms.md. The initial wsadapter import is a compatibility alias.
+and docs/migration/websocket-platforms.md. Compatibility aliases live under adapter/, including
+adapter/websocket. The former root-level WebSocket alias package has been removed; migrate its import
+to github.com/NARUBROWN/spine/adapter/websocket or the canonical contract/websocket path.
 Spine public pseudo-version v0.6.1-0.20261103040400-9b1321410211 and Gorilla platform
 v0.0.0-20261103040512-36ad41dff88f provide this API. These are development versions, not final release tags.
 CLI PR #28 adds --websocket-platform none|gorilla; new recipes require explicit selection before WS routes.

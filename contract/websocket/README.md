@@ -51,7 +51,7 @@ app := spine.New(echoPlatform.Option(), gorillaPlatform.Option())
 
 직접 구현한 factory는 `spine.WithWebSocketAdapter(factory)`로 주입합니다. WS 경로가 없으면 WS factory가 필요하지 않으며 생성하지도 않습니다. WS 경로가 있으면 HTTP 플랫폼의 `WebSocketUpgrade` 지원과 WS factory가 모두 필요합니다. factory가 없거나 계약 버전이 다르면 초기화 전에 `wsadapter.ErrInvalidAdapter`로 실패합니다.
 
-Gorilla 구현은 독립 모듈 `github.com/NARUBROWN/spine-gorilla-platform`에서 제공합니다. 배포할 때는 이 계약과 `WithWebSocketAdapter`를 제공하는 Spine 버전을 먼저 고정하고, 플랫폼이 그 버전을 의존하도록 관리합니다. 이전 로컬 `spine/wsadapter` 경로는 같은 타입과 오류의 호환 별칭입니다.
+Gorilla 구현은 독립 모듈 `github.com/NARUBROWN/spine-gorilla-platform`에서 제공합니다. 배포할 때는 이 계약과 `WithWebSocketAdapter`를 제공하는 Spine 버전을 먼저 고정하고, 플랫폼이 그 버전을 의존하도록 관리합니다. `spine/adapter/websocket` 경로는 같은 타입과 오류의 호환 별칭입니다. 이전 루트의 WebSocket 별칭 패키지는 제거했습니다.
 
 검증 오류는 1008과 `invalid message`, 처리 오류는 1011과 `handler error`, 서버 정상 종료는 1000과 `server shutting down`으로 닫습니다. 선택한 validator와 이벤트 publisher는 WS 메시지 실행에도 같은 App 파이프라인으로 연결됩니다.
 

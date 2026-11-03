@@ -2,6 +2,8 @@
   한국어 | <a href="README.en.md">English</a> | <a href="README.ja.md">日本語</a> | <a href="README.zh-Hans.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a>
 </p>
 
+> **main은 v0.6.6을 준비 중입니다.** WebSocket 호환 경로를 `adapter/websocket`으로 정리했습니다. 아직 태그나 릴리스를 발행하지 않았습니다. [경로 변경 안내](docs/migration/v0.6.6.md)를 참고하세요.
+
 > **v0.6.5**는 HTTP·WebSocket·event·validator의 공개 계약과 독립 구현 선택을 하나로 통합합니다. 코어는 표준 라이브러리만 사용합니다. [v0.6.5 전환 안내](docs/migration/v0.6.5.md)를 참고하세요.
 
 > Spine `v0.6.0`부터 새 프로젝트는 [Spine CLI의 `new`](https://github.com/NARUBROWN/spine-cli#빠른-시작)로 시작합니다. Echo 플랫폼과 필요한 의존성은 CLI가 구성합니다. 기존 앱은 [전환 안내](docs/migration/http-adapter-modules.md)를 참고하세요.

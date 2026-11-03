@@ -3,14 +3,14 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # 각 공개 계약 패키지는 표준 라이브러리만 사용하며 서로와 커널 구현에도 의존하지 않습니다.
-for contract in contract/http contract/event contract/validator contract/websocket adapter/http adapter/event adapter wsadapter; do
+for contract in contract/http contract/event contract/validator contract/websocket adapter/http adapter/event adapter/websocket adapter; do
   contract_path="github.com/NARUBROWN/spine/$contract"
   external=$(go list -deps -test -f '{{if not .Standard}}{{.ImportPath}}{{end}}' "./$contract")
   unexpected=$(printf '%s\n' "$external" | awk -v contract_path="$contract_path" -v legacy="$contract" '
     (legacy == "adapter" || legacy == "adapter/http") && $0 == "github.com/NARUBROWN/spine/contract/http" { next }
     legacy == "adapter" && $0 == "github.com/NARUBROWN/spine/adapter/http" { next }
     legacy == "adapter/event" && $0 == "github.com/NARUBROWN/spine/contract/event" { next }
-    legacy == "wsadapter" && $0 == "github.com/NARUBROWN/spine/contract/websocket" { next }
+    legacy == "adapter/websocket" && $0 == "github.com/NARUBROWN/spine/contract/websocket" { next }
     NF && $0 != contract_path && $0 != contract_path ".test" &&
       $0 != contract_path " [" contract_path ".test]" &&
       $0 != contract_path "_test [" contract_path ".test]"
