@@ -66,50 +66,28 @@ return err
 
 검증기의 숫자 `required`는 0, bool `required`는 false도 거부할 수 있습니다. 이런 제약은 OpenAPI의 `required` 배열 외에 값 제약으로도 표현해야 합니다. 포인터의 필수값은 null과 필드 누락을 구분해 설명합니다. HTTP 400에는 바인딩 오류의 `message`와 DTO 검증 오류의 선택적 `fields`를 기술합니다.
 
-## 쿼리와 헤더 DTO, 파일 업로드
+## 기존 입력과 반환형 사용
+
+명세 생성은 기존 DTO와 핸들러 반환형을 읽습니다. 명세를 위해 입력을 래퍼로 감싸거나 라우트에 응답 타입을 다시 선언하지 않습니다.
 
 ```go
-type SearchDTO struct {
-    Age int `query:"min_age" validate:"gte=18"`
-    Tags []string `query:"tag" validate:"omitempty,dive,required"`
+type CreateUserDTO struct {
+    Name string `json:"name" validate:"required,min=2"`
 }
-type HeadersDTO struct {
-    ID string `header:"X-Request-ID" validate:"required"`
+func (*UserController) Create(input *CreateUserDTO) httpx.Response[UserDTO] {
+    return httpx.Response[UserDTO]{Body: UserDTO{Name: input.Name}}
 }
-func (*UserController) Search(
-    query query.DTO[SearchDTO],
-    headers header.DTO[HeadersDTO],
-) httpx.Response[SearchResult] {
-    return httpx.Response[SearchResult]{Body: SearchResult{
-        Age: query.Value.Age, RequestID: headers.Value.ID,
-    }}
-}
+
+app.Route("POST", "/users", (*UserController).Create)
 ```
 
-이 예는 `pkg/query`, `pkg/header`, `pkg/httpx`를 import하고 앱에서 컨트롤러와 결과 타입을 정의합니다. `Value`로 바인딩한 DTO를 읽습니다. 포인터 형태인 `*query.DTO[T]`, `*header.DTO[T]`도 지원합니다. 검증 태그는 검증기를 등록했을 때만 적용합니다.
+위 코드는 앱이 정의한 `UserController`, `UserDTO`와 `pkg/httpx`를 사용하는 예입니다. 입력 필드는 `input.Name`으로 직접 읽습니다. 명세는 등록된 메서드와 경로, JSON 필드, 반환형의 본문 타입을 추출합니다. 검증기를 등록하면 설명 가능한 `validate` 규칙도 반영합니다.
 
-T는 구조체여야 합니다. 해당 출처의 태그가 있는 exported 필드와 exported 익명 구조체의 필드를 선택합니다. 중복 이름, 잘못된 헤더 이름, 지원하지 않는 타입은 사전 검사에서 거부합니다. 스칼라, 포인터, 스칼라 slice, RFC3339의 time.Time, encoding.TextUnmarshaler를 지원합니다. 쿼리 slice는 반복 키로, 헤더 slice는 쉼표 목록으로 읽습니다. 헤더 이름은 대소문자를 구분하지 않습니다. 본문은 이 두 입력 타입의 값을 덮어쓰지 않습니다.
+기존 일반 `*DTO`의 바인딩은 플랫폼 `Bind`에 위임합니다. `query` 태그가 있는 DTO는 플랫폼과 HTTP 메서드에 따라 바인딩이 달라질 수 있어 부분 명세 진단을 유지합니다. `query.Values`와 `header.Values`가 읽을 키는 핸들러 본문을 실행하거나 분석하지 않으므로 추론하지 않습니다. 이번 변경은 기존 입력의 바인딩 순서와 값 접근 방식을 바꾸지 않습니다.
 
-사용자 TextUnmarshaler는 요청 중에만 호출하며 명세 생성에서는 실행하지 않습니다. 사용자 직렬화 형식은 진단으로 남깁니다. OpenAPI가 예약한 Accept, Content-Type, Authorization 헤더도 인자 목록 대신 진단으로 표시하며 실제 바인딩은 유지합니다. 검증 오류의 공개 필드 경로는 등록한 검증기의 이름 선택 정책을 따릅니다.
+파일은 기존 `form` 태그와 표준 라이브러리의 `*mime/multipart.FileHeader`, `[]*mime/multipart.FileHeader`, `[]mime/multipart.FileHeader`에서 필드 이름과 개수를 추출합니다. 파일 필드가 있는 DTO는 multipart/form-data로만 기술합니다. 현재 Echo 기본 바인더와 대조했으며 다른 플랫폼은 자체 바인더의 지원 여부를 확인해야 합니다. 동적인 `multipart.UploadedFiles`는 필드 이름을 추측하지 않습니다.
 
-파일은 form 태그와 표준 라이브러리의 `*mime/multipart.FileHeader`, `[]*mime/multipart.FileHeader`, `[]mime/multipart.FileHeader`로 필드 이름과 개수를 표현합니다. 파일 필드가 있는 DTO는 multipart/form-data로만 기술합니다. 현재 Echo 기본 바인더와 대조했으며, 다른 플랫폼은 자체 바인더의 지원 여부를 확인해야 합니다. 동적인 `multipart.UploadedFiles`는 필드 이름을 추측하지 않습니다.
-
-기존 일반 `*DTO`의 query 태그는 플랫폼 Bind에 위임하므로 부분 명세 진단을 유지합니다. 출처를 고정할 때는 위 입력 타입을 사용합니다.
-
-## 상태별 응답 선언
-
-```go
-app.Route("POST", "/users", (*UserController).Create,
-    route.Response[UserDTO](201), route.ErrorResponse(409),
-)
-app.Route("GET", "/avatar", (*UserController).Avatar,
-    route.ResponseAs[[]byte](200, "image/png"),
-)
-```
-
-이 예는 `pkg/route`를 import한 함수 내부 등록입니다. `app`, 컨트롤러와 DTO는 앱이 정의합니다. Response[T]는 문자열에 text/plain, 나머지에 application/json을 사용합니다. ResponseAs[T]는 Content-Type도 지정하며 ErrorResponse는 프레임워크의 JSON 오류 본문을 기술합니다. 상태는 200에서 599까지 허용하며 오류 선언은 400 이상이어야 합니다. 같은 상태와 미디어 타입의 중복, 잘못된 미디어 타입과 미디어 타입 매개변수는 거부합니다. 204와 304에는 본문을 기술하지 않습니다.
-
-이 옵션들은 문서용 선언이며 실제 응답을 변경하지 않습니다. 핸들러의 ResponseOptions.Status와 Content-Type을 함께 맞춰야 합니다. 문서는 `x-spine-evidence: declared`로 구분하고 동적인 응답의 default와 진단을 유지합니다.
+`httpx.Response[T]`의 T에서 응답 본문 타입을 추출합니다. 실제 상태 코드는 기존 `ResponseOptions.Status`와 반환 오류가 결정합니다. 명세 생성기는 핸들러를 실행하지 않으므로 상태 코드를 `default`로 남깁니다. 문자열은 text/plain으로 설명하고, `httpx.Binary.ContentType`처럼 동적인 미디어 타입은 진단으로 구분합니다. 런타임 값은 별도 문서용 선언으로 보충하지 않습니다.
 
 ## CLI에서 같은 명세 내보내기
 

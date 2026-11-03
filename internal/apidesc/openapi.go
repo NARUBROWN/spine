@@ -4,9 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/NARUBROWN/spine/contract/description"
@@ -138,7 +136,7 @@ func OpenAPI(contract description.HTTP, options boot.OpenAPIOptions) (json.RawMe
 				}
 			}
 		}
-		response := map[string]any{"description": "Status codes are selected at runtime; content includes declared returns and framework error responses."}
+		response := map[string]any{"description": "Status codes are selected at runtime; content includes handler return types and framework error responses."}
 		if jsonContent, ok := content["application/json"].(map[string]any); ok {
 			jsonContent["schema"] = map[string]any{"anyOf": []any{jsonContent["schema"], errorSchema(false)}}
 		} else if _, wildcard := content["*/*"]; !wildcard {
@@ -151,24 +149,6 @@ func OpenAPI(contract description.HTTP, options boot.OpenAPIOptions) (json.RawMe
 		responses := map[string]any{"default": response}
 		if len(body) > 0 || len(parameters) > 0 {
 			responses["400"] = map[string]any{"description": "Request binding or DTO validation failed.", "content": map[string]any{"application/json": map[string]any{"schema": errorSchema(validation)}}}
-		}
-		for _, declared := range route.Responses {
-			key := strconv.Itoa(declared.Status)
-			item, exists := responses[key].(map[string]any)
-			if !exists {
-				item = map[string]any{"description": http.StatusText(declared.Status), "x-spine-evidence": "declared"}
-				responses[key] = item
-			}
-			declaredContent, _ := item["content"].(map[string]any)
-			if declaredContent == nil {
-				declaredContent = map[string]any{}
-			}
-			for media, schema := range declared.Content {
-				declaredContent[media] = map[string]any{"schema": schema}
-			}
-			if len(declaredContent) > 0 {
-				item["content"] = declaredContent
-			}
 		}
 		op["responses"] = responses
 		item[method] = op

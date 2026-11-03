@@ -623,15 +623,11 @@ an optional HTTPDescriber. Validation constraints come only from the registered 
 contract/validator.SchemaDescriber. Missing description support and dynamic/unsupported behavior remain
 explicit diagnostics. See contract/description/README.md for supported types and boundaries.
 
-Use query.DTO[T] and header.DTO[T] for source-specific typed inputs with query/header tags and Value access.
-The core shares their tagged-field plan between binding and description, applies the registered validator,
-and never lets a JSON body overwrite them. Scalar fields, pointers, slices and RFC3339 time are supported;
-unsupported fields and duplicate names fail preflight. Existing native *DTO Bind remains platform-dependent.
+Keep existing *DTO parameters, direct field access and httpx.Response[T] returns. Documentation does not
+require input wrappers or duplicate response declarations. Native DTO Bind remains platform-dependent;
+query-tagged DTOs, dynamic query.Values/header.Values and runtime status/media retain explicit diagnostics.
 Form-tagged standard mime/multipart.FileHeader pointers and slices describe named file uploads; file DTOs
 advertise multipart/form-data. Dynamic UploadedFiles keeps an unresolved-field diagnostic.
-Optional route.Response[T](status), route.ResponseAs[T](status, media) and route.ErrorResponse(status)
-declare status-specific documents with x-spine-evidence: declared; they do not change actual responses.
-The default response and dynamic diagnostics remain. Configure the handler's status and media to match.
 Managed Run prints the OpenAPI URL using the bound listener port. The companion CLI's
 contract export --format openapi --source runtime reuses DescribeHTTP and openapi.Generate without a listener.
 It executes BuildApplication and Go tooling, requires a core with these APIs, and preserves the default

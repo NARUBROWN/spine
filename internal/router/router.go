@@ -15,7 +15,6 @@ type RouteSpec struct {
 	Path         string
 	Handler      any
 	Interceptors []core.Interceptor
-	Responses    []ResponseSpec
 }
 
 type Router interface {

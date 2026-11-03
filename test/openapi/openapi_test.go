@@ -22,8 +22,6 @@ import (
 	"github.com/NARUBROWN/spine/pkg/header"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
-	"github.com/NARUBROWN/spine/pkg/query"
-	"github.com/NARUBROWN/spine/pkg/route"
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -46,9 +44,6 @@ type queryDTO struct {
 	Age  int      `json:"age" query:"min_age" validate:"gte=18"`
 	Tags []string `json:"tags" query:"tag" validate:"omitempty,dive,required"`
 }
-type headerDTO struct {
-	ID string `json:"request_id" header:"X-Request-ID" validate:"required"`
-}
 type uploadDTO struct {
 	Avatar      *multipart.FileHeader   `json:"avatar" form:"avatar" validate:"required"`
 	Attachments []*multipart.FileHeader `json:"attachments" form:"attachments"`
@@ -70,8 +65,8 @@ func (*controller) Create(value *payload) httpx.Response[payload] {
 func (*controller) Form(value *formDTO) httpx.Response[formDTO] {
 	return httpx.Response[formDTO]{Body: *value}
 }
-func (*controller) Search(values query.DTO[queryDTO], headers *header.DTO[headerDTO]) httpx.Response[searchResult] {
-	return httpx.Response[searchResult]{Body: searchResult{Age: values.Value.Age, Tags: values.Value.Tags, ID: headers.Value.ID}}
+func (*controller) Search(values *queryDTO, headers header.Values) httpx.Response[searchResult] {
+	return httpx.Response[searchResult]{Body: searchResult{Age: values.Age, Tags: values.Tags, ID: headers.Get("X-Request-ID")}}
 }
 func (*controller) Upload(value *uploadDTO) httpx.Response[uploadResult] {
 	return httpx.Response[uploadResult]{Body: uploadResult{Name: value.Avatar.Filename, Count: len(value.Attachments)}}
@@ -93,14 +88,14 @@ func application(t *testing.T) (http.Handler, map[string]any) {
 	}
 	app := spine.New(platform.Option(), spine.WithValidator(v))
 	app.Constructor(func() *controller { return &controller{} })
-	app.Route("POST", "/users", (*controller).Create, route.Response[payload](200))
-	app.Route("POST", "/form", (*controller).Form, route.Response[formDTO](200))
-	app.Route("POST", "/search", (*controller).Search, route.Response[searchResult](200))
-	app.Route("POST", "/upload", (*controller).Upload, route.Response[uploadResult](200))
-	app.Route("GET", "/nullable", (*controller).Nullable, route.Response[*payload](200))
-	app.Route("GET", "/string", (*controller).String, route.Response[string](201))
-	app.Route("GET", "/binary", (*controller).Binary, route.ResponseAs[[]byte](200, "image/png"))
-	app.Route("GET", "/conflict", (*controller).Conflict, route.ErrorResponse(409))
+	app.Route("POST", "/users", (*controller).Create)
+	app.Route("POST", "/form", (*controller).Form)
+	app.Route("GET", "/search", (*controller).Search)
+	app.Route("POST", "/upload", (*controller).Upload)
+	app.Route("GET", "/nullable", (*controller).Nullable)
+	app.Route("GET", "/string", (*controller).String)
+	app.Route("GET", "/binary", (*controller).Binary)
+	app.Route("GET", "/conflict", (*controller).Conflict)
 	prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{}})
 	if err != nil {
 		t.Fatal(err)
@@ -140,7 +135,12 @@ func contentSchema(content any, media string) any {
 	return content.(map[string]any)[media].(map[string]any)["schema"]
 }
 func responseSchema(doc map[string]any, path, method, status, media string) any {
-	return contentSchema(operation(doc, path, method)["responses"].(map[string]any)[status].(map[string]any)["content"], media)
+	responses := operation(doc, path, method)["responses"].(map[string]any)
+	response, exists := responses[status]
+	if !exists {
+		response = responses["default"]
+	}
+	return contentSchema(response.(map[string]any)["content"], media)
 }
 func compile(t *testing.T, doc map[string]any, schema any) *jsonschema.Schema {
 	t.Helper()
@@ -256,42 +256,36 @@ func clone(source map[string]any) map[string]any {
 	return result
 }
 
-func TestQueryHeaderBindingAndDocumentationUseTheSameFields(t *testing.T) {
+func TestExistingQueryDTOAndHeaderValuesKeepPlatformBinding(t *testing.T) {
 	h, doc := application(t)
-	op := operation(doc, "/search", "post")
-	if op["requestBody"] != nil {
-		t.Fatal("출처를 지정한 DTO에는 본문 바인딩이 없습니다")
+	codes := map[string]bool{}
+	for _, raw := range doc["x-spine-diagnostics"].([]any) {
+		codes[raw.(map[string]any)["code"].(string)] = true
 	}
-	parameters := map[string]map[string]any{}
-	for _, raw := range op["parameters"].([]any) {
-		item := raw.(map[string]any)
-		parameters[item["name"].(string)] = item
-	}
-	if len(parameters) != 3 || parameters["X-Request-Id"]["in"] != "header" || parameters["min_age"]["required"] != true || parameters["X-Request-Id"]["required"] != true {
-		t.Fatalf("입력 계약: %+v", parameters)
+	if !codes["DTO_QUERY_BINDING_UNRESOLVED"] || !codes["DYNAMIC_PARAMETERS_UNRESOLVED"] {
+		t.Fatal("플랫폼 쿼리 바인딩과 동적 헤더의 한계를 설명해야 합니다")
 	}
 	for _, test := range []struct {
 		age, id string
 		status  int
-	}{{"18", "request-1", 200}, {"17", "request-1", 400}, {"invalid", "request-1", 400}, {"18", "", 400}} {
-		req := httptest.NewRequest("POST", "/search?min_age="+url.QueryEscape(test.age)+"&tag=a&tag=b", strings.NewReader(`{"age":999}`))
-		req.Header.Set("Content-Type", "application/json")
+	}{{"18", "request-1", 200}, {"17", "request-1", 400}, {"invalid", "request-1", 400}, {"18", "", 200}} {
+		req := httptest.NewRequest("GET", "/search?min_age="+url.QueryEscape(test.age)+"&tag=a&tag=b", nil)
 		if test.id != "" {
-			req.Header.Set("x-request-id", test.id)
+			req.Header.Set("X-Request-ID", test.id)
 		}
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, req)
 		if w.Code != test.status {
-			t.Fatalf("쿼리와 헤더 바인딩: %d %s", w.Code, w.Body)
+			t.Fatalf("기존 DTO와 헤더 바인딩: %d %s", w.Code, w.Body)
 		}
-		assertJSONResponse(t, doc, "/search", "post", w)
-		if w.Code == 200 && (!strings.Contains(w.Body.String(), `"age":18`) || !strings.Contains(w.Body.String(), `"tags":["a","b"]`)) {
-			t.Fatalf("본문이 쿼리를 덮어쓰면 안 됩니다: %s", w.Body)
+		assertJSONResponse(t, doc, "/search", "get", w)
+		if w.Code == 200 && (!strings.Contains(w.Body.String(), `"age":18`) || !strings.Contains(w.Body.String(), `"tags":["a","b"]`) || !strings.Contains(w.Body.String(), `"id":"`+test.id+`"`)) {
+			t.Fatalf("기존 입력의 직접 접근을 유지해야 합니다: %s", w.Body)
 		}
 	}
 }
 
-func TestFormUploadsAndDeclaredResponseMedia(t *testing.T) {
+func TestExistingFormUploadsAndReturnTypesWithoutDeclarations(t *testing.T) {
 	h, doc := application(t)
 	if len(operation(doc, "/upload", "post")["requestBody"].(map[string]any)["content"].(map[string]any)) != 1 {
 		t.Fatal("파일 DTO는 multipart 미디어로만 기술해야 합니다")
@@ -334,14 +328,28 @@ func TestFormUploadsAndDeclaredResponseMedia(t *testing.T) {
 		assertJSONResponse(t, doc, path, "get", w)
 	}
 	w = serve(h, "GET", "/string", "", nil)
-	if w.Code != 201 || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/plain") || compile(t, doc, responseSchema(doc, "/string", "get", "201", "text/plain")).Validate(w.Body.String()) != nil {
+	if w.Code != 201 || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/plain") || compile(t, doc, responseSchema(doc, "/string", "get", "default", "text/plain")).Validate(w.Body.String()) != nil {
 		t.Fatalf("문자열 응답: %d %s", w.Code, w.Body)
 	}
 	w = serve(h, "GET", "/binary", "", nil)
 	if w.Code != 200 || w.Header().Get("Content-Type") != "image/png" || !bytes.Equal(w.Body.Bytes(), []byte{1, 2, 3}) {
 		t.Fatalf("바이너리 응답: %d %s", w.Code, w.Body)
 	}
-	if err := compile(t, doc, responseSchema(doc, "/binary", "get", "200", "image/png")).Validate(w.Body.String()); err != nil {
+	if err := compile(t, doc, responseSchema(doc, "/binary", "get", "default", "*/*")).Validate(w.Body.String()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRuntimeStatusAndMediaAreNotGuessedFromHandlers(t *testing.T) {
+	_, doc := application(t)
+	for _, path := range []string{"/string", "/binary", "/conflict"} {
+		responses := operation(doc, path, "get")["responses"].(map[string]any)
+		if len(responses) != 1 || responses["default"] == nil {
+			t.Fatalf("런타임 상태를 고정값으로 추측하면 안 됩니다: %s %+v", path, responses)
+		}
+	}
+	content := operation(doc, "/binary", "get")["responses"].(map[string]any)["default"].(map[string]any)["content"].(map[string]any)
+	if len(content) != 1 || content["*/*"] == nil {
+		t.Fatalf("동적 바이너리 미디어를 추측하면 안 됩니다: %+v", content)
 	}
 }

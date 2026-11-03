@@ -17,18 +17,11 @@ type HTTP struct {
 }
 
 type Route struct {
-	Method    string     `json:"method"`
-	Path      string     `json:"path"`
-	Handler   string     `json:"handler"`
-	Inputs    []Input    `json:"inputs"`
-	Returns   []Return   `json:"returns"`
-	Responses []Response `json:"responses,omitempty"`
-}
-
-// Response는 라우트에서 명시적으로 선언한 상태별 응답입니다.
-type Response struct {
-	Status  int                        `json:"status"`
-	Content map[string]json.RawMessage `json:"content,omitempty"`
+	Method  string   `json:"method"`
+	Path    string   `json:"path"`
+	Handler string   `json:"handler"`
+	Inputs  []Input  `json:"inputs"`
+	Returns []Return `json:"returns"`
 }
 
 type Input struct {
