@@ -95,3 +95,12 @@ func TestDescribeWithoutValidatorDoesNotInterpretValidationTags(t *testing.T) {
 		}
 	}
 }
+
+func TestDescribeRejectsRepeatedRoutePattern(t *testing.T) {
+	app := New()
+	app.Route("GET", "/users/:id", (*descriptionController).Get)
+	app.Route("GET", "/users/:key", (*descriptionController).Get)
+	if _, err := DescribeHTTP(app, boot.Options{HTTP: &boot.HTTPOptions{}}); err == nil {
+		t.Fatal("같은 메서드와 경로 형태의 중복 등록을 거부해야 합니다")
+	}
+}

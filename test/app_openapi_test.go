@@ -98,6 +98,19 @@ func TestOpenAPIPathConfigurationAndCollision(t *testing.T) {
 	}
 }
 
+func TestOpenAPIPreservesDuplicateRouteRejection(t *testing.T) {
+	for _, disabled := range []bool{false, true} {
+		app := setupApp()
+		app.Route("GET", "/repeat", (*appCtrl).Hello)
+		app.Route("GET", "/repeat", (*appCtrl).Hello)
+		prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Disabled: disabled}}})
+		if err == nil {
+			prepared.Close(t.Context())
+			t.Fatalf("기존 중복 경로 거부 정책을 유지해야 합니다: disabled=%v", disabled)
+		}
+	}
+}
+
 func TestOpenAPIFromStandaloneExecutableWithoutSourcesOrCLI(t *testing.T) {
 	if testing.Short() {
 		t.Skip("독립 실행 파일 빌드")

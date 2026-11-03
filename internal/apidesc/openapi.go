@@ -21,6 +21,7 @@ func OpenAPI(contract description.HTTP, options boot.OpenAPIOptions) (json.RawMe
 		version = "unversioned"
 	}
 	paths := map[string]any{}
+	templates := map[string][]string{}
 	diagnostics := append([]description.Diagnostic{}, contract.Diagnostics...)
 	for _, route := range contract.Routes {
 		method := strings.ToLower(route.Method)
@@ -31,6 +32,8 @@ func OpenAPI(contract description.HTTP, options boot.OpenAPIOptions) (json.RawMe
 			continue
 		}
 		segments := strings.Split(route.Path, "/")
+		shape := append([]string(nil), segments...)
+		parameterNames := map[string]string{}
 		validPath := true
 		for i, segment := range segments {
 			if strings.HasPrefix(segment, ":") {
@@ -39,13 +42,27 @@ func OpenAPI(contract description.HTTP, options boot.OpenAPIOptions) (json.RawMe
 					break
 				}
 				segments[i] = "{" + segment[1:] + "}"
+				shape[i] = "{}"
 			} else {
 				segments[i] = url.PathEscape(segment)
+				shape[i] = segments[i]
 			}
 		}
 		if !validPath {
 			diagnostics = append(diagnostics, description.Diagnostic{Code: "PATH_TEMPLATE_UNRESOLVED", Target: route.Handler, Message: "The registered path has no valid OpenAPI template."})
 			continue
+		}
+		// 메서드별 인자 이름이 달라도 같은 URL 형태는 하나의 Path Item을 공유합니다.
+		shapeKey := strings.Join(shape, "/")
+		if canonical, exists := templates[shapeKey]; exists {
+			for i, segment := range segments {
+				if shape[i] == "{}" {
+					parameterNames[strings.TrimSuffix(strings.TrimPrefix(segment, "{"), "}")] = strings.TrimSuffix(strings.TrimPrefix(canonical[i], "{"), "}")
+					segments[i] = canonical[i]
+				}
+			}
+		} else {
+			templates[shapeKey] = append([]string(nil), segments...)
 		}
 		path := strings.Join(segments, "/")
 		item, _ := paths[path].(map[string]any)
@@ -56,13 +73,24 @@ func OpenAPI(contract description.HTTP, options boot.OpenAPIOptions) (json.RawMe
 		id := sha256.Sum256([]byte(route.Method + " " + route.Path))
 		op := map[string]any{"operationId": fmt.Sprintf("%s_%x", method, id[:8])}
 		parameters := []any{}
+		seenParameters := map[string]bool{}
 		body := map[string]any{}
 		validation := false
 		for _, input := range route.Inputs {
 			switch input.Binding {
 			case "path", "query":
 				if input.Name != "" {
-					parameters = append(parameters, map[string]any{"name": input.Name, "in": input.Binding, "required": input.Required, "schema": input.Schema})
+					name := input.Name
+					if canonical := parameterNames[name]; input.Binding == "path" && canonical != "" {
+						name = canonical
+					}
+					key := input.Binding + "\x00" + name
+					if seenParameters[key] {
+						diagnostics = append(diagnostics, description.Diagnostic{Code: "DUPLICATE_PARAMETER", Target: route.Handler, Message: "Repeated parameter names are represented once."})
+						continue
+					}
+					seenParameters[key] = true
+					parameters = append(parameters, map[string]any{"name": name, "in": input.Binding, "required": input.Required, "schema": input.Schema})
 				}
 			case "body":
 				if len(body) > 0 {

@@ -43,3 +43,25 @@ func TestOpenAPIOmitsUnrepresentableMethodsAndTemplatesWithDiagnostics(t *testin
 		t.Fatalf("표현 불가 등록: %s", data)
 	}
 }
+
+func TestOpenAPIUnifiesTemplateNamesAcrossMethods(t *testing.T) {
+	contract := description.HTTP{Schemas: map[string]json.RawMessage{}}
+	for _, spec := range []struct{ method, name string }{{"GET", "id"}, {"POST", "userID"}} {
+		contract.Routes = append(contract.Routes, description.Route{Method: spec.method, Path: "/users/:" + spec.name, Inputs: []description.Input{{Binding: "path", Name: spec.name, Required: true, Schema: json.RawMessage(`{"type":"integer"}`)}}})
+	}
+	data, err := OpenAPI(contract, boot.OpenAPIOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Paths map[string]map[string]struct {
+			Parameters []struct{ Name string }
+		}
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Paths) != 1 || len(doc.Paths["/users/{id}"]) != 2 || doc.Paths["/users/{id}"]["post"].Parameters[0].Name != "id" {
+		t.Fatalf("같은 URL 형태는 메서드별로 중복 Path Item을 만들면 안 됩니다: %s", data)
+	}
+}

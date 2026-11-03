@@ -73,6 +73,8 @@ return err
 - `time.Time`, `json.RawMessage`, byte slice, 중첩·재귀·제네릭 타입
 - 등록된 검증기가 설명하는 제약조건
 
+같은 메서드의 경로가 충돌하면 기존 앱 준비 단계처럼 거부합니다. 같은 URL 형태에서 메서드별 경로 인자 이름이 다르면 하나의 OpenAPI Path Item으로 묶습니다.
+
 명세에 표현되지 않은 동작은 `x-spine-diagnostics`로 구분합니다. 동적 query/header 키, adapter별 쿼리 DTO 바인딩, 업로드 필드 이름, 사용자 정의 JSON/text 직렬화와 동적 status·Content-Type은 완전히 추론하지 않습니다. `ResponseOptions.Status`나 서비스 내부 오류를 얻으려고 핸들러를 실행하지 않습니다. 응답 상태는 `default`로 남기며 본문은 선언된 반환형과 프레임워크 오류 형식을 함께 설명합니다.
 
 HTTP 플랫폼에 직접 등록한 native 경로, WS 메시지와 event payload는 이번 OpenAPI 대상에 포함하지 않습니다. Swagger UI와 ReDoc은 이 JSON을 읽는 별도 표시 계층으로 추가할 수 있습니다.
