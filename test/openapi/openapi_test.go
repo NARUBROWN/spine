@@ -182,6 +182,11 @@ func assertJSONResponse(t *testing.T, doc map[string]any, path, method string, w
 
 func TestOpenAPIDocumentConformsToOfficialStructure(t *testing.T) {
 	_, doc := application(t)
+	assertDocumentStructure(t, doc)
+}
+
+func assertDocumentStructure(t *testing.T, doc map[string]any) {
+	t.Helper()
 	file, err := os.Open("testdata/openapi-3.1-schema.json")
 	if err != nil {
 		t.Fatal(err)
@@ -417,7 +422,7 @@ func TestUnconfiguredValidatorSkipsRequiredRulesButStillRejectsConversionErrors(
 		}
 	}
 	doc := serve(prepared.Handler(), "GET", "/openapi.json", "", nil)
-	if !strings.Contains(doc.Body.String(), "INPUT_SCHEMA_DESCRIPTION_UNAVAILABLE") || strings.Contains(doc.Body.String(), `"parameters"`) {
+	if !strings.Contains(doc.Body.String(), "VALIDATOR_NOT_CONFIGURED") || strings.Contains(doc.Body.String(), `"parameters"`) || strings.Contains(doc.Body.String(), `"components"`) {
 		t.Fatalf("상세 명세는 선택한 검증 설명 계약이 필요합니다: %s", doc.Body)
 	}
 }

@@ -30,10 +30,6 @@ type httpBaselineForm struct {
 	Count int    `json:"count" form:"count"`
 }
 
-type httpBaselinePathDTO struct {
-	ID int `param:"id"`
-}
-
 type httpBaselineFile struct {
 	FieldName   string `json:"field_name"`
 	Filename    string `json:"filename"`
@@ -57,10 +53,9 @@ func (*httpBaselineController) Form(dto *httpBaselineForm) httpx.Response[httpBa
 	return httpx.Response[httpBaselineForm]{Body: *dto}
 }
 
-func (*httpBaselineController) Path(id path.Int, dto *httpBaselinePathDTO) httpx.Response[map[string]int] {
+func (*httpBaselineController) Path(id path.Int) httpx.Response[map[string]int] {
 	return httpx.Response[map[string]int]{Body: map[string]int{
-		"spine_id": int(id.Value),
-		"dto_id":   dto.ID,
+		"id": int(id.Value),
 	}}
 }
 
@@ -240,9 +235,7 @@ func TestAppIntegration_PathBindingBaseline(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &got); recorder.Code != 200 || err != nil {
 		t.Fatalf("경로 응답: 상태=%d 본문=%s 오류=%v", recorder.Code, recorder.Body.String(), err)
 	}
-	// DTO param 바인딩을 지원하도록 바꾸는 작업은 이 리팩터링과 분리한다.
-	dtoID, hasDTOID := got["dto_id"]
-	if got["spine_id"] != 43 || !hasDTOID || dtoID != 0 {
-		t.Fatalf("Spine 경로 인자와 DTO param의 현재 동작을 보존해야 합니다: %+v", got)
+	if got["id"] != 43 {
+		t.Fatalf("경로 값은 기존 Spine 경로 인자로 읽어야 합니다: %+v", got)
 	}
 }

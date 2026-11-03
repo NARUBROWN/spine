@@ -56,17 +56,17 @@ return err
 
 위 코드는 `spine`과 `github.com/NARUBROWN/spine/pkg/openapi`를 import한 함수 내부 예입니다. `app`, HTTP가 활성화된 `options`, `io.Writer`인 `output`을 받습니다. `DescribeHTTP`는 생성자, factory, 핸들러나 검증 규칙을 실행하지 않습니다. 검증기가 `SchemaDescriber`를 구현하면 부작용 없는 규칙 설명 메서드만 호출합니다.
 
-같은 핸들러에서 동일한 구조체 타입의 입력 DTO를 중복 선언하면 `HTTP_INPUT_DTO_DUPLICATED`로 거부합니다. 타입 별칭도 같은 타입으로 판정하며 다른 라우트에서의 재사용은 허용합니다. 앱 사전 검사와 HTTP 설명은 같은 검사 규칙을 사용합니다.
+같은 핸들러에서 동일한 구조체 타입의 입력 DTO를 중복 선언하면 `HTTP_INPUT_DTO_DUPLICATED`로 거부합니다. 서로 다른 본문 DTO도 하나를 초과하면 `HTTP_BODY_PARAMETERS_DUPLICATED`로 거부하고, 같은 출처의 입력 키를 여러 DTO가 선언하면 `HTTP_INPUT_KEY_DUPLICATED`로 거부합니다. 타입 별칭도 같은 타입으로 판정하며 다른 라우트에서의 재사용은 허용합니다. 앱 사전 검사와 HTTP 설명은 같은 검사 규칙을 사용합니다.
 
 기존 `spine.App` 인터페이스에는 메서드를 추가하지 않았습니다. 표준 앱은 선택적 `spine.HTTPDescriber`를 구현합니다. 이 기능이 없는 사용자 정의 App에는 `ErrHTTPDescriptionUnavailable`을 반환합니다.
 
 ## 검증 규칙
 
-등록된 validator만 검증 제약을 설명할 수 있습니다. validator가 없거나 설명 계약을 지원하지 않으면 DTO 상세 입력을 제공하지 않고 `INPUT_SCHEMA_DESCRIPTION_UNAVAILABLE`로 이유를 남깁니다. `json:",omitempty"`도 입력 필수값 판정에 사용하지 않습니다.
+등록된 validator만 검증 제약을 설명할 수 있습니다. validator가 없으면 경로와 HTTP 메서드만 설명하고 `VALIDATOR_NOT_CONFIGURED`로 이유를 남깁니다. 입력 파라미터, 요청과 응답 모델, 오류 상태 코드를 추정하지 않습니다. 표준 OpenAPI에 필요한 최소 응답 자리와 타입을 지정하지 않은 경로 변수 자리만 유지합니다. validator는 있지만 설명 계약을 지원하지 않으면 DTO 상세 입력을 생략하고 `INPUT_SCHEMA_DESCRIPTION_UNAVAILABLE`로 이유를 남깁니다. `json:",omitempty"`도 입력 필수값 판정에 사용하지 않습니다.
 
 `contract/validator.SchemaDescriber`는 Go 필드 인덱스와 JSON Schema 2020-12 제약을 연결합니다. 기존 `Validator` 인터페이스는 유지됩니다. 설명 기능이 없는 validator도 요청 검증은 정상 동작하지만 상세 입력 명세는 생략합니다. 지원하지 않는 사용자 규칙, 태그 이름 변경과 규칙 덮어쓰기는 실제 validator 구현이 판단해야 합니다. 명세를 얻으려고 `Validate`에 빈 DTO를 넣지 않습니다.
 
-검증기의 숫자 `required`는 0, bool `required`는 false도 거부할 수 있습니다. 이런 제약은 OpenAPI의 `required` 배열 외에 값 제약으로도 표현해야 합니다. 포인터의 필수값은 null과 필드 누락을 구분해 설명합니다. HTTP 400에는 바인딩 오류의 `message`와 DTO 검증 오류의 선택적 `fields`를 기술합니다.
+검증기의 숫자 `required`는 0, bool `required`는 false도 거부할 수 있습니다. 이런 제약은 OpenAPI의 `required` 배열 외에 값 제약으로도 표현해야 합니다. 포인터의 필수값은 null과 필드 누락을 구분해 설명합니다. HTTP 400에는 바인딩 오류의 `message`, 출처인 `in`과 DTO 검증 오류의 선택적 `fields`를 기술합니다. 검증 필드에는 입력 출처와 실제 바인딩 필드명을 사용합니다. 태그 없는 본문과 검증 태그 없는 DTO도 사용할 수 있습니다.
 
 ## 기존 입력과 반환형 사용
 
@@ -91,18 +91,13 @@ app.Route("POST", "/users", (*UserController).Create)
 
 `httpx.Response[T]`의 T에서 응답 본문 타입을 추출합니다. 실제 상태 코드는 기존 `ResponseOptions.Status`와 반환 오류가 결정합니다. 명세 생성기는 핸들러를 실행하지 않으므로 상태 코드를 `default`로 남깁니다. 문자열은 text/plain으로 설명하고, `httpx.Binary.ContentType`처럼 동적인 미디어 타입은 진단으로 구분합니다. 런타임 값은 별도 문서용 선언으로 보충하지 않습니다.
 
-## CLI에서 같은 명세 내보내기
+## CLI 연동
 
-연동 CLI 변경도 현재 개발 범위입니다. 설치한 CLI의 `spine schema --json`으로 지원 여부를 확인하세요.
-
-```sh
-spine contract export --format openapi --source runtime --output openapi.json
-spine contract export --format openapi --source static --output static-openapi.json
-```
-
-runtime은 import할 수 있는 composition 패키지의 BuildApplication() (spine.App, boot.Options, error)를 실행하고 공개 DescribeHTTP와 openapi.Generate를 호출합니다. 리스너나 앱 생성자는 시작하지 않습니다. 구성 함수 자체의 사용자 코드, Go 빌드, 모듈 해석과 캐시는 실행됩니다. 구성 로그는 JSON 출력과 분리하고 숫자 정밀도를 보존합니다. static은 기존 AST 내보내기이며 CLI 기본값입니다. runtime 실패를 static 성공으로 바꾸지 않습니다. 명세 리소스를 Disabled로 꺼도 런타임 내보내기는 사용할 수 있습니다.
+CLI 연동은 코어 입력 스펙 확정 후 별도 이슈로 진행합니다. 현재 변경의 명세 생성과 입력 검사는 런타임 코어의 동작이며 CLI 변경을 전제로 하지 않습니다.
 
 ## 현재 지원 범위
+
+다음 상세 설명 범위는 validator가 설정된 경우에 적용하며 상세 입력에는 SchemaDescriber가 필요합니다.
 
 - 등록된 메서드, 경로, prefix와 경로 인자, `query.Pagination`의 기본값
 - JSON DTO, form 태그가 있는 DTO의 JSON, urlencoded, multipart 입력
@@ -126,4 +121,4 @@ go -C test test . -run '^TestOpenAPI' -count=1
 go -C test/openapi test -race ./... -count=1
 ```
 
-test 모듈은 실제 HTTP 진입점과 소스, CLI가 없는 디렉터리에서 실행 파일만 사용하는 경로를 검증합니다. test/openapi는 Go 1.26 이상에서 공식 OpenAPI 구조 스키마, 독립 JSON Schema 검사와 실제 Echo 요청을 대조합니다. 35개 경계 입력의 일치는 해당 표본의 증거이며 모든 사용자 규칙의 완전한 변환을 뜻하지 않습니다. 코어와 공개 계약은 표준 라이브러리만 사용하며 외부 검증 의존성은 별도 테스트 모듈에 둡니다.
+test 모듈은 실제 HTTP 진입점과 소스, CLI가 없는 디렉터리에서 실행 파일만 사용하는 경로를 검증합니다. test/openapi는 Go 1.26 이상에서 공식 OpenAPI 구조 스키마, 독립 JSON Schema 검사와 실제 Echo 요청을 대조합니다. 검증한 경계 입력의 일치는 해당 표본의 증거이며 모든 사용자 규칙의 완전한 변환을 뜻하지 않습니다. 코어와 공개 계약은 표준 라이브러리만 사용하며 외부 검증 의존성은 별도 테스트 모듈에 둡니다.

@@ -29,8 +29,8 @@ func DTO(t reflect.Type) (reflect.Type, string, bool) {
 		return nil, "", false
 	}
 	visited := map[reflect.Type]bool{}
-	var source func(reflect.Type) string
-	source = func(current reflect.Type) string {
+	var source func(reflect.Type, bool) string
+	source = func(current reflect.Type, declared bool) string {
 		if visited[current] {
 			return ""
 		}
@@ -41,7 +41,7 @@ func DTO(t reflect.Type) (reflect.Type, string, bool) {
 				continue
 			}
 			for _, name := range []string{"query", "header"} {
-				if tag := field.Tag.Get(name); tag != "" && tag != "-" {
+				if tag, exists := field.Tag.Lookup(name); exists && (declared || tag != "" && tag != "-") {
 					return name
 				}
 			}
@@ -50,14 +50,18 @@ func DTO(t reflect.Type) (reflect.Type, string, bool) {
 				base = base.Elem()
 			}
 			if field.Anonymous && base.Kind() == reflect.Struct {
-				if name := source(base); name != "" {
+				if name := source(base, declared); name != "" {
 					return name
 				}
 			}
 		}
 		return ""
 	}
-	name := source(t)
+	name := source(t, false)
+	if name == "" {
+		visited = map[reflect.Type]bool{}
+		name = source(t, true)
+	}
 	return t, name, name != ""
 }
 
@@ -81,6 +85,9 @@ func Fields(t reflect.Type, source string) ([]Field, error) {
 			if !f.IsExported() {
 				continue
 			}
+			if err := CheckTagNames(f); err != nil {
+				return err
+			}
 			for _, other := range []string{"query", "header", "form", "param"} {
 				if tag := f.Tag.Get(other); other != source && tag != "" && tag != "-" {
 					return fmt.Errorf("%s DTO contains %s input; use separate handler parameters", source, other)
@@ -101,8 +108,11 @@ func Fields(t reflect.Type, source string) ([]Field, error) {
 				}
 				continue
 			}
-			if name == "" || name == "-" {
+			if name == "-" {
 				continue
+			}
+			if name == "" {
+				return fmt.Errorf("%s DTO field %s has no %s tag; bind it explicitly or exclude it with '-'", source, f.Name, source)
 			}
 			if strings.Contains(name, ",") || strings.IndexFunc(name, unicode.IsControl) >= 0 {
 				return fmt.Errorf("invalid %s field name %q", source, name)
@@ -120,6 +130,11 @@ func Fields(t reflect.Type, source string) ([]Field, error) {
 			}
 			if !supported(f.Type) {
 				return fmt.Errorf("unsupported %s field %s: %s", source, name, f.Type)
+			}
+			if source == "header" {
+				if err := checkHeaderType(name, f.Type); err != nil {
+					return err
+				}
 			}
 			seen[name] = true
 			fields = append(fields, Field{Name: name, Index: index, Type: f.Type})
@@ -167,14 +182,16 @@ func Bind(target reflect.Value, fields []Field, values map[string][]string, sour
 			}
 			value = value.Field(index)
 		}
-		if source == "header" && value.Kind() == reflect.Slice && !value.Addr().Type().Implements(reflect.TypeFor[encoding.TextUnmarshaler]()) {
-			var parts []string
-			for _, line := range raw {
-				for _, part := range strings.Split(line, ",") {
-					parts = append(parts, strings.TrimSpace(part))
-				}
+		if source == "header" {
+			var err error
+			raw, err = headerValues(field.Name, field.Type, raw)
+			if err != nil {
+				return fmt.Errorf("invalid header field %s", field.Name)
 			}
-			raw = parts
+			if len(raw) == 0 && value.Kind() == reflect.Slice {
+				value.Set(reflect.MakeSlice(value.Type(), 0, 0))
+				continue
+			}
 		}
 		if err := set(value, raw); err != nil {
 			// 거부한 입력값과 사용자 UnmarshalText 오류 원문은 노출하지 않습니다.

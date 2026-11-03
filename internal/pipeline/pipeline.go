@@ -440,7 +440,7 @@ func (p *Pipeline) handleExecutionError(ctx core.ExecutionContext, err error) er
 	}
 
 	if body == nil {
-		body = handler.ErrorJSON(message)
+		body = handler.InputErrorJSON(err, status, message)
 	}
 	if writeErr := rw.WriteJSON(status, body); writeErr != nil {
 		responseErr = errors.Join(responseErr, fmt.Errorf("write execution error response: %w", writeErr))

@@ -7,6 +7,7 @@ import (
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/input"
+	"github.com/NARUBROWN/spine/pkg/httperr"
 )
 
 type FormDTOResolver struct {
@@ -46,10 +47,10 @@ func (r *FormDTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta Param
 
 	// Echo의 폼 바인딩에 위임
 	if err := httpCtx.Bind(dto); err != nil {
-		return nil, err
+		return nil, &httperr.InputError{Source: "body", Cause: err}
 	}
 
-	if err := ValidateDTO(ctx.Context(), r.Validator, dto); err != nil {
+	if err := ValidateHTTPDTO(ctx.Context(), r.Validator, dto, "body", bodyFieldTag(httpCtx)); err != nil {
 		return nil, err
 	}
 	return dto, nil

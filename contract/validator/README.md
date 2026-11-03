@@ -97,3 +97,9 @@ bash scripts/check-module-boundaries.sh
 [spine-validator-playground](https://github.com/NARUBROWN/spine-validator-playground)는 이 계약의 실제 go-playground 구현입니다. `playground.New()`로 생성한 검증기를 `spine.WithValidator`에 전달합니다. 현재 구현의 go-playground v10.30.6은 Go 1.26 이상이 필요하며 Spine 코어의 최소 버전과 별도로 관리됩니다.
 
 새 구현은 이 패키지를 import하고 라이브러리 오류를 공통 `FieldError`로 변환하면 됩니다. 공통 계약을 위한 별도 Go 모듈은 필요하지 않습니다. [플랫폼 계약 E2E](../../test/platform-e2e/README.md)에서 실제 요청과 브로커 메시지의 처리 결과를 확인할 수 있습니다.
+
+## 요청별 외부 필드명
+
+`WithFieldTags(ctx, tags...)`와 `FieldTags(ctx)`는 한 번의 검증에서 외부 필드명에 사용할 태그 우선순위를 전달합니다. 규칙 태그와 공유 검증기 설정은 바꾸지 않습니다. 구현체는 요청에 지정된 태그를 우선하고, 지정되지 않았으면 자신의 기본 필드명 설정을 사용합니다.
+
+HTTP는 실제 바인딩에 따라 json, form, xml, query 또는 header를 선택합니다. 이 계약에는 HTTP 출처나 상태 코드를 넣지 않습니다. 코어가 HTTP 응답을 만들 때만 오류에 body, query, header 출처를 덧붙이며 WebSocket과 소비자의 공통 검증 오류 형식은 유지합니다.

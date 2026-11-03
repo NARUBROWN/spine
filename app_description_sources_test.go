@@ -94,8 +94,16 @@ func TestInputSchemasRequireAConfiguredSchemaDescriber(t *testing.T) {
 			}
 		}
 	}
-	if !strings.Contains(string(document), "INPUT_SCHEMA_DESCRIPTION_UNAVAILABLE") {
-		t.Fatal("입력 명세 생략 이유가 필요합니다")
+	if !desc.PathsOnly || !strings.Contains(string(document), "VALIDATOR_NOT_CONFIGURED") || doc["components"] != nil {
+		t.Fatal("검증기 미등록 시 경로만 설명하고 생략 이유를 남겨야 합니다")
+	}
+	for _, item := range doc["paths"].(map[string]any) {
+		for _, raw := range item.(map[string]any) {
+			responses := raw.(map[string]any)["responses"].(map[string]any)
+			if len(responses) != 1 || responses["default"].(map[string]any)["content"] != nil {
+				t.Fatalf("응답 스키마나 상태 코드를 추정하면 안 됩니다: %s", document)
+			}
+		}
 	}
 }
 

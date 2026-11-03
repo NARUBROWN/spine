@@ -9,11 +9,13 @@ const ContractVersion = "spine.http-description/v1alpha1"
 // HTTP는 한 번의 설명 요청에서 복사한 HTTP 등록과 스키마입니다.
 // 반환값을 수정해도 앱 등록이나 이미 준비된 서버의 명세는 바뀌지 않습니다.
 type HTTP struct {
-	ContractVersion string                     `json:"contract_version"`
-	Enabled         bool                       `json:"enabled"`
-	Routes          []Route                    `json:"routes"`
-	Schemas         map[string]json.RawMessage `json:"schemas"`
-	Diagnostics     []Diagnostic               `json:"diagnostics"`
+	ContractVersion string `json:"contract_version"`
+	Enabled         bool   `json:"enabled"`
+	// PathsOnly는 validator 미등록으로 경로와 메서드만 설명하는 모드입니다.
+	PathsOnly   bool                       `json:"paths_only,omitempty"`
+	Routes      []Route                    `json:"routes"`
+	Schemas     map[string]json.RawMessage `json:"schemas"`
+	Diagnostics []Diagnostic               `json:"diagnostics"`
 }
 
 type Route struct {

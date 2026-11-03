@@ -24,7 +24,7 @@ func (r *PaginationResolver) Resolve(ctx core.ExecutionContext, parameterMeta Pa
 	values := httpCtx.Queries()
 	for _, name := range []string{"page", "size"} {
 		if len(values[name]) > 1 {
-			return nil, httperr.BadRequest("multiple values for query field " + name)
+			return nil, &httperr.InputError{Source: "query", Cause: httperr.BadRequest("multiple values for query field " + name)}
 		}
 	}
 

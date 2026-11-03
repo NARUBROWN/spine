@@ -37,3 +37,13 @@ go test ./contract/http -count=1
 ```
 
 이전 `github.com/NARUBROWN/spine/adapter` 경로는 같은 타입과 오류의 호환 별칭을 제공합니다. 기존 Echo 플랫폼을 그대로 연결할 수 있으며 새 구현은 `contract/http`를 사용합니다.
+
+## 헤더 개수와 목록 바인딩
+
+단일값 헤더는 같은 값의 반복도 거부합니다. 지원하는 표준 목록형 헤더는 여러 줄을 순서대로 병합합니다. 문자열 필드는 전체 필드값을 받고 일반 슬라이스 필드는 파싱한 목록을 받습니다. 사용자 정의 헤더는 scalar와 일반 슬라이스의 선언으로 단일값 또는 쉼표 목록을 정합니다.
+
+기본 목록 처리에는 Accept 계열, Allow, Cache-Control, Connection, Content-Encoding, Content-Language, Forwarded, Pragma, TE, Trailer, Transfer-Encoding, Upgrade, Vary, 접근 제어 목록과 WebSocket 프로토콜 목록을 포함합니다. If-Match와 If-None-Match의 opaque entity tag, Via의 주석과 Link의 URI도 별도로 처리합니다. 원소의 프로토콜 표현은 유지하고 구분자 주변의 SP와 HTAB만 정리합니다. [RFC 9110의 필드 결합 규칙](https://www.rfc-editor.org/rfc/rfc9110.html#section-5.3)을 따릅니다.
+
+Host, Content-Type, Authorization과 날짜 헤더처럼 단일값인 필드에는 일반 슬라이스를 사용할 수 없습니다. Cookie와 인증 challenge 목록도 일반 쉼표 배열로 처리하지 않습니다. Cookie는 여러 줄을 `; `로 병합하고, WWW-Authenticate와 Proxy-Authenticate는 문자열이나 자체 TextUnmarshaler를 사용합니다. 필드 전체의 TextUnmarshaler는 자체 파싱을 위해 전체 값을 받습니다. [HTTP/2 Cookie 결합 규칙](https://www.rfc-editor.org/rfc/rfc9113.html#section-8.2.3)도 보존합니다.
+
+이 타입과 개수 검사는 validator 유무와 관계없이 적용합니다. 태그 없는 본문은 Go JSON 기본 필드명으로 계속 바인딩할 수 있습니다.

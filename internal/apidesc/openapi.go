@@ -72,6 +72,26 @@ func OpenAPI(contract description.HTTP, options boot.OpenAPIOptions) (json.RawMe
 		}
 		id := sha256.Sum256([]byte(route.Method + " " + route.Path))
 		op := map[string]any{"operationId": fmt.Sprintf("%s_%x", method, id[:8])}
+		if contract.PathsOnly {
+			// 경로 변수의 존재만 표현하며 타입이나 검증 규칙을 추측하지 않습니다.
+			parameters := []any{}
+			seenNames := map[string]bool{}
+			for i, segment := range segments {
+				if shape[i] == "{}" {
+					name := strings.TrimSuffix(strings.TrimPrefix(segment, "{"), "}")
+					if !seenNames[name] {
+						parameters = append(parameters, map[string]any{"in": "path", "name": name, "required": true, "schema": map[string]any{}})
+						seenNames[name] = true
+					}
+				}
+			}
+			if len(parameters) > 0 {
+				op["parameters"] = parameters
+			}
+			op["responses"] = map[string]any{"default": map[string]any{"description": "Response details are unavailable without a validator."}}
+			item[method] = op
+			continue
+		}
 		parameters := []any{}
 		seenParameters := map[string]bool{}
 		body := map[string]any{}
@@ -154,6 +174,9 @@ func OpenAPI(contract description.HTTP, options boot.OpenAPIOptions) (json.RawMe
 		item[method] = op
 	}
 	document := map[string]any{"openapi": "3.1.2", "info": map[string]any{"title": title, "version": version}, "paths": paths, "components": map[string]any{"schemas": contract.Schemas}}
+	if contract.PathsOnly {
+		delete(document, "components")
+	}
 	if len(diagnostics) > 0 {
 		document["x-spine-diagnostics"] = diagnostics
 	}
@@ -161,9 +184,10 @@ func OpenAPI(contract description.HTTP, options boot.OpenAPIOptions) (json.RawMe
 }
 
 func errorSchema(validation bool) any {
-	properties := map[string]any{"message": map[string]any{"type": "string"}}
+	location := map[string]any{"type": "string", "enum": []string{"body", "query", "header"}}
+	properties := map[string]any{"message": map[string]any{"type": "string"}, "in": location}
 	if validation {
-		properties["fields"] = map[string]any{"type": "array", "items": map[string]any{"type": "object", "required": []string{"field", "rule"}, "properties": map[string]any{"field": map[string]any{"type": "string"}, "rule": map[string]any{"type": "string"}, "param": map[string]any{"type": "string"}, "message": map[string]any{"type": "string"}}}}
+		properties["fields"] = map[string]any{"type": "array", "items": map[string]any{"type": "object", "required": []string{"field", "rule"}, "properties": map[string]any{"in": location, "field": map[string]any{"type": "string"}, "rule": map[string]any{"type": "string"}, "param": map[string]any{"type": "string"}, "message": map[string]any{"type": "string"}}}}
 	}
 	return map[string]any{"type": "object", "required": []string{"message"}, "properties": properties}
 }

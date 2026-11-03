@@ -49,9 +49,9 @@ func (r *InputDTOResolver) Resolve(ctx core.ExecutionContext, parameter Paramete
 		bindingErr = input.Bind(value.Elem(), fields, values, source)
 	}
 	if bindingErr != nil {
-		return nil, httperr.BadRequest(bindingErr.Error())
+		return nil, &httperr.InputError{Source: source, Cause: httperr.BadRequest(bindingErr.Error())}
 	}
-	if err := ValidateDTO(ctx.Context(), r.Validator, value.Interface()); err != nil {
+	if err := ValidateHTTPDTO(ctx.Context(), r.Validator, value.Interface(), source, source); err != nil {
 		return nil, err
 	}
 	return value.Interface(), nil

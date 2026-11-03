@@ -47,7 +47,7 @@ func TestDTOParameterIssuesUseTypeIdentityAndExcludeNonDTOBindings(t *testing.T)
 	}{
 		{"Body", 1}, {"Query", 1}, {"Header", 1}, {"Form", 1}, {"Alias", 1},
 		{"AfterContext", 2}, {"Anonymous", 1},
-		{"SeparateTypes", -1}, {"SeparatePackages", -1}, {"Contexts", -1}, {"Paths", -1},
+		{"SeparateTypes", 1}, {"SeparatePackages", 1}, {"Contexts", -1}, {"Paths", -1},
 	} {
 		t.Run(test.method, func(t *testing.T) {
 			method, ok := reflect.TypeFor[*controller]().MethodByName(test.method)
@@ -61,7 +61,11 @@ func TestDTOParameterIssuesUseTypeIdentityAndExcludeNonDTOBindings(t *testing.T)
 				}
 				return
 			}
-			if len(issues) != 1 || issues[0].Code != "HTTP_INPUT_DTO_DUPLICATED" || !strings.Contains(issues[0].Message, test.method) || issues[0].Hint == "" {
+			code := "HTTP_INPUT_DTO_DUPLICATED"
+			if test.method == "SeparateTypes" || test.method == "SeparatePackages" {
+				code = "HTTP_BODY_PARAMETERS_DUPLICATED"
+			}
+			if len(issues) != 1 || issues[0].Code != code || !strings.Contains(issues[0].Message, test.method) || issues[0].Hint == "" {
 				t.Fatalf("중복 타입과 핸들러를 안내해야 합니다: %+v", issues)
 			}
 			want := "Routes[3].Parameters[1]"

@@ -34,7 +34,7 @@ func TestBindingUsesOnlyItsSourceAndPreservesPresence(t *testing.T) {
 		Embedded
 		IDs     []uint8   `query:"id"`
 		When    time.Time `query:"when"`
-		Ignored string    `json:"ignored"`
+		Ignored string    `json:"ignored" query:"-"`
 	}
 	fields, err := Fields(reflect.TypeFor[filters](), "query")
 	if err != nil || len(fields) != 3 {

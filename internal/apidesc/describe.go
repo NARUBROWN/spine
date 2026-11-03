@@ -23,6 +23,7 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 	if options == nil {
 		return result, nil
 	}
+	result.PathsOnly = validator == nil
 	if err := boot.ValidationError(options.ValidateIssues("HTTP")...); err != nil {
 		return result, err
 	}
@@ -31,13 +32,24 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 		return result, fmt.Errorf("invalid HTTP global prefix")
 	}
 	c := newCatalog(validator)
+	if result.PathsOnly {
+		c.diagnostic("VALIDATOR_NOT_CONFIGURED", "HTTP", "Only registered paths and methods are described because no validator is configured.")
+	}
 	seen := map[string]bool{}
+	var inputIssues []boot.ConfigIssue
 	for index, spec := range routes {
 		meta, err := router.NewHandlerMeta(spec.Handler)
 		if err != nil {
 			return result, err
 		}
-		if err := boot.ValidationError(httpplan.DTOParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", index))...); err != nil {
+		inputIssues = append(inputIssues, httpplan.DTOParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", index))...)
+	}
+	if err := boot.ValidationError(inputIssues...); err != nil {
+		return result, err
+	}
+	for _, spec := range routes {
+		meta, err := router.NewHandlerMeta(spec.Handler)
+		if err != nil {
 			return result, err
 		}
 		fullPath, err := httpplan.Path(prefix, spec.Path)
@@ -56,6 +68,10 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 		}
 		seen[key] = true
 		route := description.Route{Method: spec.Method, Path: fullPath, Handler: meta.ControllerType.String() + "." + meta.Method.Name, Inputs: []description.Input{}, Returns: []description.Return{}}
+		if result.PathsOnly {
+			result.Routes = append(result.Routes, route)
+			continue
+		}
 		var pathKeys []string
 		for _, segment := range strings.Split(fullPath, "/") {
 			if strings.HasPrefix(segment, ":") {

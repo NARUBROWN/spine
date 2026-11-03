@@ -2,11 +2,13 @@ package resolver
 
 import (
 	"fmt"
+	"mime"
 	"reflect"
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/input"
+	"github.com/NARUBROWN/spine/pkg/httperr"
 )
 
 type DTOResolver struct {
@@ -53,16 +55,27 @@ func (r *DTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta Parameter
 	valuePtr := reflect.New(parameterMeta.Type.Elem())
 
 	if err := httpCtx.Bind(valuePtr.Interface()); err != nil {
-		return nil, fmt.Errorf(
+		return nil, &httperr.InputError{Source: "body", Cause: fmt.Errorf(
 			"DTO binding failed (%s): %w",
 			parameterMeta.Type.Name(),
 			err,
-		)
+		)}
 	}
 
 	// 포인터로 전달
-	if err := ValidateDTO(ctx.Context(), r.Validator, valuePtr.Interface()); err != nil {
+	if err := ValidateHTTPDTO(ctx.Context(), r.Validator, valuePtr.Interface(), "body", bodyFieldTag(httpCtx)); err != nil {
 		return nil, err
 	}
 	return valuePtr.Interface(), nil
+}
+
+func bodyFieldTag(ctx core.HttpRequestContext) string {
+	media, _, _ := mime.ParseMediaType(ctx.Header("Content-Type"))
+	if media == "multipart/form-data" || media == "application/x-www-form-urlencoded" {
+		return "form"
+	}
+	if media == "application/xml" || media == "text/xml" {
+		return "xml"
+	}
+	return "json"
 }

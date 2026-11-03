@@ -39,5 +39,5 @@ func (h *ErrorReturnHandler) Handle(value any, ctx core.ExecutionContext) error 
 		return rw.WriteJSON(400, body)
 	}
 
-	return rw.WriteJSON(status, ErrorJSON(message))
+	return rw.WriteJSON(status, InputErrorJSON(err, status, message))
 }

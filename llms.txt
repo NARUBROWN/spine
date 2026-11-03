@@ -625,14 +625,13 @@ explicit diagnostics. See contract/description/README.md for supported types and
 
 Keep existing *DTO parameters, direct field access and httpx.Response[T] returns. Documentation does not
 require input wrappers or duplicate response declarations. Native DTO Bind remains platform-dependent;
-Separate query/header pointer DTOs bind only their declared source and validate before the handler. Input schema details require a configured SchemaDescriber; runtime status/media retain diagnostics.
+Separate query/header pointer DTOs bind only their declared source and validate before the handler. Without a validator, OpenAPI only lists registered paths and methods, with minimum structural placeholders. It omits input and response details. With a validator, detailed input schemas require SchemaDescriber; runtime status/media retain diagnostics.
 query.Values/header.Values are removed. Migrate using docs/migration/structured-inputs.md; preserve missing values with pointer fields and handle defaults explicitly.
 Form-tagged standard mime/multipart.FileHeader pointers and slices describe named file uploads; file DTOs
 advertise multipart/form-data. Dynamic UploadedFiles keeps an unresolved-field diagnostic.
-Managed Run prints the OpenAPI URL using the bound listener port. The companion CLI's
-contract export --format openapi --source runtime reuses DescribeHTTP and openapi.Generate without a listener.
-It executes BuildApplication and Go tooling, requires a core with these APIs, and preserves the default
-offline --source static mode. test/openapi independently compares official structure, schemas and real HTTP.
+Managed Run prints the OpenAPI URL using the bound listener port. CLI integration is deferred until the
+core input specification is finalized and will be tracked separately. test/openapi independently compares
+official structure, schemas and actual HTTP behavior.
 
 The Bun demo's existing Swaggo UI can remain on `/swagger/*` through platform.WithEcho. Its generated
 Swagger document remains separate from the runtime OpenAPI endpoint. Swagger UI and ReDoc integration
