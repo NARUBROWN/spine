@@ -27,6 +27,7 @@ type HTTPContext interface {
 	Header(string) string
 	// Headers의 반환값을 바꾸어도 원래 요청 헤더가 변경되면 안 됩니다.
 	Headers() map[string][]string
+	// Bind는 본문만 읽으며 경로 값이나 URL 쿼리를 병합하지 않습니다.
 	// JSON 바인딩은 일반 값 타입의 명시적 null을 거부합니다.
 	// nil을 표현할 수 있는 타입과 사용자 정의 JSON 디코더는 각자의 규칙을 따릅니다.
 	Bind(any) error

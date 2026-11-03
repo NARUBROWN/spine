@@ -183,6 +183,13 @@ func Validate(config Config) error {
 			return err
 		}
 	}
+	for i, route := range config.Routes {
+		meta, _ := spineRouter.NewHandlerMeta(route.Handler)
+		issues = append(issues, httpplan.ValidationParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", i), config.Validator)...)
+	}
+	if err := boot.ValidationError(issues...); err != nil {
+		return err
+	}
 	if config.HTTP != nil {
 		hasWebSocketRoutes := config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0
 		if err := adapter.ValidateFactory(config.HTTPAdapterFactory, adapter.Requirements{WebSocketUpgrade: hasWebSocketRoutes}); err != nil {

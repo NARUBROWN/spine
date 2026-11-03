@@ -35,14 +35,7 @@ func (r *DTOResolver) Supports(pm ParameterMeta) bool {
 		return false
 	}
 
-	// form 태그가 하나라도 있으면 FormDTO로 넘긴다
-	for i := 0; i < elem.NumField(); i++ {
-		if elem.Field(i).Tag.Get("form") != "" {
-			return false
-		}
-	}
-
-	return true
+	return !input.HasForm(elem)
 }
 
 func (r *DTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error) {

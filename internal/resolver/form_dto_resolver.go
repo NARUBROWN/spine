@@ -28,13 +28,7 @@ func (r *FormDTOResolver) Supports(pm ParameterMeta) bool {
 		return false
 	}
 
-	for i := 0; i < elem.NumField(); i++ {
-		if elem.Field(i).Tag.Get("form") != "" {
-			return true
-		}
-	}
-
-	return false
+	return input.HasForm(elem)
 }
 
 func (r *FormDTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error) {

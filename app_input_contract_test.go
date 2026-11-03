@@ -47,6 +47,15 @@ type hiddenQueryBody struct{ privateQuerySource }
 type unsupportedHeaderList struct {
 	Values []string `header:"Content-Type"`
 }
+type duplicateJSONLeft struct{ ID string }
+type duplicateJSONRight struct{ ID string }
+type duplicateJSONBody struct {
+	duplicateJSONLeft
+	duplicateJSONRight
+}
+type hiddenNestedQueryBody struct {
+	Inner privateQuerySource `json:"-"`
+}
 type contractController struct{}
 
 func (*contractController) Bodies(*repeatedBody, *anotherBody)         {}
@@ -62,6 +71,8 @@ func (*contractController) EmptyHeader(*emptyHeaderSource)             {}
 func (*contractController) HiddenQuery(*hiddenQueryBody)               {}
 func (*contractController) UnsupportedHeader(*unsupportedHeaderList)   {}
 func (*contractController) Untagged(*anotherBody)                      {}
+func (*contractController) DuplicateJSON(*duplicateJSONBody)           {}
+func (*contractController) HiddenNestedQuery(*hiddenNestedQueryBody)   {}
 
 func TestHTTPInputContractsFailBeforeBootAndDescriptionCallbacks(t *testing.T) {
 	for _, test := range []struct {
@@ -80,6 +91,8 @@ func TestHTTPInputContractsFailBeforeBootAndDescriptionCallbacks(t *testing.T) {
 		{(*contractController).EmptyHeader, "HTTP_INPUT_CONTRACT_INVALID"},
 		{(*contractController).HiddenQuery, "HTTP_INPUT_CONTRACT_INVALID"},
 		{(*contractController).UnsupportedHeader, "HTTP_INPUT_CONTRACT_INVALID"},
+		{(*contractController).DuplicateJSON, "HTTP_INPUT_CONTRACT_INVALID"},
+		{(*contractController).HiddenNestedQuery, "HTTP_INPUT_CONTRACT_INVALID"},
 	} {
 		for _, configured := range []bool{false, true} {
 			for _, disabled := range []bool{false, true} {

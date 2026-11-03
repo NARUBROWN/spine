@@ -72,6 +72,8 @@ Validate, Prepare와 Run은 생성자, 검증기, 어댑터 초기화와 본문 
 
 본문 DTO는 타입이 달라도 하나만 허용합니다. JSON DTO와 폼 DTO를 각각 받는 경우도 `HTTP_BODY_PARAMETERS_DUPLICATED`로 부팅 전에 거부합니다.
 
+본문 DTO 내부에서 JSON 이름이 같은 깊이에서 모호하게 겹치거나 폼 입력 키가 중복되어도 `HTTP_INPUT_CONTRACT_INVALID`로 거부합니다. 정상적인 JSON 익명 임베딩의 필드 가리기 규칙은 유지합니다. json 태그로 제외한 중첩 구조체도 다른 본문 형식의 바인더가 읽을 수 있으므로 query, header, param 태그 혼합 검사에서 제외하지 않습니다.
+
 서로 다른 쿼리 DTO나 헤더 DTO가 같은 입력 키를 선언하면 `HTTP_INPUT_KEY_DUPLICATED`로 거부합니다. 헤더 이름은 대소문자를 구분하지 않습니다. `query.Pagination`의 page, size도 같은 검사에 포함합니다. 본문, 쿼리, 헤더처럼 출처가 다른 동일 이름은 충돌로 취급하지 않습니다. 이 검사는 validator 등록 여부와 OpenAPI 활성화 여부에 관계없이 적용합니다.
 
 본문의 json 태그와 검증 태그는 필수 조건이 아닙니다. 태그 없는 본문 필드는 Go JSON 기본 필드명을 그대로 사용합니다. 검증 태그를 요구하지 않으며, 선택한 validator가 있으면 실제 설정된 규칙만 적용합니다.
@@ -105,7 +107,11 @@ HTTP 수정은 이 규칙을 적용한 Echo 플랫폼과 코어를 함께 사용
 
 태그가 있는 공개 필드만 바인딩합니다. 스칼라, 스칼라 포인터와 슬라이스, RFC3339의 time.Time, encoding.TextUnmarshaler를 지원합니다. 쿼리 슬라이스는 반복 키와 쉼표 구분을 함께 읽습니다. 헤더 이름은 대소문자를 구분하지 않으며, 헤더 슬라이스는 지원하는 목록 문법으로 반복 값과 쉼표 목록을 읽습니다. 사용자 TextUnmarshaler는 요청 중에만 실행합니다. map, 일반 중첩 객체, 익명 포인터 임베딩과 중복 이름은 지원하지 않습니다. 공개 익명 값 구조체의 필드는 펼쳐서 바인딩합니다.
 
-기존 `spine.WithValidator(...)` 연결을 유지하세요. 변환 실패 시 validator를 호출하지 않습니다. 검증기는 쿼리와 헤더 구조체를 각각 검증하며 사용자 규칙도 기존 계약을 따릅니다. Playground 개발 변경은 기본 공개 이름 태그를 json, form, query, header 순서로 확장합니다. 직접 WithFieldTags를 지정했다면 필요한 query, header 태그도 포함하세요.
+기존 `spine.WithValidator(...)` 연결을 유지하세요. 변환 실패 시 validator를 호출하지 않습니다. 검증기는 쿼리와 헤더 구조체를 각각 검증하며 사용자 규칙도 기존 계약을 따릅니다. Playground 개발 변경은 요청에서 선택한 실제 출처의 태그를 오류 이름에 사용합니다. 요청별 선택이 없는 호출은 생성 시 지정한 WithFieldTags 기본값을 유지합니다.
+
+query 또는 header에서 `"-"`로 제외한 필드를 선택한 validator가 필수로 요구하면 `HTTP_INPUT_VALIDATION_CONFLICT`로 부팅 전에 거부합니다. 검증 태그를 강제하지 않으며 validator가 없으면 이 규칙도 적용하지 않습니다. 이 검사는 SchemaDescriber가 설명한 필수 제약에 적용하며 사용자 규칙의 실행 결과를 추측하지 않습니다. OpenAPI를 꺼도 같은 검사를 수행합니다.
+
+기본 Echo 본문 바인딩은 경로와 URL 쿼리를 병합하지 않습니다. urlencoded 폼도 본문 값만 사용합니다. 익명 임베딩과 태그 없는 중첩 값 구조체 안의 form 필드도 같은 필드 계획으로 판별하고 명세에 펼칩니다. 사용자 지정 Binder는 해당 구현의 바인딩 규칙을 따릅니다.
 
 ## 쿼리 슬라이스와 반복 입력
 
@@ -152,6 +158,10 @@ Host, Content-Type, Authorization, Cookie 같은 단일값 또는 별도 문법�
 validator가 없으면 OpenAPI는 경로와 HTTP 메서드만 설명합니다. 입력 모델, 쿼리와 헤더 정보, 반환 모델과 오류 상태 코드를 추정하지 않습니다. 표준 OpenAPI 구조에 필요한 최소 응답 자리와 타입을 지정하지 않은 경로 변수 자리만 남깁니다. 태그 없는 본문 바인딩은 계속 사용할 수 있습니다.
 
 validator가 있으면 해당 구현의 SchemaDescriber로 상세 입력을 설명합니다. 검증기는 있지만 설명 계약이 없으면 `INPUT_SCHEMA_DESCRIPTION_UNAVAILABLE`로 상세 입력 생략 이유를 남깁니다. validator 자체가 없으면 `VALIDATOR_NOT_CONFIGURED`로 경로만 설명하는 이유를 남깁니다.
+
+JSON 요청의 고정 배열은 Go 디코딩처럼 부족한 원소를 기본값으로 채우고 길이를 넘는 원소를 버립니다. 요청 명세는 처리할 위치만 prefixItems로 설명하고, 응답은 고정 길이 배열로 설명합니다. 실제 배열 원소에 적용한 검증 제약은 유지합니다. byte slice 요청은 base64 문자열과 숫자 배열을 모두 설명하며 응답은 base64 문자열로 설명합니다. 익명 구조체의 스키마 식별에는 필드 타입의 전체 패키지 경로를 포함합니다.
+
+명세 리소스는 기본 공개입니다. 부팅 옵션의 `HTTP.OpenAPI.Disabled`를 true로 설정하면 자동 생성과 HTTP 제공을 끕니다. 문서 요청은 업무용 Spine 인터셉터를 실행하지 않습니다.
 
 ```sh
 go test ./...

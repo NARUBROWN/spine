@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/NARUBROWN/spine/contract/description"
 	validation "github.com/NARUBROWN/spine/contract/validator"
@@ -60,7 +59,7 @@ func (c *catalog) schema(t reflect.Type, mode string) any {
 		if id, exists := c.ids[key]; exists {
 			return reference(id)
 		}
-		hash := sha256.Sum256([]byte(t.PkgPath() + ":" + t.Name() + ":" + mode))
+		hash := sha256.Sum256([]byte(typeIdentity(t) + ":" + mode))
 		id := fmt.Sprintf("Collection_%x", hash[:8])
 		c.ids[key], c.schemas[id] = id, map[string]any{}
 		c.schemas[id] = c.schemaValue(t, mode)
@@ -120,10 +119,27 @@ func (c *catalog) schemaValue(t reflect.Type, mode string) any {
 		return map[string]any{}
 	case reflect.Slice:
 		if t.Elem().Kind() == reflect.Uint8 && !strings.HasSuffix(mode, "/query") && !strings.HasSuffix(mode, "/header") {
+			if strings.HasSuffix(mode, "/json") && !strings.HasPrefix(mode, "response/") {
+				return nullable(map[string]any{"anyOf": []any{
+					map[string]any{"type": "string", "contentEncoding": "base64"},
+					map[string]any{"type": "array", "items": c.schema(t.Elem(), mode)},
+				}})
+			}
 			return nullable(map[string]any{"type": "string", "contentEncoding": "base64"})
 		}
 		return nullable(map[string]any{"type": "array", "items": c.schema(t.Elem(), mode)})
 	case reflect.Array:
+		if strings.HasSuffix(mode, "/json") && !strings.HasPrefix(mode, "response/") {
+			prefix := make([]any, t.Len())
+			for i := range prefix {
+				prefix[i] = c.schema(t.Elem(), mode)
+			}
+			result := map[string]any{"type": "array"}
+			if len(prefix) > 0 {
+				result["prefixItems"] = prefix
+			}
+			return result
+		}
 		return map[string]any{"type": "array", "items": c.schema(t.Elem(), mode), "minItems": t.Len(), "maxItems": t.Len()}
 	case reflect.Map:
 		key := t.Key()
@@ -147,7 +163,7 @@ func (c *catalog) schemaValue(t reflect.Type, mode string) any {
 			}
 			return '_'
 		}, base)
-		hash := sha256.Sum256([]byte(t.PkgPath() + ":" + t.String() + ":" + mode))
+		hash := sha256.Sum256([]byte(typeIdentity(t) + ":" + mode))
 		id := fmt.Sprintf("%s_%x", base, hash[:8])
 		c.ids[key], c.schemas[id] = id, map[string]any{}
 		c.schemas[id] = c.structure(t, mode)
@@ -274,101 +290,19 @@ func describeValidation(describer validation.SchemaDescriber, t reflect.Type) (r
 }
 
 type wireField struct {
-	name                               string
-	index                              []int
-	typeOf                             reflect.Type
-	tagged, optional, quoted, indirect bool
+	name                       string
+	index                      []int
+	typeOf                     reflect.Type
+	optional, quoted, indirect bool
 }
 
-// wireFields는 익명 임베딩의 깊이, 태그 우선순위와 이름 충돌을 JSON과 같은 순서로 해석합니다.
-// 폼에서는 form 태그가 있는 필드만 기술합니다.
 func wireFields(root reflect.Type, form bool) []wireField {
-	type entry struct {
-		t        reflect.Type
-		index    []int
-		visited  map[reflect.Type]bool
-		indirect bool
+	fields, _ := input.BodyFields(root, form)
+	result := make([]wireField, 0, len(fields))
+	for _, f := range fields {
+		result = append(result, wireField{name: f.Name, index: f.Index, typeOf: f.Type, optional: f.Optional, quoted: f.Quoted, indirect: f.Indirect})
 	}
-	queue := []entry{{root, nil, map[reflect.Type]bool{root: true}, false}}
-	byName := map[string][]wireField{}
-	for len(queue) > 0 {
-		e := queue[0]
-		queue = queue[1:]
-		for i := 0; i < e.t.NumField(); i++ {
-			f := e.t.Field(i)
-			underlying := f.Type
-			if underlying.Kind() == reflect.Pointer {
-				underlying = underlying.Elem()
-			}
-			if !f.IsExported() && (!f.Anonymous || underlying.Kind() != reflect.Struct) {
-				continue
-			}
-			tag := f.Tag.Get("json")
-			if form {
-				tag = f.Tag.Get("form")
-			}
-			parts := strings.Split(tag, ",")
-			name := parts[0]
-			if tag == "-" {
-				continue
-			}
-			if !validName(name) {
-				name = ""
-			}
-			index := append(append([]int(nil), e.index...), i)
-			if f.Anonymous && underlying.Kind() == reflect.Struct && name == "" {
-				if e.visited[underlying] {
-					continue
-				}
-				seen := map[reflect.Type]bool{}
-				for k, v := range e.visited {
-					seen[k] = v
-				}
-				seen[underlying] = true
-				queue = append(queue, entry{underlying, index, seen, e.indirect || f.Type.Kind() == reflect.Pointer})
-				continue
-			}
-			if form && name == "" {
-				continue
-			}
-			field := wireField{name: name, index: index, typeOf: f.Type, tagged: name != "", indirect: e.indirect}
-			if field.name == "" {
-				field.name = f.Name
-			}
-			for _, option := range parts[1:] {
-				field.optional = field.optional || option == "omitempty" || option == "omitzero"
-				field.quoted = field.quoted || option == "string"
-			}
-			kind := underlying.Kind()
-			field.quoted = field.quoted && (kind == reflect.String || kind == reflect.Bool || integerKind(kind) || kind == reflect.Float32 || kind == reflect.Float64)
-			byName[field.name] = append(byName[field.name], field)
-		}
-	}
-	result := []wireField{}
-	for _, candidates := range byName {
-		sort.SliceStable(candidates, func(i, j int) bool {
-			if len(candidates[i].index) != len(candidates[j].index) {
-				return len(candidates[i].index) < len(candidates[j].index)
-			}
-			return candidates[i].tagged && !candidates[j].tagged
-		})
-		winner := candidates[0]
-		if len(candidates) > 1 && len(winner.index) == len(candidates[1].index) && winner.tagged == candidates[1].tagged {
-			continue
-		}
-		result = append(result, winner)
-	}
-	sort.Slice(result, func(i, j int) bool { return result[i].name < result[j].name })
 	return result
-}
-
-func validName(name string) bool {
-	for _, r := range name {
-		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune("!#$%&()*+-./:;<=>?@[]^_{|}~ ", r) {
-			return false
-		}
-	}
-	return true
 }
 
 func raw(value any) json.RawMessage { contents, _ := json.Marshal(value); return contents }

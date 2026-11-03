@@ -8,12 +8,29 @@ import (
 	"time"
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
+	left "github.com/NARUBROWN/spine/internal/apidesc/testdata/left"
+	right "github.com/NARUBROWN/spine/internal/apidesc/testdata/right"
 )
 
 type sharedA struct {
 	Clash string
 	A     int
 }
+
+func TestAnonymousSchemasKeepPackageIdentityWithinFields(t *testing.T) {
+	a := reflect.TypeFor[struct{ Value left.Item }]()
+	b := reflect.TypeFor[struct{ Value right.Item }]()
+	if a.String() != b.String() {
+		t.Fatal("문자열 표현만으로 구분되지 않는 타입을 검사해야 합니다")
+	}
+	c := newCatalog(nil)
+	c.schema(a, "response/json")
+	c.schema(b, "response/json")
+	if c.ids[schemaKey{a, "response/json"}] == c.ids[schemaKey{b, "response/json"}] {
+		t.Fatal("익명 구조체의 필드 타입 패키지 경로를 보존해야 합니다")
+	}
+}
+
 type sharedB struct {
 	Clash string
 	B     bool

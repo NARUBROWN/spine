@@ -24,7 +24,7 @@ options := boot.Options{
 
 | 옵션 | 기본값 | 동작 |
 | --- | --- | --- |
-| `Disabled` | `false` | `true`이면 명세 리소스를 제공하지 않음 |
+| `Disabled` | `false` | `true`이면 명세 자동 생성과 HTTP 제공을 끔 |
 | `Path` | `/openapi.json` | GET, HEAD를 제공하는 정적 절대 경로 |
 | `Title` | `Spine API` | OpenAPI `info.title` |
 | `Version` | `unversioned` | API 문서 버전. OpenAPI 규격 버전과 별개 |
@@ -37,7 +37,7 @@ options := boot.Options{
 
 ## 문서 요청의 실행 정책
 
-명세 요청은 HTTP 플랫폼의 서버 미들웨어를 통과하지만 비즈니스 컨트롤러, DTO 바인딩, validator와 Spine 인터셉터 파이프라인은 실행하지 않습니다. 문서를 조회하면서 트랜잭션을 열거나 이벤트를 발행하지 않습니다. 문서는 기본적으로 조회 가능하며, 접근 제한이 필요하면 서버 미들웨어를 적용하거나 `Disabled`를 설정합니다.
+명세는 기본 공개 리소스입니다. 요청은 HTTP 플랫폼의 서버 미들웨어를 통과하지만 비즈니스 컨트롤러, DTO 바인딩, validator와 Spine 인터셉터 파이프라인은 실행하지 않습니다. 문서를 조회하면서 트랜잭션을 열거나 이벤트를 발행하지 않습니다. 부팅 옵션의 `HTTP.OpenAPI.Disabled`를 true로 설정하면 명세 자동 생성, HTTP 제공과 문서 경로 충돌 검사를 끕니다. 앱을 명시적으로 설명하는 DescribeHTTP와 openapi.Generate는 계속 사용할 수 있습니다.
 
 ## 앱을 실행하지 않고 설명하거나 내보내기
 

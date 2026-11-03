@@ -47,6 +47,13 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 	if err := boot.ValidationError(inputIssues...); err != nil {
 		return result, err
 	}
+	for index, spec := range routes {
+		meta, _ := router.NewHandlerMeta(spec.Handler)
+		inputIssues = append(inputIssues, httpplan.ValidationParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", index), validator)...)
+	}
+	if err := boot.ValidationError(inputIssues...); err != nil {
+		return result, err
+	}
 	for _, spec := range routes {
 		meta, err := router.NewHandlerMeta(spec.Handler)
 		if err != nil {

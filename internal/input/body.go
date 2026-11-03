@@ -23,6 +23,12 @@ func CheckBody(t reflect.Type) error {
 		case reflect.Pointer, reflect.Slice, reflect.Array, reflect.Map:
 			return walk(current.Elem())
 		case reflect.Struct:
+			for _, form := range []bool{false, true} {
+				_, conflicts := BodyFields(current, form)
+				if len(conflicts) > 0 {
+					return fmt.Errorf("body DTO %s repeats input key %q", current, conflicts[0])
+				}
+			}
 			for i := 0; i < current.NumField(); i++ {
 				field := current.Field(i)
 				if !field.IsExported() {
@@ -41,9 +47,6 @@ func CheckBody(t reflect.Type) error {
 						return fmt.Errorf("body DTO field %s contains %s input; use separate handler parameters", field.Name, source)
 					}
 				}
-				if field.Tag.Get("json") == "-" {
-					continue
-				}
 				if err := walk(field.Type); err != nil {
 					return err
 				}
@@ -52,6 +55,12 @@ func CheckBody(t reflect.Type) error {
 		return nil
 	}
 	return walk(t)
+}
+
+// HasForm은 중첩 값과 익명 임베딩에 있는 폼 필드도 같은 기준으로 찾습니다.
+func HasForm(t reflect.Type) bool {
+	fields, conflicts := BodyFields(t, true)
+	return len(fields) > 0 || len(conflicts) > 0
 }
 
 // CheckTagNames는 지원하는 입력 태그의 흔한 복수형 오타가 본문으로 처리되지 않도록 합니다.

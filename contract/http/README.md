@@ -14,6 +14,8 @@ scope와 writer는 요청 중에만 사용하며 별도 goroutine에서 동시 �
 
 ## Host와 JSON 입력 바인딩
 
+Bind는 본문만 읽으며 경로 값과 URL 쿼리를 병합하지 않습니다. urlencoded 폼에서도 URL 쿼리를 제외한 본문 값만 사용합니다. 기본 Echo 구현은 이미 파싱한 PostForm을 재사용하고, 본문 바인딩 후 원래 native 요청을 유지합니다. 플랫폼의 사용자 지정 Binder를 등록하면 해당 구현이 출처 분리와 디코딩 규칙을 소유합니다.
+
 이 작업 브랜치에서는 Header와 Headers의 Host 조회에 Go 요청의 `Request.Host`를 사용합니다. Go가 Host를 헤더 맵과 분리하므로 플랫폼이 별도로 보충해야 합니다. 대소문자가 다른 Host 이름도 같은 값을 읽으며 포트가 있으면 그대로 보존합니다. `X-Forwarded-Host` 같은 전달 헤더로 대체하지 않습니다. Headers는 원래 요청 맵을 변경하지 않는 조회 뷰를 반환합니다.
 
 기본 JSON 입력 바인딩은 `int`, `bool`, `string`, 일반 구조체와 배열처럼 nil을 표현할 수 없는 타입에 명시한 `null`을 거부합니다. 중첩 필드와 컬렉션 원소에도 같은 규칙을 적용합니다. 필드 누락은 그대로 두며 포인터, map, slice와 interface의 null은 허용합니다. 필수 여부와 값 제약은 등록한 validator가 판단합니다.
