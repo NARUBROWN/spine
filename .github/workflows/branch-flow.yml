@@ -1,0 +1,43 @@
+name: Branch Flow
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+permissions:
+  contents: read
+  statuses: write
+  pull-requests: write
+concurrency:
+  group: branch-flow-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  routing:
+    name: Enforce PR Direction
+    runs-on: ubuntu-latest
+    steps:
+      # PR의 코드를 실행하지 않고 기본 브랜치에 있는 정책만 사용합니다.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const { evaluate } = require('./scripts/release/branch_flow.cjs');
+            const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: context.issue.number });
+            const result = evaluate({
+              head: pr.head.ref,
+              base: pr.base.ref,
+              sameRepository: pr.head.repo?.full_name === pr.base.repo.full_name,
+            });
+            const target_url = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            // Actions의 PR check run과 같은 head SHA에 기록합니다.
+            // 임시 merge SHA에 상태를 쓰면 GitHub가 그 SHA에서 모든 필수 검사를 찾습니다.
+            await github.rest.repos.createCommitStatus({
+              ...context.repo, sha: pr.head.sha, context: result.context,
+              state: result.allowed ? 'success' : 'failure',
+              description: result.description.slice(0, 140), target_url,
+            });
+            if (!result.allowed) {
+              await github.rest.pulls.update({ ...context.repo, pull_number: pr.number, state: 'closed' });
+              core.setFailed(result.description);
+            }

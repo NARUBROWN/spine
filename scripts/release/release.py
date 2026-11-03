@@ -64,6 +64,8 @@ def validate_policy(policy):
         raise ReleaseError("채팅·MSA 예제와 플랫폼 버전 조합을 지정해야 합니다")
     if policy.get("approval_environment") != "release-stable" or not policy.get("reviewer_login"):
         raise ReleaseError("정식 승인 환경과 지정 리뷰어가 필요합니다")
+    if policy.get("branches") != {"preview": "preview", "rc": "rc", "stable": "main"}:
+        raise ReleaseError("출시 브랜치는 preview → rc → main으로 지정해야 합니다")
     for version in [policy["cli_version"], *policy["modules"].values()]:
         if not re.fullmatch(r"v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", version):
             raise ReleaseError("의존성은 변경 가능한 브랜치 대신 버전으로 고정해야 합니다")
@@ -79,7 +81,8 @@ class GitHub:
         self.repository = repository
 
     def api(self, path, *, missing=False, method="GET", data=None):
-        args = ["gh", "api", "--method", method, f"repos/{self.repository}/{path}"]
+        endpoint = f"repos/{self.repository}" + ("/" + path if path else "")
+        args = ["gh", "api", "--method", method, endpoint]
         if data is not None:
             args += ["--input", "-"]
         result = subprocess.run(args, input=json.dumps(data) if data is not None else None,
@@ -125,7 +128,7 @@ class GitHub:
             return json.loads((Path(directory) / "release-manifest.json").read_text())
 
 
-def verify_source_release(github, source, expected_channel):
+def verify_source_release(github, source, expected_channel, policy):
     _, channel, _ = parse_tag(source)
     if channel != expected_channel:
         raise ReleaseError(f"이 단계의 출처는 {expected_channel} 태그여야 합니다")
@@ -137,6 +140,7 @@ def verify_source_release(github, source, expected_channel):
     if (manifest.get("schema_version") != "spine.release-manifest/v1" or
             manifest.get("version") != source or manifest.get("channel") != channel or
             manifest.get("source_sha") != sha or not SHA.fullmatch(sha or "") or
+            manifest.get("branch") != policy["branches"][channel] or
             manifest.get("validation", {}).get("result") != "passed" or
             manifest["validation"].get("source_sha") != sha or
             manifest["validation"].get("version") != source or
@@ -145,9 +149,29 @@ def verify_source_release(github, source, expected_channel):
     workflow_run = github.api(f"actions/runs/{int(manifest['workflow_run_id'])}")
     if (workflow_run.get("conclusion") != "success" or workflow_run.get("status") != "completed" or
             workflow_run.get("event") != "workflow_dispatch" or
+            workflow_run.get("head_branch") != policy["branches"][channel] or
+            workflow_run.get("head_sha") != sha or
             workflow_run.get("path", "").split("@")[0] != f".github/workflows/{WORKFLOWS[channel]}"):
         raise ReleaseError("출처 릴리스의 발행 workflow가 성공하지 않았습니다")
     return release, manifest
+
+
+def promotion(github, source_sha, upstream_sha, branch, upstream_branch):
+    commit = github.api(f"git/commits/{source_sha}")
+    upstream = github.api(f"git/commits/{upstream_sha}")
+    parents = commit.get("parents", [])
+    if len(parents) != 2 or parents[1]["sha"] != upstream_sha:
+        raise ReleaseError("채널 승격은 검증한 후보를 두 번째 부모로 갖는 merge commit이어야 합니다")
+    if commit["tree"]["sha"] != upstream["tree"]["sha"]:
+        raise ReleaseError("승격 merge가 후보 소스를 변경했습니다. 새 Preview에서 다시 검증해야 합니다")
+    pulls = github.api(f"commits/{source_sha}/pulls?per_page=100")
+    matches = [pr for pr in pulls if pr.get("merged_at") and pr.get("merge_commit_sha") == source_sha
+               and pr["base"]["ref"] == branch and pr["head"]["ref"] == upstream_branch
+               and (pr["head"].get("repo") or {}).get("full_name") == github.repository]
+    if not matches:
+        raise ReleaseError(f"{upstream_branch} → {branch} 방향의 병합된 PR이 필요합니다")
+    return {"number": matches[0]["number"], "head": upstream_branch, "base": branch,
+            "merge_sha": source_sha, "head_sha": upstream_sha}
 
 
 def approval_environment(github, policy):
@@ -184,26 +208,28 @@ def make_plan(github, policy, channel, version, source, reason="", now=None):
                    if TAG.fullmatch(item["ref"].removeprefix("refs/tags/"))]
         if numbers and parse_tag(version)[2] <= max(numbers):
             raise ReleaseError("같은 채널의 새 번호는 기존 번호보다 커야 합니다")
-    source_tag = ""
+    branch = policy["branches"][channel]
+    source_sha = github.api(f"git/ref/heads/{branch}")["object"]["sha"]
+    if not SHA.fullmatch(source_sha):
+        raise ReleaseError("채널 브랜치가 유효한 커밋을 가리키지 않습니다")
+    source_tag, upstream_sha, promotion_pr = "", "", None
     if channel == "preview":
-        if not SHA.fullmatch(source):
-            raise ReleaseError("Preview 출처에는 main에 포함된 전체 커밋 SHA가 필요합니다")
-        source_sha = source
+        if not SHA.fullmatch(source) or source != source_sha:
+            raise ReleaseError("Preview 출처에는 preview 브랜치 HEAD의 전체 커밋 SHA가 필요합니다")
     else:
         source_tag = source
         source_base, _, _ = parse_tag(source)
         if source_base != base:
             raise ReleaseError("다른 버전의 후보를 승격할 수 없습니다")
         expected = "preview" if channel == "rc" else "rc"
-        release, manifest = verify_source_release(github, source, expected)
-        source_sha = manifest["source_sha"]
+        release, manifest = verify_source_release(github, source, expected, policy)
+        upstream_sha = manifest["source_sha"]
+        promotion_pr = promotion(github, source_sha, upstream_sha, branch, policy["branches"][expected])
         # 코드와 호환 버전 조합은 승인된 후보에서 그대로 이어받습니다.
         if manifest.get("components") != components(policy):
             raise ReleaseError("후보 검증 뒤 호환 버전 조합이 바뀌었습니다. 새 Preview가 필요합니다")
         require_age(release["published_at"], policy[f"{expected}_hours"], now, reason)
-    comparison = github.api(f"compare/{source_sha}...main")
-    if comparison.get("status") not in ("ahead", "identical"):
-        raise ReleaseError("출시 커밋이 main의 이력에 포함되지 않습니다")
+    tree = github.api(f"git/commits/{source_sha}")["tree"]["sha"]
     source_policy = github.api(f"contents/.github/release-policy.json?ref={source_sha}")
     if json.loads(base64.b64decode(source_policy["content"])) != policy:
         raise ReleaseError("후보 커밋의 릴리스 정책이 현재 계획과 다릅니다. 대상 SHA를 확인하세요")
@@ -218,7 +244,8 @@ def make_plan(github, policy, channel, version, source, reason="", now=None):
             last = max(stable, key=lambda r: timestamp(r["published_at"]))
             require_age(last["published_at"], policy["stable_interval_hours"], now, reason)
     return {"schema_version": "spine.release-manifest/v1", "channel": channel, "version": version,
-            "source_sha": source_sha, "source_tag": source_tag, "components": components(policy),
+            "source_sha": source_sha, "source_tag": source_tag, "branch": branch, "source_tree": tree,
+            "upstream_source_sha": upstream_sha, "promotion_pr": promotion_pr, "components": components(policy),
             "observation_override_reason": reason, "planned_at": now.isoformat(),
             "workflow_run_id": os.environ.get("GITHUB_RUN_ID", ""),
             "repository": github.repository}
@@ -231,15 +258,15 @@ def components(policy):
 def publish(github, policy, plan, verified_sha):
     if verified_sha != plan["source_sha"]:
         raise ReleaseError("검증한 커밋과 발행 대상이 다릅니다")
-    if os.environ.get("GITHUB_REF") != "refs/heads/main":
-        raise ReleaseError("릴리스 workflow는 main에서만 실행할 수 있습니다")
-    current = github.api("contents/.github/release-policy.json?ref=main")
+    if os.environ.get("GITHUB_REF") != "refs/heads/" + plan["branch"]:
+        raise ReleaseError("릴리스 workflow의 실행 브랜치가 채널과 다릅니다")
+    current = github.api("contents/.github/release-policy.json?ref=" + plan["branch"])
     if json.loads(base64.b64decode(current["content"])) != policy:
-        raise ReleaseError("계획을 만든 뒤 main의 릴리스 정책이 바뀌었습니다")
+        raise ReleaseError("계획을 만든 뒤 채널 브랜치의 릴리스 정책이 바뀌었습니다")
     # 승인 대기 중 태그·정책·관찰 기간이 바뀌었는지 쓰기 직전에 다시 검사합니다.
     fresh = make_plan(github, policy, plan["channel"], plan["version"],
                       plan["source_tag"] or plan["source_sha"], plan["observation_override_reason"])
-    for key in ("source_sha", "channel", "version", "components"):
+    for key in ("source_sha", "source_tree", "branch", "promotion_pr", "channel", "version", "components"):
         if fresh[key] != plan[key]:
             raise ReleaseError("승인한 계획이 바뀌었습니다. 새 실행이 필요합니다")
     github.api("git/refs", method="POST", data={"ref": f"refs/tags/{plan['version']}", "sha": verified_sha})
@@ -256,7 +283,8 @@ def finish(github, plan, report):
         path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
         notes = Path(directory) / "notes.md"
         notes.write_text(f"커밋: `{plan['source_sha']}`\n\n"
-                         f"이전 단계: `{plan['source_tag'] or 'main'}`\n\n"
+                         f"채널 브랜치: `{plan['branch']}`\n\n"
+                         f"이전 단계: `{plan['source_tag'] or 'preview'}`\n\n"
                          f"전환 안내: https://github.com/{github.repository}/blob/{plan['source_sha']}/docs/migration/{parse_tag(plan['version'])[0]}.md\n\n"
                          f"관찰 기간 단축 사유: {plan['observation_override_reason'] or '없음'}\n\n"
                          "검증한 CLI·플랫폼·예제 버전과 실행 증거는 첨부 manifest를 확인하세요.\n")
@@ -293,9 +321,9 @@ def main():
         print("정식 릴리스 승인 환경 확인 완료")
         return
     if args.command == "plan":
-        if os.environ.get("GITHUB_REF") != "refs/heads/main":
-            raise ReleaseError("main에서 workflow를 실행해야 합니다")
         channel = os.environ["RELEASE_CHANNEL"]
+        if os.environ.get("GITHUB_REF") != "refs/heads/" + policy["branches"][channel]:
+            raise ReleaseError("채널에 맞는 preview·rc·main 브랜치에서 workflow를 실행해야 합니다")
         source = os.environ["RELEASE_SOURCE"]
         version = parse_tag(source)[0] if channel == "stable" else os.environ["RELEASE_VERSION"]
         plan = make_plan(github, policy, channel, version, source, os.environ.get("RELEASE_OVERRIDE_REASON", ""))

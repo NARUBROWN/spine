@@ -52,7 +52,7 @@ jobs:
     uses: ./.github/workflows/release-public-check.yml
     with:
       source_sha: ${{ needs.plan.outputs.sha }}
-      query: ${{ inputs.source }}
+      query: ${{ needs.plan.outputs.sha }}
       artifact: public-before-tag
   tag:
     needs: [plan, ci, public-before-tag]

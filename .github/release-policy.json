@@ -23,5 +23,10 @@
       "repository": "NARUBROWN/spine-simple-msa-demo",
       "ref": "c84998658380ff005286a193bf6a6379de00bfbe"
     }
+  },
+  "branches": {
+    "preview": "preview",
+    "rc": "rc",
+    "stable": "main"
   }
 }
