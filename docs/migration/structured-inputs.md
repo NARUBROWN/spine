@@ -85,6 +85,16 @@ Validate, Prepare와 Run은 생성자, 검증기, 어댑터 초기화와 본문 
 
 숫자와 bool의 `required`는 선택한 validator의 규칙을 따릅니다. go-playground 구현에서 0과 false를 허용하면서 누락만 거부하려면 `*int`, `*bool` 필드와 `validate:"required"`를 사용하세요. 존재 여부만 확인하던 `Has`도 포인터 필드로 전환할 수 있습니다.
 
+## JSON null과 Host 바인딩
+
+일반 값 타입에 JSON `null`을 보내면 0, false나 빈 문자열로 대체하지 않고 입력 오류로 거부합니다. HTTP에서는 400을 반환하며 validator와 핸들러를 실행하지 않습니다. WS와 이벤트 소비자의 JSON DTO 디코딩도 같은 타입 규칙을 사용합니다. 일반 구조체 전체와 배열 전체의 null, 중첩 필드, 배열과 맵 원소에도 적용합니다.
+
+필드 누락은 이 검사로 거부하지 않습니다. `*int`, `*bool`, `*string` 같은 포인터와 map, slice의 null은 nil로 유지합니다. 그 뒤 등록한 validator가 null을 허용하는지 판단합니다. 예를 들어 go-playground 구현에서 `*int`와 `validate:"required"`를 사용하면 null은 실패하고 실제 숫자 0은 통과합니다. `json.Unmarshaler`를 구현한 타입은 자신의 디코더에서 null 처리를 결정합니다.
+
+`header:"Host"` 필드는 Go 요청의 `Request.Host`에서 읽습니다. 포트가 있으면 그대로 전달하며 `X-Forwarded-Host`로 대체하지 않습니다. 일반 Header 조회와 Headers 조회 뷰에도 같은 값을 제공합니다. 원래 요청 헤더 맵은 변경하지 않습니다. DTO 선언과 필드 접근 방식은 바뀌지 않습니다.
+
+HTTP 수정은 이 규칙을 적용한 Echo 플랫폼과 코어를 함께 사용해야 합니다. 기존 공개 Echo 플랫폼 `v0.1.0`에는 포함되지 않습니다.
+
 ## 지원하는 필드와 검증기
 
 태그가 있는 공개 필드만 바인딩합니다. 스칼라, 스칼라 포인터와 슬라이스, RFC3339의 time.Time, encoding.TextUnmarshaler를 지원합니다. 쿼리 슬라이스는 반복 키에서 읽습니다. 헤더 이름은 대소문자를 구분하지 않으며 헤더 슬라이스는 반복 값과 쉼표 목록을 읽습니다. 사용자 TextUnmarshaler는 요청 중에만 실행합니다. map, 일반 중첩 객체, 익명 포인터 임베딩과 중복 이름은 지원하지 않습니다. 공개 익명 값 구조체의 필드는 펼쳐서 바인딩합니다.

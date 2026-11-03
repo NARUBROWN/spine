@@ -22,8 +22,13 @@ type HTTPContext interface {
 	Params() map[string]string
 	Query(string) string
 	Queries() map[string][]string
+	// Header와 Headers는 Host를 Request.Host에서 보충한 조회 뷰를 제공합니다.
+	// Host에는 포트를 포함한 요청 값을 그대로 사용하며 전달 헤더로 대체하지 않습니다.
 	Header(string) string
+	// Headers의 반환값을 바꾸어도 원래 요청 헤더가 변경되면 안 됩니다.
 	Headers() map[string][]string
+	// JSON 바인딩은 일반 값 타입의 명시적 null을 거부합니다.
+	// nil을 표현할 수 있는 타입과 사용자 정의 JSON 디코더는 각자의 규칙을 따릅니다.
 	Bind(any) error
 	MultipartForm() (*multipart.Form, error)
 	Writer() ResponseWriter

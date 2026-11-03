@@ -12,6 +12,16 @@ native Echo 설정은 플랫폼의 `WithEcho(func(*echo.Echo))` 옵션이 소유
 
 scope와 writer는 요청 중에만 사용하며 별도 goroutine에서 동시 접근하거나 보관하지 않습니다. Spine의 요청 store, 라우팅 결과, EventBus와 응답 staging은 커널이 소유합니다. 요청 오류는 RequestError로 상태와 원인을 전달하고 커널이 공개 HTTP 오류로 변환합니다.
 
+## Host와 JSON 입력 바인딩
+
+이 작업 브랜치에서는 Header와 Headers의 Host 조회에 Go 요청의 `Request.Host`를 사용합니다. Go가 Host를 헤더 맵과 분리하므로 플랫폼이 별도로 보충해야 합니다. 대소문자가 다른 Host 이름도 같은 값을 읽으며 포트가 있으면 그대로 보존합니다. `X-Forwarded-Host` 같은 전달 헤더로 대체하지 않습니다. Headers는 원래 요청 맵을 변경하지 않는 조회 뷰를 반환합니다.
+
+기본 JSON 입력 바인딩은 `int`, `bool`, `string`, 일반 구조체와 배열처럼 nil을 표현할 수 없는 타입에 명시한 `null`을 거부합니다. 중첩 필드와 컬렉션 원소에도 같은 규칙을 적용합니다. 필드 누락은 그대로 두며 포인터, map, slice와 interface의 null은 허용합니다. 필수 여부와 값 제약은 등록한 validator가 판단합니다.
+
+플랫폼은 공통 `github.com/NARUBROWN/spine/pkg/jsonx.Unmarshal`을 사용해 이 규칙을 적용할 수 있습니다. 이 함수는 JSON 필드 이름, 익명 필드 선택과 사용자 정의 `json.Unmarshaler`를 보존합니다. 사용자 정의 JSON 디코더의 null 처리는 해당 구현이 결정합니다. null 타입 오류는 `RequestError`로 감싼 HTTP 400으로 전달하고 validator나 핸들러를 실행하지 않습니다.
+
+이 동작은 새 플랫폼 구현과 코어를 함께 적용해야 합니다. 기존에 공개한 Echo 플랫폼 `v0.1.0`에 소급 적용되지 않습니다.
+
 ASGI의 앱과 서버 경계 및 수명 정의를 참고하지만 **Python ASGI 호환을 제공하지 않습니다.** Spine v0.6.0과 Echo 플랫폼 v0.1.0에서 이 계약을 사용합니다.
 
 ```sh
