@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/query"
 )
 
@@ -19,6 +20,12 @@ func (r *PaginationResolver) Resolve(ctx core.ExecutionContext, parameterMeta Pa
 	httpCtx, ok := ctx.(core.HttpRequestContext)
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")
+	}
+	values := httpCtx.Queries()
+	for _, name := range []string{"page", "size"} {
+		if len(values[name]) > 1 {
+			return nil, httperr.BadRequest("multiple values for query field " + name)
+		}
 	}
 
 	page := parseInt(httpCtx.Query("page"), 1)

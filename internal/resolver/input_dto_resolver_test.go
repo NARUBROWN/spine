@@ -8,6 +8,7 @@ import (
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/pkg/httperr"
+	"github.com/NARUBROWN/spine/pkg/query"
 )
 
 func TestInputDTOResolverBindsOnlyTheDeclaredSourceBeforeValidation(t *testing.T) {
@@ -58,5 +59,62 @@ func TestInputDTOResolverPreservesValidationFailure(t *testing.T) {
 	_, err := r.Resolve(newFakeHttpCtx(), ParameterMeta{Type: reflect.TypeFor[*headers]()})
 	if !errors.Is(err, failure) {
 		t.Fatalf("검증 계약의 오류를 보존해야 합니다: %v", err)
+	}
+}
+
+type rawQueryHTTPContext struct {
+	*fakeHttpCtx
+	raw       string
+	available bool
+}
+
+func (c rawQueryHTTPContext) RawQuery() (string, bool) { return c.raw, c.available }
+
+func TestInputDTOResolverUsesRawQueryBeforeValidation(t *testing.T) {
+	type filters struct {
+		Tags  []string `query:"tags"`
+		Count *int     `query:"count"`
+	}
+	ctx := rawQueryHTTPContext{fakeHttpCtx: newFakeHttpCtx(), raw: "tags=a%2Cb,%20c&tags=d&count=0", available: true}
+	ctx.queries = map[string][]string{"tags": {"wrong decoded fallback"}}
+	calls := 0
+	r := &InputDTOResolver{Validator: validatorFunc(func(_ context.Context, dto any) error {
+		calls++
+		value := dto.(*filters)
+		if !reflect.DeepEqual(value.Tags, []string{"a,b", " c", "d"}) || value.Count == nil || *value.Count != 0 {
+			t.Fatalf("검증기에는 경계를 보존한 DTO를 전달해야 합니다: %+v", value)
+		}
+		return nil
+	})}
+	meta := ParameterMeta{Type: reflect.TypeFor[*filters]()}
+	if _, err := r.Resolve(ctx, meta); err != nil || calls != 1 {
+		t.Fatalf("원시 쿼리 바인딩 실패: %v %d", err, calls)
+	}
+	ctx.raw = "count=0&count=0"
+	_, err := r.Resolve(ctx, meta)
+	var failure *httperr.HTTPError
+	if !errors.As(err, &failure) || failure.Status != 400 || calls != 1 {
+		t.Fatalf("단일 값 중복은 검증 전에 400이어야 합니다: %v %d", err, calls)
+	}
+	ctx.available = false
+	ctx.queries = map[string][]string{"tags": {"a,b"}}
+	r.Validator = nil
+	value, err := r.Resolve(ctx, meta)
+	if err != nil || !reflect.DeepEqual(value.(*filters).Tags, []string{"a,b"}) {
+		t.Fatalf("원시 쿼리가 없으면 디코딩된 쉼표를 구분자로 추측하면 안 됩니다: %+v %v", value, err)
+	}
+}
+
+func TestPaginationRejectsRepeatedQueryValues(t *testing.T) {
+	r := &PaginationResolver{}
+	meta := ParameterMeta{Type: reflect.TypeFor[query.Pagination]()}
+	for _, name := range []string{"page", "size"} {
+		ctx := newFakeHttpCtx()
+		ctx.queries[name] = []string{"1", "1"}
+		_, err := r.Resolve(ctx, meta)
+		var failure *httperr.HTTPError
+		if !errors.As(err, &failure) || failure.Status != 400 {
+			t.Fatalf("페이지네이션도 단일 값 중복을 거부해야 합니다: %v", err)
+		}
 	}
 }

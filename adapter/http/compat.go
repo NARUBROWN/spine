@@ -9,17 +9,18 @@ import httpadapter "github.com/NARUBROWN/spine/contract/http"
 const ContractVersion = httpadapter.ContractVersion
 
 type (
-	HTTPContext    = httpadapter.HTTPContext
-	ResponseWriter = httpadapter.ResponseWriter
-	ExecuteFunc    = httpadapter.ExecuteFunc
-	UpgradeRoute   = httpadapter.UpgradeRoute
-	Config         = httpadapter.Config
-	Factory        = httpadapter.Factory
-	HTTPAdapter    = httpadapter.HTTPAdapter
-	Capabilities   = httpadapter.Capabilities
-	Requirements   = httpadapter.Requirements
-	RequestError   = httpadapter.RequestError
-	ServerOptions  = httpadapter.ServerOptions
+	HTTPContext     = httpadapter.HTTPContext
+	RawQueryContext = httpadapter.RawQueryContext
+	ResponseWriter  = httpadapter.ResponseWriter
+	ExecuteFunc     = httpadapter.ExecuteFunc
+	UpgradeRoute    = httpadapter.UpgradeRoute
+	Config          = httpadapter.Config
+	Factory         = httpadapter.Factory
+	HTTPAdapter     = httpadapter.HTTPAdapter
+	Capabilities    = httpadapter.Capabilities
+	Requirements    = httpadapter.Requirements
+	RequestError    = httpadapter.RequestError
+	ServerOptions   = httpadapter.ServerOptions
 )
 
 var (

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"reflect"
 
+	httpcontract "github.com/NARUBROWN/spine/contract/http"
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/input"
@@ -37,8 +38,18 @@ func (r *InputDTOResolver) Resolve(ctx core.ExecutionContext, parameter Paramete
 		}
 	}
 	value := reflect.New(t)
-	if err := input.Bind(value.Elem(), fields, values, source); err != nil {
-		return nil, httperr.BadRequest(err.Error())
+	var bindingErr error
+	if raw, ok := httpCtx.(httpcontract.RawQueryContext); source == "query" && ok {
+		if query, available := raw.RawQuery(); available {
+			bindingErr = input.BindQuery(value.Elem(), fields, query)
+		} else {
+			bindingErr = input.Bind(value.Elem(), fields, values, source)
+		}
+	} else {
+		bindingErr = input.Bind(value.Elem(), fields, values, source)
+	}
+	if bindingErr != nil {
+		return nil, httperr.BadRequest(bindingErr.Error())
 	}
 	if err := ValidateDTO(ctx.Context(), r.Validator, value.Interface()); err != nil {
 		return nil, err

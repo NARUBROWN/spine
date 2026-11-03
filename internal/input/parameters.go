@@ -154,6 +154,9 @@ func Bind(target reflect.Value, fields []Field, values map[string][]string, sour
 		if !exists || len(raw) == 0 {
 			continue
 		}
+		if source == "query" && !queryList(field.Type) && len(raw) > 1 {
+			return fmt.Errorf("multiple values for query field %s", field.Name)
+		}
 		value := target
 		for _, index := range field.Index {
 			if value.Kind() == reflect.Pointer {

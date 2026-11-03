@@ -97,3 +97,26 @@ func TestHTTPContextUsesStatusTextWhenContractMessageIsEmpty(t *testing.T) {
 		t.Fatalf("계약 오류의 기본 메시지를 보존해야 합니다: %v", err)
 	}
 }
+
+type rawQueryScope struct {
+	testScope
+	raw       string
+	available bool
+}
+
+func (s rawQueryScope) RawQuery() (string, bool) { return s.raw, s.available }
+
+func TestHTTPContextPreservesOptionalRawQueryAvailability(t *testing.T) {
+	for _, source := range []rawQueryScope{
+		{raw: "tags=a%2Cb,c", available: true},
+		{available: true},
+		{available: false},
+	} {
+		if raw, available := NewHTTPContext(source).RawQuery(); raw != source.raw || available != source.available {
+			t.Fatalf("원시 쿼리와 제공 여부를 보존해야 합니다: %q %v", raw, available)
+		}
+	}
+	if raw, available := NewHTTPContext(testScope{}).RawQuery(); raw != "" || available {
+		t.Fatal("기존 어댑터의 디코딩된 값을 원시 쿼리로 가장하면 안 됩니다")
+	}
+}

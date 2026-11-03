@@ -34,6 +34,13 @@ type HTTPContext interface {
 	Writer() ResponseWriter
 }
 
+// RawQueryContext는 URL 디코딩 전의 쿼리를 제공하는 선택적 입력 계약입니다.
+// bool은 원시 쿼리 제공 여부이며 빈 쿼리도 제공할 수 있으면 true를 반환합니다.
+// 슬라이스 바인딩은 이를 사용해 구분자 쉼표와 값 안의 %2C를 구별합니다.
+type RawQueryContext interface {
+	RawQuery() (string, bool)
+}
+
 // ResponseWriter는 실제 HTTP 출력 계약입니다. 응답 staging은 커널이 수행합니다.
 type ResponseWriter interface {
 	SetHeader(key, value string)
