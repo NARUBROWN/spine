@@ -5,12 +5,14 @@ import argparse
 import base64
 import datetime as dt
 import json
+import hashlib
 import os
 from pathlib import Path
 import re
 import subprocess
 import sys
 import tempfile
+import zipfile
 
 
 TAG = re.compile(r"v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(preview|rc)\.([1-9]\d*))?\Z")
@@ -41,7 +43,7 @@ def timestamp(value):
     try:
         return dt.datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(dt.timezone.utc)
     except (AttributeError, ValueError) as exc:
-        raise ReleaseError("공개 시각이 없는 릴리스는 승격할 수 없습니다") from exc
+        raise ReleaseError("공개 시각이나 검증 기록 시각이 올바르지 않습니다") from exc
 
 
 def require_age(published_at, hours, now, reason):
@@ -121,39 +123,69 @@ class GitHub:
             obj = self.api(f"git/tags/{obj['sha']}")["object"]
         raise ReleaseError("태그가 단일 커밋을 가리키지 않습니다")
 
-    def manifest(self, tag):
+    def candidate_evidence(self, tag):
+        parse_tag(tag)
+        name = "release-manifest-" + tag
+        artifacts = []
+        for page in range(1, 101):
+            items = self.api(f"actions/artifacts?name={name}&per_page=100&page={page}")["artifacts"]
+            artifacts.extend(item for item in items if item["name"] == name)
+            if len(items) < 100:
+                break
+        else:
+            raise ReleaseError("후보 검증 기록 목록을 모두 확인하지 못했습니다")
+        if len(artifacts) != 1 or artifacts[0].get("expired", True):
+            raise ReleaseError("태그에 대응하는 검증 artifact가 없거나 중복, 만료됐습니다. 새 Preview가 필요합니다")
+        artifact = artifacts[0]
+        workflow_run = self.api(f"actions/runs/{int(artifact['workflow_run']['id'])}")
         with tempfile.TemporaryDirectory(prefix="spine-release-manifest-") as directory:
-            run("gh", "release", "download", tag, "--repo", self.repository,
-                "--pattern", "release-manifest.json", "--dir", directory)
-            return json.loads((Path(directory) / "release-manifest.json").read_text())
+            archive = Path(directory) / "manifest.zip"
+            with archive.open("wb") as output:
+                result = subprocess.run(["gh", "api", f"repos/{self.repository}/actions/artifacts/{int(artifact['id'])}/zip"],
+                                        stdout=output, stderr=subprocess.PIPE)
+            if result.returncode:
+                raise ReleaseError("후보 검증 artifact를 다운로드하지 못했습니다: " + result.stderr.decode("utf-8", errors="replace").strip())
+            if artifact.get("digest") != "sha256:" + hashlib.sha256(archive.read_bytes()).hexdigest():
+                raise ReleaseError("후보 검증 artifact의 SHA-256이 일치하지 않습니다")
+            try:
+                with zipfile.ZipFile(archive) as package:
+                    manifest = json.loads(package.read("release-manifest.json"))
+            except (zipfile.BadZipFile, KeyError) as exc:
+                raise ReleaseError("후보 검증 artifact에 올바른 manifest가 없습니다") from exc
+        return {"artifact": artifact, "workflow_run": workflow_run, "manifest": manifest}
 
 
-def verify_source_release(github, source, expected_channel, policy):
+def verify_source_candidate(github, source, expected_channel, policy):
     _, channel, _ = parse_tag(source)
     if channel != expected_channel:
         raise ReleaseError(f"이 단계의 출처는 {expected_channel} 태그여야 합니다")
-    release = github.api(f"releases/tags/{source}")
-    if release.get("draft") or not release.get("prerelease"):
-        raise ReleaseError("공개된 사전 릴리스만 승격할 수 있습니다")
-    manifest = github.manifest(source)
+    evidence = github.candidate_evidence(source)
+    artifact, workflow_run, manifest = evidence["artifact"], evidence["workflow_run"], evidence["manifest"]
     sha = github.tag_sha(source)
     if (manifest.get("schema_version") != "spine.release-manifest/v1" or
             manifest.get("version") != source or manifest.get("channel") != channel or
             manifest.get("source_sha") != sha or not SHA.fullmatch(sha or "") or
+            manifest.get("repository") != github.repository or
             manifest.get("branch") != policy["branches"][channel] or
+            manifest.get("source_tree") != github.api(f"git/commits/{sha}")["tree"]["sha"] or
             manifest.get("validation", {}).get("result") != "passed" or
             manifest["validation"].get("source_sha") != sha or
             manifest["validation"].get("version") != source or
             manifest["validation"].get("components") != manifest.get("components")):
-        raise ReleaseError("출처 태그와 릴리스 manifest가 일치하지 않습니다")
-    workflow_run = github.api(f"actions/runs/{int(manifest['workflow_run_id'])}")
+        raise ReleaseError("출처 태그와 검증 manifest가 일치하지 않습니다")
+    artifact_run = artifact.get("workflow_run", {})
     if (workflow_run.get("conclusion") != "success" or workflow_run.get("status") != "completed" or
             workflow_run.get("event") != "workflow_dispatch" or
             workflow_run.get("head_branch") != policy["branches"][channel] or
             workflow_run.get("head_sha") != sha or
+            str(workflow_run.get("id")) != manifest.get("workflow_run_id") or
+            str(workflow_run.get("run_attempt")) != manifest.get("workflow_run_attempt") or
+            artifact.get("name") != "release-manifest-" + source or artifact.get("expired", True) or
+            artifact_run.get("id") != workflow_run.get("id") or
+            artifact_run.get("head_sha") != sha or artifact_run.get("head_branch") != policy["branches"][channel] or
             workflow_run.get("path", "").split("@")[0] != f".github/workflows/{WORKFLOWS[channel]}"):
-        raise ReleaseError("출처 릴리스의 발행 workflow가 성공하지 않았습니다")
-    return release, manifest
+        raise ReleaseError("출처 태그의 검증 workflow와 artifact가 일치하지 않거나 성공하지 않았습니다")
+    return artifact, manifest
 
 
 def promotion(github, source_sha, upstream_sha, branch, upstream_branch):
@@ -212,7 +244,7 @@ def make_plan(github, policy, channel, version, source, reason="", now=None):
     source_sha = github.api(f"git/ref/heads/{branch}")["object"]["sha"]
     if not SHA.fullmatch(source_sha):
         raise ReleaseError("채널 브랜치가 유효한 커밋을 가리키지 않습니다")
-    source_tag, upstream_sha, promotion_pr = "", "", None
+    source_tag, upstream_sha, promotion_pr, source_evidence = "", "", None, None
     if channel == "preview":
         if not SHA.fullmatch(source) or source != source_sha:
             raise ReleaseError("Preview 출처에는 preview 브랜치 HEAD의 전체 커밋 SHA가 필요합니다")
@@ -222,13 +254,15 @@ def make_plan(github, policy, channel, version, source, reason="", now=None):
         if source_base != base:
             raise ReleaseError("다른 버전의 후보를 승격할 수 없습니다")
         expected = "preview" if channel == "rc" else "rc"
-        release, manifest = verify_source_release(github, source, expected, policy)
+        artifact, manifest = verify_source_candidate(github, source, expected, policy)
+        source_evidence = {"artifact_id": artifact["id"], "digest": artifact["digest"],
+                           "workflow_run_id": manifest["workflow_run_id"], "created_at": artifact["created_at"]}
         upstream_sha = manifest["source_sha"]
         promotion_pr = promotion(github, source_sha, upstream_sha, branch, policy["branches"][expected])
         # 코드와 호환 버전 조합은 승인된 후보에서 그대로 이어받습니다.
         if manifest.get("components") != components(policy):
             raise ReleaseError("후보 검증 뒤 호환 버전 조합이 바뀌었습니다. 새 Preview가 필요합니다")
-        require_age(release["published_at"], policy[f"{expected}_hours"], now, reason)
+        require_age(artifact["created_at"], policy[f"{expected}_hours"], now, reason)
     tree = github.api(f"git/commits/{source_sha}")["tree"]["sha"]
     source_policy = github.api(f"contents/.github/release-policy.json?ref={source_sha}")
     if json.loads(base64.b64decode(source_policy["content"])) != policy:
@@ -246,8 +280,10 @@ def make_plan(github, policy, channel, version, source, reason="", now=None):
     return {"schema_version": "spine.release-manifest/v1", "channel": channel, "version": version,
             "source_sha": source_sha, "source_tag": source_tag, "branch": branch, "source_tree": tree,
             "upstream_source_sha": upstream_sha, "promotion_pr": promotion_pr, "components": components(policy),
+            "source_evidence": source_evidence,
             "observation_override_reason": reason, "planned_at": now.isoformat(),
             "workflow_run_id": os.environ.get("GITHUB_RUN_ID", ""),
+            "workflow_run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", "1"),
             "repository": github.repository}
 
 
@@ -263,34 +299,36 @@ def publish(github, policy, plan, verified_sha):
     current = github.api("contents/.github/release-policy.json?ref=" + plan["branch"])
     if json.loads(base64.b64decode(current["content"])) != policy:
         raise ReleaseError("계획을 만든 뒤 채널 브랜치의 릴리스 정책이 바뀌었습니다")
-    # 승인 대기 중 태그·정책·관찰 기간이 바뀌었는지 쓰기 직전에 다시 검사합니다.
+    # 승인 대기 중 태그, 정책, 관찰 기간이 바뀌었는지 쓰기 직전에 다시 검사합니다.
     fresh = make_plan(github, policy, plan["channel"], plan["version"],
                       plan["source_tag"] or plan["source_sha"], plan["observation_override_reason"])
-    for key in ("source_sha", "source_tree", "branch", "promotion_pr", "channel", "version", "components"):
+    for key in ("source_sha", "source_tree", "branch", "promotion_pr", "source_evidence", "channel", "version", "components"):
         if fresh[key] != plan[key]:
             raise ReleaseError("승인한 계획이 바뀌었습니다. 새 실행이 필요합니다")
     github.api("git/refs", method="POST", data={"ref": f"refs/tags/{plan['version']}", "sha": verified_sha})
 
 
-def finish(github, plan, report):
+def finish(github, plan, report, manifest_path="release-manifest.json"):
     if (report.get("source_sha") != plan["source_sha"] or report.get("version") != plan["version"] or
             report.get("result") != "passed" or report.get("components") != plan["components"] or
             github.tag_sha(plan["version"]) != plan["source_sha"]):
         raise ReleaseError("공개 모듈 검증 결과가 발행 계획과 다릅니다")
     manifest = dict(plan, validation=report)
+    path = Path(manifest_path).resolve()
+    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    # 후보는 태그와 Actions artifact로 검증 기록을 남기고 정식 버전만 GitHub Release를 공개합니다.
+    if plan["channel"] != "stable":
+        return
     with tempfile.TemporaryDirectory(prefix="spine-release-publish-") as directory:
-        path = Path(directory) / "release-manifest.json"
-        path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
         notes = Path(directory) / "notes.md"
         notes.write_text(f"커밋: `{plan['source_sha']}`\n\n"
                          f"채널 브랜치: `{plan['branch']}`\n\n"
                          f"이전 단계: `{plan['source_tag'] or 'preview'}`\n\n"
                          f"전환 안내: https://github.com/{github.repository}/blob/{plan['source_sha']}/docs/migration/{parse_tag(plan['version'])[0]}.md\n\n"
                          f"관찰 기간 단축 사유: {plan['observation_override_reason'] or '없음'}\n\n"
-                         "검증한 CLI·플랫폼·예제 버전과 실행 증거는 첨부 manifest를 확인하세요.\n")
+                         "검증한 CLI, 플랫폼과 예제 버전, 실행 증거는 첨부 manifest를 확인하세요.\n")
         args = ["gh", "release", "create", plan["version"], str(path), "--repo", github.repository,
-                "--verify-tag", "--title", plan["version"], "--notes-file", str(notes)]
-        args += ["--latest"] if plan["channel"] == "stable" else ["--prerelease", "--latest=false"]
+                "--verify-tag", "--title", plan["version"], "--notes-file", str(notes), "--latest"]
         run(*args)
 
 
@@ -300,6 +338,7 @@ def main():
     parser.add_argument("--policy", default=".github/release-policy.json")
     parser.add_argument("--plan", default="release-plan.json")
     parser.add_argument("--report", default="release-validation.json")
+    parser.add_argument("--manifest", default="release-manifest.json")
     args = parser.parse_args()
     policy = json.loads(Path(args.policy).read_text())
     validate_policy(policy)
@@ -340,7 +379,7 @@ def main():
         if args.command == "tag":
             publish(github, policy, plan, os.environ["VERIFIED_SHA"])
         else:
-            finish(github, plan, json.loads(Path(args.report).read_text()))
+            finish(github, plan, json.loads(Path(args.report).read_text()), args.manifest)
 
 
 if __name__ == "__main__":

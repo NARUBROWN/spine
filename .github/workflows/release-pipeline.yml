@@ -98,7 +98,13 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: public-after-tag
-      - name: Publish release with verified manifest
+      - name: Record verified tag and publish Production release
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/release/release.py finish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest-${{ needs.plan.outputs.version }}
+          path: release-manifest.json
+          if-no-files-found: error
+          retention-days: 90

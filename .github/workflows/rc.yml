@@ -8,7 +8,7 @@ on:
         type: string
         required: true
       preview_tag:
-        description: 검증과 공개를 마친 같은 버전의 Preview 태그
+        description: 태그 공개와 Actions 검증 기록 저장을 마친 같은 버전의 Preview 태그
         type: string
         required: true
       observation_override_reason:
