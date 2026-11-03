@@ -33,7 +33,7 @@ def specification(branch):
             {"type": "required_status_checks", "parameters": {
                 "strict_required_status_checks_policy": False,
                 "required_status_checks": [
-                    {"context": "Verified Source", "integration_id": 15368},
+                    {"context": "Verified Source / " + branch, "integration_id": 15368},
                     {"context": "Branch Flow / " + branch, "integration_id": 15368},
                 ],
             }},

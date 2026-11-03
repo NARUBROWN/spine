@@ -384,7 +384,7 @@ jobs:
         working-directory: .
 
   verified:
-    name: Verified Source
+    name: ${{ github.event_name == 'pull_request' && format('Verified Source / {0}', github.base_ref) || 'Verified Source' }}
     runs-on: ubuntu-latest
     if: ${{ always() }}
     needs: [branch-direction, quality, unit, integration, e2e, race, event-platform-e2e, release-policy]
