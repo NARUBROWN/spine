@@ -1,3 +1,12 @@
+# Spine v0.6.5 release
+
+Spine v0.6.5 includes the completed HTTP/WebSocket/event/validator contract separation and App wiring together.
+Use contract/http, contract/websocket, contract/event and contract/validator; the kernel module uses only the standard library.
+The composition API remains spine.New(echo.Option(), gorilla.Option(), spine.WithEventAdapter(name, factory), spine.WithValidator(validator)).
+Create event factories and validators first and handle their errors. WebSocket routes require an explicit WebSocket option.
+The v0.6.5 migration guide is docs/migration/v0.6.5.md. Sections naming v0.6.0 or dated pseudo-versions below record earlier compatibility evidence; they do not override the v0.6.5 API or final release recipe.
+Core and non-playground apps require Go 1.25.5+, and playground apps require Go 1.26+.
+
 # Spine
 
 > Agent-oriented guide to understanding Spine and building correct applications with the current checkout. Spine is a Go backend framework whose method signatures are the request/response contract and whose startup wiring is explicit.
