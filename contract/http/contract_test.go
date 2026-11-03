@@ -1,4 +1,4 @@
-package httpadapter_test
+package httpcontract_test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	adapter "github.com/NARUBROWN/spine/adapter/http"
+	adapter "github.com/NARUBROWN/spine/contract/http"
 )
 
 // 외부 패키지에서 공개 계약만으로 구현할 수 있는지 컴파일 시 확인합니다.

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync"
 
-	eventadapter "github.com/NARUBROWN/spine/adapter/event"
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
 )
 
 // PlatformPublisher는 실패한 발행기를 분리하고 다음 호출에서 새 자원을 준비합니다.

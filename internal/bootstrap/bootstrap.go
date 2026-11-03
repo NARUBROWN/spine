@@ -8,8 +8,9 @@ import (
 	"strings"
 	"time"
 
-	eventadapter "github.com/NARUBROWN/spine/adapter/event"
-	adapter "github.com/NARUBROWN/spine/adapter/http"
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
+	adapter "github.com/NARUBROWN/spine/contract/http"
+	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
@@ -38,6 +39,8 @@ type Config struct {
 	HTTP                   *boot.HTTPOptions
 	HTTPAdapterFactory     adapter.Factory
 	WebSocketRegistry      *ws.Registry
+	Validator              validation.Validator
+	ValidatorConfigured    bool
 }
 
 // EventAdapterBinding은 구현과 공통 실행 정책을 연결하는 준비 설정입니다.
@@ -167,6 +170,11 @@ func Validate(config Config) error {
 	}
 	if err := boot.ValidationError(issues...); err != nil {
 		return err
+	}
+	if config.ValidatorConfigured || config.Validator != nil {
+		if err := validation.CheckValidator(config.Validator); err != nil {
+			return err
+		}
 	}
 	if config.HTTP != nil {
 		if err := adapter.ValidateFactory(config.HTTPAdapterFactory, adapter.Requirements{WebSocketUpgrade: config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0}); err != nil {
@@ -400,7 +408,7 @@ func printBanner() {
 	log.Printf("[Bootstrap] Spine version: %s", spineVersion)
 }
 
-func buildConsumerPipeline(container *container.Container, registry *consumer.Registry, dispatchHook *hook.EventDispatchHook) *pipeline.Pipeline {
+func buildConsumerPipeline(container *container.Container, registry *consumer.Registry, dispatchHook *hook.EventDispatchHook, validator validation.Validator) *pipeline.Pipeline {
 	consumerRouter := spineRouter.NewRouter()
 	for _, registration := range registry.Registrations() {
 		consumerRouter.Register("EVENT", registration.Topic, registration.Meta)
@@ -417,7 +425,7 @@ func buildConsumerPipeline(container *container.Container, registry *consumer.Re
 		&resolver.StdContextResolver{},
 		&eventResolver.EventNameResolver{},
 		&eventResolver.PayloadResolver{},
-		&eventResolver.DTOResolver{},
+		&eventResolver.DTOResolver{Validator: validator},
 	)
 
 	return consumerPipeline
@@ -428,6 +436,7 @@ func buildWSPipeline(
 	registry *ws.Registry,
 	dispatchHook *hook.EventDispatchHook,
 	interceptors []core.Interceptor,
+	validator validation.Validator,
 ) *pipeline.Pipeline {
 	wsRouter := spineRouter.NewRouter()
 	for _, reg := range registry.Registrations() {
@@ -448,7 +457,7 @@ func buildWSPipeline(
 		&resolver.StdContextResolver{},
 		&wsResolver.ConnectionIDResolver{},
 		&wsResolver.PayloadResolver{},
-		&wsResolver.DTOResolver{},
+		&wsResolver.DTOResolver{Validator: validator},
 	)
 
 	return wsPipeline

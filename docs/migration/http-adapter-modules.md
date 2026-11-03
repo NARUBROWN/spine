@@ -1,6 +1,6 @@
 # Echo 플랫폼으로 전환하기
 
-현재 개발 소스의 HTTP 계약 정식 경로는 `github.com/NARUBROWN/spine/adapter/http`이며 Go 패키지 이름은 `httpadapter`입니다. 기존 `github.com/NARUBROWN/spine/adapter`는 같은 타입과 오류를 재노출하는 호환 경로로 유지합니다. 아래에 기록된 Spine v0.6.0·Echo 플랫폼 v0.1.0 조합은 기존 경로를 그대로 사용할 수 있습니다. 전체 계약 분류는 [adapter 문서](../../adapter/README.md)를 참고하세요.
+현재 소스에서는 공통 계약을 `contract/http`, `contract/event`, `contract/validator`로 정리합니다. HTTP의 이전 `adapter` 경로에는 같은 타입의 호환 별칭을 유지하므로 아래 v0.6.0 플랫폼 연결 예제는 계속 사용할 수 있습니다. 새 구현은 [공통 계약](../../contract/README.md)을 참고하세요.
 
 Spine `v0.6.0`부터 새 프로젝트의 공식 시작 경로는 Spine CLI의 `spine new`입니다. CLI가 Echo 플랫폼 연결과 의존성을 구성합니다. 이 문서는 기존 앱의 전환과 직접 플랫폼을 연결하는 방법을 설명합니다.
 

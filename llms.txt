@@ -22,7 +22,7 @@ Use sources in this order:
 
 The external demos reviewed on 2026-07-30 all pin Spine `v0.5.1`. Their architecture is useful, but reconcile copied code with this checkout before using it. This checkout changes HTTP app construction: choose the Echo integration explicitly using `platform.New()`.
 
-Do not import `github.com/NARUBROWN/spine/internal/...` from an application. Application code should use the root package, `adapter/http`, `adapter/event`, `core`, `interceptor/...`, and `pkg/...` only. The old `adapter` package remains an HTTP compatibility facade.
+Do not import `github.com/NARUBROWN/spine/internal/...` from an application. Application code should use the root package, `contract/...`, `core`, `interceptor/...`, and `pkg/...` only.
 
 For source development, use local module replacements as shown in `cmd/demo/go.mod`.
 For new applications, install the CLI with @latest and use its bundled recipe, with no local replacements. Read the generated go.mod for the selected versions; the runtime API reference below uses the v0.6.0/v0.1.0 baseline.
@@ -31,8 +31,8 @@ See `docs/migration/http-adapter-modules.md` for the intentional constructor cha
 
 ## HTTP integration modules
 
-- `github.com/NARUBROWN/spine/adapter/http` (package httpadapter): canonical public standard-library-only HTTP execution interfaces, versioned with Spine. The old `spine/adapter` path re-exports the same types, version and errors for released consumers.
-- `github.com/NARUBROWN/spine`: kernel and public adapter contract, with no Echo or platform-module dependency.
+- `github.com/NARUBROWN/spine/contract/http` (package httpcontract): public standard-library-only HTTP execution interfaces, versioned with Spine. The old `spine/adapter` import remains a compatibility alias.
+- `github.com/NARUBROWN/spine`: kernel app assembly, with no Echo or platform-module dependency. Public contracts live under `contract/`.
 - `github.com/NARUBROWN/spine-echo-platform` (package platform): Echo v5.4.4 implementation and starter, depending on Spine and Echo.
 
 Spine v0.6.0 and Echo platform v0.1.0 use `spine.http-adapter/v2`: native hooks belong to typed platform.WithEcho options, JSON writers accept json.RawMessage, and framework routing/writer state uses typed fields. App.Transport and Config.NativeHooks are removed. Custom ExecutionContext implementations must provide SetRoute(params map[string]string, pathKeys []string); HTTP response access uses core.HTTPResponseContext. User Set/Get storage remains separate. Platform v0.1.0 depends on released Spine v0.6.0. Module consumers use the published dependencies without local replacements; the repository fixtures retain sibling-checkout replacements for source development.
@@ -60,7 +60,7 @@ ASGI informs the boundary and lifetime design. This does not provide Python ASGI
 
 ## Event adapter contract
 
-`github.com/NARUBROWN/spine/adapter/event` (package eventadapter) defines `spine.event-adapter/v1` using only
+`github.com/NARUBROWN/spine/contract/event` (package eventcontract) defines `spine.event-adapter/v1` using only
 the standard library. Register a named factory with `spine.WithEventAdapter(name, factory)` alongside the HTTP
 platform option. Consume/Publish roles come from the factory's immutable capabilities. App.Validate checks
 names, capabilities and common policies offline. Prepare constructs publishers and retains ready readers;
@@ -78,10 +78,10 @@ execution and post-processing, or Nack after failure. Settlement errors require 
 reconnecting, including ErrReaderInvalidated for Kafka-style failed-offset protection. Close is idempotent
 and its context bounds waiting only. Publishing is synchronous and concurrency-safe; input bytes are read-only.
 Local fake-platform tests cover lifecycle and execution boundaries; separate real-broker App E2E tests cover delivery. Neither implies DB/broker atomicity or exactly-once.
-See adapter/event/README.md for payload lifetimes, cancellation, shutdown and error semantics.
+See contract/event/README.md for payload lifetimes, cancellation, shutdown and error semantics.
 The current CLI does not reconcile event factory selection/capabilities or broker readiness. Its static consumer registrations and partial registry probe do not replace the real-broker App E2E tests.
 
-The `adapter/http` and `adapter/event` packages classify public contracts by transport. Concrete integrations
+The `contract/http`, `contract/event` and `contract/validator` packages define public execution and validation contracts. Concrete integrations
 use `spine-XXX-platform` module names: spine-echo-platform, spine-kafka-platform and spine-rabbitmq-platform.
 A platform implements a Spine contract and owns native settings and resource lifetimes. This term covers
 both HTTP execution and broker readers/publishers; it does not require identical constructors across transports.
@@ -247,7 +247,9 @@ Use this map instead of searching the entire repository blindly:
 - `pkg/event/publish`: domain-event contract and request-scoped publishing.
 - `pkg/route`: route-level interceptor options.
 - `core/interceptor.go`, `core/context.go`: interceptor and context contracts.
-- `adapter`: public HTTP execution contract package within Spine; no separate module or repository.
+- `contract/http`, `contract/event`, `contract/validator`: public standard-library-only contracts. HTTP, event factories and validators are connected to App assembly and runtime execution; native HTTP, broker and validation engines remain external.
+- `contract/validator`: `spine.validation/v1`, selected with `spine.WithValidator`. HTTP body/form DTOs and WebSocket/consumer message DTOs are validated after decoding, before handlers. Omission disables validation; explicit nil is rejected at preflight. HTTP rule failures return 400 with `message` and `fields`; WebSocket rule failures close with 1008; consumer failures follow existing NACK policy. Processing/configuration failures remain distinct from invalid DTOs. Concrete validation engines are external. See `contract/validator/README.md`.
+- `adapter`, `adapter/http`, `adapter/event`: compatibility aliases for released HTTP and event integrations. New implementations use `contract/http` and `contract/event`.
 - [spine-echo-platform](https://github.com/NARUBROWN/spine-echo-platform): independent Echo implementation and starter repository, checked out beside Spine.
 - `internal/transport`: kernel HTTP scope bridge adding Spine store, routing state, EventBus and error conversion.
 - `internal/bootstrap`: shared preparation, managed execution and resource cleanup; no concrete HTTP platform import.

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	eventadapter "github.com/NARUBROWN/spine/adapter/event"
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	"github.com/NARUBROWN/spine/pkg/boot"
 )

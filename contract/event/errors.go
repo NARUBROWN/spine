@@ -1,4 +1,4 @@
-package eventadapter
+package eventcontract
 
 import "errors"
 

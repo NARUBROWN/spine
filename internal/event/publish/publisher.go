@@ -3,7 +3,7 @@ package publish
 import (
 	"context"
 
-	eventadapter "github.com/NARUBROWN/spine/adapter/event"
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
 )
 
 type EventPublisher interface {

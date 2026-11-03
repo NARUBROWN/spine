@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	eventadapter "github.com/NARUBROWN/spine/adapter/event"
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
 	"net"
 	"strings"
 	"sync"

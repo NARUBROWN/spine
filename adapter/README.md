@@ -1,28 +1,13 @@
-# 어댑터 계약
+# 이전 계약 경로 호환성
 
-Spine의 공개 계약은 전송 종류별 패키지로 나눕니다. 계약은 표준 라이브러리만 사용하고 구체 구현은 `spine-XXX-platform` 모듈이 소유합니다.
+공개 계약의 정식 경로는 [`contract/http`](../contract/http/README.md), [`contract/event`](../contract/event/README.md), [`contract/validator`](../contract/validator/README.md)입니다.
 
-| 계약 | 패키지 | 구현 모듈 |
-| --- | --- | --- |
-| HTTP | [`adapter/http`](http/README.md), package `httpadapter` | `spine-echo-platform` |
-| 이벤트 | [`adapter/event`](event/README.md), package `eventadapter` | `spine-kafka-platform`, `spine-rabbitmq-platform` |
+이 디렉토리는 공개된 플랫폼 버전과 앱이 같은 타입과 오류를 계속 사용할 수 있도록 호환 별칭을 제공합니다.
 
-`platform`은 Spine 계약을 특정 기술로 구현하고 native 설정과 자원 수명을 관리하는 통합 모듈을 뜻합니다. HTTP 플랫폼은 HTTP 실행을, 브로커 플랫폼은 Reader와 Publisher를 제공합니다.
+| 이전 import | 정식 import |
+| --- | --- |
+| `github.com/NARUBROWN/spine/adapter` | `github.com/NARUBROWN/spine/contract/http` |
+| `github.com/NARUBROWN/spine/adapter/http` | `github.com/NARUBROWN/spine/contract/http` |
+| `github.com/NARUBROWN/spine/adapter/event` | `github.com/NARUBROWN/spine/contract/event` |
 
-## 기존 HTTP 경로의 호환성
-
-`github.com/NARUBROWN/spine/adapter`는 기존 HTTP 소비자를 위한 호환 패키지로 남습니다. 공개 타입은 `adapter/http`의 타입 별칭이고 계약 버전, 오류와 `ValidateFactory`도 같은 구현을 사용합니다. 기존 Echo 플랫폼과 앱은 import 경로를 바꾸지 않고 계속 사용할 수 있습니다.
-
-새 HTTP 구현은 다음 경로를 사용합니다.
-
-```go
-import httpadapter "github.com/NARUBROWN/spine/adapter/http"
-```
-
-이벤트 구현은 다음 경로를 사용합니다.
-
-```go
-import eventadapter "github.com/NARUBROWN/spine/adapter/event"
-```
-
-이 패키지 재배치는 HTTP 계약 `spine.http-adapter/v2`의 메서드나 버전을 바꾸지 않습니다. 이벤트 계약은 `spine.event-adapter/v1`입니다. 이벤트 factory는 `spine.WithEventAdapter(name, factory)`로 App에 등록합니다. 기존 `boot.Options.Kafka`·`RabbitMQ`와 코어의 구체 브로커 구현은 제거했으며 [마이그레이션 안내](../docs/migration/event-platforms.md)에 따라 플랫폼 설정으로 옮깁니다.
+각 경로의 타입·계약 버전·오류는 정식 계약과 같습니다. `ValidateFactory`도 같은 구현을 호출합니다. 기존 Echo·Kafka·RabbitMQ 플랫폼을 사용하기 위해 import를 즉시 바꿀 필요는 없습니다. 새 구현은 정식 경로를 사용하세요.

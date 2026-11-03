@@ -1,6 +1,6 @@
-// Package eventadapter는 Spine 커널과 브로커 구현이 공유하는 공개 이벤트 전송 계약입니다.
+// Package eventcontract는 Spine 커널과 브로커 구현이 공유하는 공개 이벤트 전송 계약입니다.
 // 표준 라이브러리만 사용하며 도메인 이벤트, DI, 파이프라인과 브로커 클라이언트를 참조하지 않습니다.
-package eventadapter
+package eventcontract
 
 import (
 	"context"

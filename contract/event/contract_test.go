@@ -1,4 +1,4 @@
-package eventadapter_test
+package eventcontract_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/NARUBROWN/spine/adapter/event"
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
 )
 
 // 외부 구현이 internal 타입이나 도메인 이벤트 없이 계약 전체를 만족할 수 있는지 확인합니다.

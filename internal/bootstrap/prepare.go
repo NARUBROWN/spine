@@ -9,8 +9,8 @@ import (
 	"reflect"
 	"strings"
 
-	eventadapter "github.com/NARUBROWN/spine/adapter/event"
-	adapter "github.com/NARUBROWN/spine/adapter/http"
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
+	adapter "github.com/NARUBROWN/spine/contract/http"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
@@ -237,10 +237,10 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 			&resolver.QueryValuesResolver{},
 
 			// 요청 본문 리졸버
-			&resolver.DTOResolver{},
+			&resolver.DTOResolver{Validator: config.Validator},
 
 			// 폼 DTO(멀티파트/폼)
-			&resolver.FormDTOResolver{},
+			&resolver.FormDTOResolver{Validator: config.Validator},
 
 			// 멀티파트 파일
 			&resolver.UploadedFilesResolver{},
@@ -278,7 +278,7 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 			log.Printf("[Bootstrap] Configuring WebSocket routes (%d routes)", len(wsRegistrations))
 
 			// WS 전용 인자 리졸버 등록
-			wsPipeline := buildWSPipeline(container, config.WebSocketRegistry, dispatchHook, resolvedWSInterceptors)
+			wsPipeline := buildWSPipeline(container, config.WebSocketRegistry, dispatchHook, resolvedWSInterceptors, config.Validator)
 
 			application.wsRuntime = ws.NewRuntime(
 				wsPipeline,
@@ -346,7 +346,7 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 			}
 			runtime := consumer.NewRuntime(config.ConsumerRegistry,
 				consumer.NewPlatformFactory(binding.Factory, binding.Options),
-				buildConsumerPipeline(container, config.ConsumerRegistry, dispatchHook))
+				buildConsumerPipeline(container, config.ConsumerRegistry, dispatchHook, config.Validator))
 			application.consumers = append(application.consumers, consumerRuntime{name: binding.Name, runtime: runtime})
 			if err := runtime.PrepareWithRetry(ctx); err != nil {
 				if ctx.Err() != nil && errors.Is(err, ctx.Err()) {

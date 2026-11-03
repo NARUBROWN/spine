@@ -5,8 +5,9 @@ import (
 	"strings"
 	"time"
 
-	eventadapter "github.com/NARUBROWN/spine/adapter/event"
-	adapter "github.com/NARUBROWN/spine/adapter/http"
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
+	adapter "github.com/NARUBROWN/spine/contract/http"
+	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/bootstrap"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
@@ -41,14 +42,16 @@ type App interface {
 }
 
 type app struct {
-	constructors       []any
-	routes             []router.RouteSpec
-	interceptors       []bootstrap.InterceptorBinding
-	customTransports   []core.CustomTransport
-	consumerRegistry   *consumer.Registry
-	websocketRegistry  *ws.Registry
-	httpAdapterFactory adapter.Factory
-	eventAdapters      []bootstrap.EventAdapterBinding
+	constructors        []any
+	routes              []router.RouteSpec
+	interceptors        []bootstrap.InterceptorBinding
+	customTransports    []core.CustomTransport
+	consumerRegistry    *consumer.Registry
+	websocketRegistry   *ws.Registry
+	httpAdapterFactory  adapter.Factory
+	eventAdapters       []bootstrap.EventAdapterBinding
+	validator           validation.Validator
+	validatorConfigured bool
 }
 
 // Option은 애플리케이션의 통합 구현을 명시적으로 선택하는 생성 옵션입니다.
@@ -84,6 +87,15 @@ func WithEventConsumerRetry(policy boot.ConsumerRetryOptions) EventAdapterOption
 // WithEventSettlementTimeout은 Ack/Nack 완료를 기다릴 최대 시간을 설정합니다.
 func WithEventSettlementTimeout(timeout time.Duration) EventAdapterOption {
 	return func(options *boot.EventOptions) { options.SettlementTimeout = timeout }
+}
+
+// WithValidator는 모든 기본 DTO 리졸버가 사용할 검증기를 등록합니다.
+// 생략하면 검증하지 않으며, 명시적으로 등록한 nil은 앱 사전 검사에서 거부합니다.
+func WithValidator(validator validation.Validator) Option {
+	return func(a *app) {
+		a.validator = validator
+		a.validatorConfigured = true
+	}
 }
 
 // New는 특정 HTTP 서버 구현을 선택하지 않는 Spine 커널 앱을 생성합니다.
@@ -151,6 +163,8 @@ func (a *app) bootstrapConfig(opts boot.Options) bootstrap.Config {
 		WebSocketRegistry:      a.websocketRegistry,
 		HTTP:                   opts.HTTP,
 		HTTPAdapterFactory:     a.httpAdapterFactory,
+		Validator:              a.validator,
+		ValidatorConfigured:    a.validatorConfigured,
 	}
 }
 

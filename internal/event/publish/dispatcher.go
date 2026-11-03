@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"sync"
 
-	eventadapter "github.com/NARUBROWN/spine/adapter/event"
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
 	"github.com/NARUBROWN/spine/pkg/event/publish"
 )
 

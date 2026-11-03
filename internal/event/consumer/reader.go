@@ -3,7 +3,7 @@ package consumer
 import (
 	"context"
 
-	eventadapter "github.com/NARUBROWN/spine/adapter/event"
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
 )
 
 // ErrReaderInvalidated는 현재 Reader 세션으로 다음 메시지를 읽어서는 안 된다는 뜻입니다.

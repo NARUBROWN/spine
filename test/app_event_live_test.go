@@ -18,7 +18,7 @@ import (
 	echoplatform "github.com/NARUBROWN/spine-echo-platform"
 	kafkaplatform "github.com/NARUBROWN/spine-kafka-platform"
 	rabbitmqplatform "github.com/NARUBROWN/spine-rabbitmq-platform"
-	eventadapter "github.com/NARUBROWN/spine/adapter/event"
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/NARUBROWN/spine/pkg/httpx"

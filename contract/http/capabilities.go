@@ -1,4 +1,4 @@
-package httpadapter
+package httpcontract
 
 import (
 	"fmt"

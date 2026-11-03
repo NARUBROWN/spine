@@ -1,10 +1,10 @@
 // Package adapter는 기존 HTTP 계약 import 경로의 호환성을 유지합니다.
-// 새 구현은 github.com/NARUBROWN/spine/adapter/http를 사용합니다.
+// 새 구현은 github.com/NARUBROWN/spine/contract/http를 사용합니다.
 //
-// Deprecated: HTTP 계약은 adapter/http, 이벤트 계약은 adapter/event를 사용하세요.
+// Deprecated: 공개 계약은 contract/http, contract/event, contract/validator를 사용하세요.
 package adapter
 
-import httpadapter "github.com/NARUBROWN/spine/adapter/http"
+import httpadapter "github.com/NARUBROWN/spine/contract/http"
 
 const ContractVersion = httpadapter.ContractVersion
 

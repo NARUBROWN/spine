@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	eventadapter "github.com/NARUBROWN/spine/adapter/event"
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
 )
 
 type platformFactoryStub struct {

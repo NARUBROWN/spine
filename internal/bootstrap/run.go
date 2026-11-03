@@ -11,7 +11,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	adapter "github.com/NARUBROWN/spine/adapter/http"
+	adapter "github.com/NARUBROWN/spine/contract/http"
 )
 
 func Run(config Config) error { return RunContext(context.Background(), config) }

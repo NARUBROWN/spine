@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	adapter "github.com/NARUBROWN/spine/adapter/http"
+	adapter "github.com/NARUBROWN/spine/contract/http"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 )
 

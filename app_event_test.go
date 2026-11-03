@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/NARUBROWN/spine"
-	eventadapter "github.com/NARUBROWN/spine/adapter/event"
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/event/publish"
 )

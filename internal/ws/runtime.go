@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/pkg/boot"
@@ -285,9 +286,13 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 
 		if err := r.pipeline.Execute(ctx); err != nil {
 			log.Printf("[WS] Handler failed (conn=%p): %v", &connID, err)
+			code, reason := websocket.CloseInternalServerErr, "handler error"
+			if _, ok := validation.AsError(err); ok {
+				code, reason = websocket.ClosePolicyViolation, "invalid message"
+			}
 			_ = tracked.writeControl(
 				websocket.CloseMessage,
-				websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "handler error"),
+				websocket.FormatCloseMessage(code, reason),
 				r.options.WriteTimeout,
 			)
 			return

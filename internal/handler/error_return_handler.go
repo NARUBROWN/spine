@@ -35,6 +35,8 @@ func (h *ErrorReturnHandler) Handle(value any, ctx core.ExecutionContext) error 
 	if errors.As(err, &httpErr) {
 		status = httpErr.Status
 		message = httpErr.Message
+	} else if body, ok := ValidationErrorJSON(err); ok {
+		return rw.WriteJSON(400, body)
 	}
 
 	return rw.WriteJSON(status, ErrorJSON(message))
