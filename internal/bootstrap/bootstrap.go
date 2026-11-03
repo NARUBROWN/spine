@@ -150,6 +150,7 @@ func Validate(config Config) error {
 	}
 	for i, route := range config.Routes {
 		if meta, err := spineRouter.NewHandlerMeta(route.Handler); err == nil {
+			issues = append(issues, httpplan.DTOParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", i))...)
 			for index := 1; index < meta.Method.Type.NumIn(); index++ {
 				parameter := meta.Method.Type.In(index)
 				if payload, source, ok := input.DTO(parameter); ok {

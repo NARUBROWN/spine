@@ -32,9 +32,12 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 	}
 	c := newCatalog(validator)
 	seen := map[string]bool{}
-	for _, spec := range routes {
+	for index, spec := range routes {
 		meta, err := router.NewHandlerMeta(spec.Handler)
 		if err != nil {
+			return result, err
+		}
+		if err := boot.ValidationError(httpplan.DTOParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", index))...); err != nil {
 			return result, err
 		}
 		fullPath, err := httpplan.Path(prefix, spec.Path)

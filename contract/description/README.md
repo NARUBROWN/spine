@@ -56,6 +56,8 @@ return err
 
 위 코드는 `spine`과 `github.com/NARUBROWN/spine/pkg/openapi`를 import한 함수 내부 예입니다. `app`, HTTP가 활성화된 `options`, `io.Writer`인 `output`을 받습니다. `DescribeHTTP`는 생성자, factory, 핸들러나 검증 규칙을 실행하지 않습니다. 검증기가 `SchemaDescriber`를 구현하면 부작용 없는 규칙 설명 메서드만 호출합니다.
 
+같은 핸들러에서 동일한 구조체 타입의 입력 DTO를 중복 선언하면 `HTTP_INPUT_DTO_DUPLICATED`로 거부합니다. 타입 별칭도 같은 타입으로 판정하며 다른 라우트에서의 재사용은 허용합니다. 앱 사전 검사와 HTTP 설명은 같은 검사 규칙을 사용합니다.
+
 기존 `spine.App` 인터페이스에는 메서드를 추가하지 않았습니다. 표준 앱은 선택적 `spine.HTTPDescriber`를 구현합니다. 이 기능이 없는 사용자 정의 App에는 `ErrHTTPDescriptionUnavailable`을 반환합니다.
 
 ## 검증 규칙

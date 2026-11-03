@@ -58,6 +58,18 @@ func (c *Controller) Search(q *SearchQuery, headers *RequestHeaders) httpx.Respo
 
 기존 DTO에 `json`과 `query` 태그를 함께 넣고 플랫폼의 병합 바인딩에 의존했다면, 쿼리 DTO와 본문 DTO를 분리하세요. 특히 이전 Echo 바인딩의 GET, DELETE 제한과 본문 덮어쓰기 동작은 새 쿼리 구조체에 적용하지 않습니다.
 
+## 같은 DTO를 중복 인자로 선언하지 않기
+
+한 핸들러에서 같은 구조체 타입의 입력 DTO를 두 번 이상 선언하면 `HTTP_INPUT_DTO_DUPLICATED`로 거부합니다. 예를 들어 `Create(first *CreateBody, second *CreateBody)`는 허용하지 않습니다. 인자 이름을 바꾸어도 다른 입력으로 취급하지 않습니다. 필요한 값은 기존 인자에서 읽으세요.
+
+타입 별칭인 `type Alias = CreateBody`도 원래 타입과 같으므로 중복으로 판정합니다. 서로 다른 패키지의 동명 타입과 `type OtherBody CreateBody`처럼 새로 정의한 구조체 타입은 이 중복 타입 검사에서 구분합니다. 필드 모양이나 타입 이름 문자열만 비교하지 않습니다.
+
+검사는 핸들러마다 독립적으로 수행합니다. 같은 DTO를 다른 핸들러나 라우트에서 사용하는 것은 허용합니다. context.Context와 ControllerContext 같은 컨텍스트, 서로 다른 경로 키를 받는 path.Int 같은 내장 경로 인자는 DTO 중복 검사 대상이 아닙니다.
+
+Validate, Prepare와 Run은 생성자, 검증기, 어댑터 초기화와 본문 읽기 전에 이 설정 오류를 반환합니다. HTTP를 활성화한 DescribeHTTP도 같은 검사를 사용합니다. OpenAPI 리소스를 Disabled로 설정해도 앱 사전 검사의 중복 규칙은 유지됩니다. 오류의 Routes[i].Parameters[j]는 receiver를 제외한 0부터 시작하는 인자 위치입니다.
+
+이 규칙은 같은 Go 타입의 중복 선언을 검사합니다. 서로 다른 타입을 사용하는 모든 조합의 유효성을 보장하는 규칙은 아닙니다.
+
 ## 누락, 기본값과 변환 오류 구분하기
 
 | 입력 상태 | 새 구조체 바인딩 |
