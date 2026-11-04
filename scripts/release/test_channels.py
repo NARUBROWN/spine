@@ -117,7 +117,7 @@ class ChannelPolicyTests(unittest.TestCase):
     def test_source_workspace_builds_without_querying_unpublished_tags(self):
         policy = platform_policy(release.CORE + "-echo-platform")
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             (root / ".github").mkdir()
             (root / ".github/release-policy.json").write_text(json.dumps(policy))
             (root / "go.mod").write_text("module " + policy["module"] + "\n\ngo 1.26.0\n\nrequire github.com/NARUBROWN/spine v0.7.0-preview.1\n")
@@ -128,8 +128,10 @@ class ChannelPolicyTests(unittest.TestCase):
             (source / "source.go").write_text("package spine\nconst Value = 1\n")
             with patch.dict(os.environ, {"GITHUB_ENV": ""}):
                 workspace = ci_workspace.prepare(root, root / "source.work")
-            subprocess.run(["go", "build", "./..."], cwd=root,
-                           env=dict(os.environ, GOWORK=str(workspace), GOPROXY="off", GOSUMDB="off"), check=True)
+            result = subprocess.run(["go", "build", "./..."], cwd=root,
+                                    env=dict(os.environ, GOWORK=str(workspace), GOPROXY="off", GOSUMDB="off"),
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr + "\nroot=" + str(root) + "\n" + workspace.read_text())
             self.assertNotIn("replace", (root / "go.mod").read_text())
 
     def test_dependency_free_core_and_empty_child_module_require_lists_are_valid(self):
