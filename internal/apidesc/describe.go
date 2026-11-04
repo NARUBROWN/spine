@@ -42,7 +42,7 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 		if err != nil {
 			return result, err
 		}
-		inputIssues = append(inputIssues, httpplan.DTOParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", index))...)
+		inputIssues = append(inputIssues, httpplan.DTOParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", index), spec.Path)...)
 	}
 	if err := boot.ValidationError(inputIssues...); err != nil {
 		return result, err

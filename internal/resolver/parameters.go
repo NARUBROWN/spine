@@ -13,7 +13,7 @@ func Parameters(method reflect.Method, pathKeys []string) []ParameterMeta {
 	for i := 1; i < method.Type.NumIn(); i++ {
 		t := method.Type.In(i)
 		parameter := ParameterMeta{Index: i - 1, Type: t}
-		if t.PkgPath() == reflect.TypeFor[path.Int]().PkgPath() {
+		if IsLegacyPath(t) {
 			if pathIndex < len(pathKeys) {
 				parameter.PathKey = pathKeys[pathIndex]
 			}
@@ -22,4 +22,12 @@ func Parameters(method reflect.Method, pathKeys []string) []ParameterMeta {
 		result = append(result, parameter)
 	}
 	return result
+}
+
+// IsLegacyPath는 전환 기간에만 사용하는 기존 경로 래퍼를 식별합니다.
+func IsLegacyPath(t reflect.Type) bool {
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	return t == reflect.TypeFor[path.Int]() || t == reflect.TypeFor[path.String]() || t == reflect.TypeFor[path.Boolean]()
 }

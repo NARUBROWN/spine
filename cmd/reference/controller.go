@@ -11,11 +11,20 @@ import (
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	"github.com/NARUBROWN/spine/pkg/multipart"
-	"github.com/NARUBROWN/spine/pkg/path"
 	"github.com/NARUBROWN/spine/pkg/query"
 	"github.com/NARUBROWN/spine/pkg/spine"
 	"github.com/NARUBROWN/spine/pkg/ws"
 )
+
+type UserPath struct {
+	ID int64 `path:"id"`
+}
+type OrderPath struct {
+	OrderID int64 `path:"orderId"`
+}
+type StockPath struct {
+	StockID int64 `path:"stockId"`
+}
 
 type UserController struct{}
 
@@ -40,7 +49,7 @@ type User struct {
 	Name string `json:"name"`
 }
 
-func (c *UserController) GetUser(ctx context.Context, userId path.Int, spineCtx spine.Ctx) (User, error) {
+func (c *UserController) GetUser(ctx context.Context, p *UserPath, spineCtx spine.Ctx) (User, error) {
 	v, ok := spineCtx.Get("test")
 	if !ok {
 		return User{}, httperr.BadRequest("context does not contain content")
@@ -106,9 +115,9 @@ func (c *UserController) Upload(
 	return "OK"
 }
 
-func (c *UserController) CreateOrder(ctx context.Context, orderId path.Int) httpx.Response[string] {
+func (c *UserController) CreateOrder(ctx context.Context, p *OrderPath) httpx.Response[string] {
 	publish.Event(ctx, OrderCreated{
-		OrderID: orderId.Value,
+		OrderID: p.OrderID,
 		At:      time.Now(),
 	})
 
@@ -117,9 +126,9 @@ func (c *UserController) CreateOrder(ctx context.Context, orderId path.Int) http
 	}
 }
 
-func (c *UserController) CreateStock(ctx context.Context, stockId path.Int) httpx.Response[string] {
+func (c *UserController) CreateStock(ctx context.Context, p *StockPath) httpx.Response[string] {
 	publish.Event(ctx, StockCreated{
-		OrderID: stockId.Value,
+		OrderID: p.StockID,
 		At:      time.Now(),
 	})
 

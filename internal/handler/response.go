@@ -66,7 +66,7 @@ func inputSource(err error) string {
 	var input *httperr.InputError
 	if errors.As(err, &input) && input != nil {
 		switch input.Source {
-		case "body", "query", "header":
+		case "body", "path", "query", "header":
 			return input.Source
 		}
 	}

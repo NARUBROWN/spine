@@ -66,7 +66,9 @@ return err
 
 `contract/validator.SchemaDescriber`는 Go 필드 인덱스와 JSON Schema 2020-12 제약을 연결합니다. 기존 `Validator` 인터페이스는 유지됩니다. 설명 기능이 없는 validator도 요청 검증은 정상 동작하지만 상세 입력 명세는 생략합니다. 지원하지 않는 사용자 규칙, 태그 이름 변경과 규칙 덮어쓰기는 실제 validator 구현이 판단해야 합니다. 명세를 얻으려고 `Validate`에 빈 DTO를 넣지 않습니다.
 
-검증기의 숫자 `required`는 0, bool `required`는 false도 거부할 수 있습니다. 이런 제약은 OpenAPI의 `required` 배열 외에 값 제약으로도 표현해야 합니다. 포인터의 필수값은 null과 필드 누락을 구분해 설명합니다. HTTP 400에는 바인딩 오류의 `message`, 출처인 `in`과 DTO 검증 오류의 선택적 `fields`를 기술합니다. 검증 필드에는 입력 출처와 실제 바인딩 필드명을 사용합니다. 태그 없는 본문과 검증 태그 없는 DTO도 사용할 수 있습니다.
+검증기의 숫자 `required`는 0, bool `required`는 false도 거부할 수 있습니다. 이런 제약은 OpenAPI의 `required` 배열 외에 값 제약으로도 표현해야 합니다. 포인터의 필수값은 null과 필드 누락을 구분해 설명합니다. 경로 이름 불일치, 같은 라우트의 중복 경로 변수와 기존 래퍼 및 Path DTO의 혼용은 validator나 명세 활성화 여부와 무관하게 부팅 전에 거부합니다.
+
+HTTP 400에는 바인딩 오류의 `message`, 출처인 `in`과 DTO 검증 오류의 선택적 `fields`를 기술합니다. 검증 필드에는 입력 출처와 실제 바인딩 필드명을 사용합니다. 태그 없는 본문과 검증 태그 없는 DTO도 사용할 수 있습니다.
 
 ## 기존 입력과 반환형 사용
 
@@ -85,7 +87,7 @@ app.Route("POST", "/users", (*UserController).Create)
 
 위 코드는 앱이 정의한 `UserController`, `UserDTO`와 `pkg/httpx`를 사용하는 예입니다. 입력 필드는 `input.Name`으로 직접 읽습니다. 명세는 등록된 메서드와 경로, JSON 필드, 반환형의 본문 타입을 추출합니다. 검증기를 등록하면 설명 가능한 `validate` 규칙도 반영합니다.
 
-쿼리와 헤더는 각각 별도 구조체 포인터로 받습니다. `query` 필드 태그가 있는 DTO는 쿼리에서, `header` 필드 태그가 있는 DTO는 헤더에서만 읽습니다. 함수 안에서는 일반 필드로 직접 접근하며 본문이 값을 덮어쓰지 않습니다. 서로 다른 출처의 필드는 한 DTO에 섞지 않습니다. query.Values와 header.Values는 제거했습니다. [구조체 입력 전환 안내](../../docs/migration/structured-inputs.md)를 참고하세요.
+경로, 쿼리와 헤더는 각각 별도 구조체 포인터로 받습니다. path 태그는 라우트의 경로 변수 이름과 정확히 연결하며 구조체 필드 순서에 의존하지 않습니다. 경로 파라미터는 검증 태그와 무관하게 required로 설명하고 포인터 필드도 null로 표시하지 않습니다. `query` 필드 태그가 있는 DTO는 쿼리에서, `header` 필드 태그가 있는 DTO는 헤더에서만 읽습니다. 함수 안에서는 일반 필드로 직접 접근하며 본문이 값을 덮어쓰지 않습니다. 서로 다른 출처의 필드는 한 DTO에 섞지 않습니다. query.Values와 header.Values는 제거했습니다. 기존 path.Int, path.String, path.Boolean은 전환 기간에 단독 사용을 유지하며 새 Path DTO와 혼용하면 거부합니다. [구조체 입력 전환 안내](../../docs/migration/structured-inputs.md)를 참고하세요.
 
 파일은 기존 `form` 태그와 표준 라이브러리의 `*mime/multipart.FileHeader`, `[]*mime/multipart.FileHeader`, `[]mime/multipart.FileHeader`에서 필드 이름과 개수를 추출합니다. 파일 필드가 있는 DTO는 multipart/form-data로만 기술합니다. 현재 Echo 기본 바인더와 대조했으며 다른 플랫폼은 자체 바인더의 지원 여부를 확인해야 합니다. 동적인 `multipart.UploadedFiles`는 필드 이름을 추측하지 않습니다.
 

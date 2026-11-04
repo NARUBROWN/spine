@@ -14,13 +14,15 @@ import (
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
-	"github.com/NARUBROWN/spine/pkg/path"
 )
 
+type userPath struct {
+	ID int64 `path:"id"`
+}
 type appCtrl struct{}
 
-func (c *appCtrl) GetUser(id path.Int) httpx.Response[int] {
-	return httpx.Response[int]{Body: int(id.Value)}
+func (c *appCtrl) GetUser(p *userPath) httpx.Response[int] {
+	return httpx.Response[int]{Body: int(p.ID)}
 }
 
 func (c *appCtrl) Hello() httpx.Response[string] {

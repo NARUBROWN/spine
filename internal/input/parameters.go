@@ -19,7 +19,7 @@ type Field struct {
 	Type  reflect.Type
 }
 
-// DTO는 일반 구조체의 query 또는 header 태그에서 입력 출처를 식별합니다.
+// DTO는 일반 구조체의 path, query 또는 header 태그에서 입력 출처를 식별합니다.
 // 타입 이름과 제네릭 래퍼에 의존하지 않습니다. 혼합 출처는 Fields에서 거부합니다.
 func DTO(t reflect.Type) (reflect.Type, string, bool) {
 	if t.Kind() == reflect.Pointer {
@@ -40,7 +40,7 @@ func DTO(t reflect.Type) (reflect.Type, string, bool) {
 			if !field.IsExported() {
 				continue
 			}
-			for _, name := range []string{"query", "header"} {
+			for _, name := range []string{"path", "query", "header"} {
 				if tag, exists := field.Tag.Lookup(name); exists && (declared || tag != "" && tag != "-") {
 					return name
 				}
@@ -88,7 +88,7 @@ func Fields(t reflect.Type, source string) ([]Field, error) {
 			if err := CheckTagNames(f); err != nil {
 				return err
 			}
-			for _, other := range []string{"query", "header", "form", "param"} {
+			for _, other := range []string{"path", "query", "header", "form", "param"} {
 				if tag := f.Tag.Get(other); other != source && tag != "" && tag != "-" {
 					return fmt.Errorf("%s DTO contains %s input; use separate handler parameters", source, other)
 				}
@@ -131,6 +131,15 @@ func Fields(t reflect.Type, source string) ([]Field, error) {
 			if !supported(f.Type) {
 				return fmt.Errorf("unsupported %s field %s: %s", source, name, f.Type)
 			}
+			if source == "path" {
+				base := f.Type
+				if base.Kind() == reflect.Pointer {
+					base = base.Elem()
+				}
+				if !supportedScalar(base) {
+					return fmt.Errorf("unsupported path field %s: use a scalar or TextUnmarshaler", name)
+				}
+			}
 			if source == "header" {
 				if err := checkHeaderType(name, f.Type); err != nil {
 					return err
@@ -167,7 +176,13 @@ func Bind(target reflect.Value, fields []Field, values map[string][]string, sour
 	for _, field := range fields {
 		raw, exists := values[field.Name]
 		if !exists || len(raw) == 0 {
+			if source == "path" {
+				return fmt.Errorf("missing path field %s", field.Name)
+			}
 			continue
+		}
+		if source == "path" && len(raw) != 1 {
+			return fmt.Errorf("multiple values for path field %s", field.Name)
 		}
 		if source == "query" && !queryList(field.Type) && len(raw) > 1 {
 			return fmt.Errorf("multiple values for query field %s", field.Name)

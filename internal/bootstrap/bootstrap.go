@@ -149,7 +149,7 @@ func Validate(config Config) error {
 	}
 	for i, route := range config.Routes {
 		if meta, err := spineRouter.NewHandlerMeta(route.Handler); err == nil {
-			issues = append(issues, httpplan.DTOParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", i))...)
+			issues = append(issues, httpplan.DTOParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", i), route.Path)...)
 		}
 		if _, err := spineRouter.NewHandlerMeta(route.Handler); err != nil {
 			issues = append(issues, boot.ConfigIssue{

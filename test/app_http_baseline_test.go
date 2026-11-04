@@ -17,7 +17,6 @@ import (
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	spinemultipart "github.com/NARUBROWN/spine/pkg/multipart"
-	"github.com/NARUBROWN/spine/pkg/path"
 )
 
 type httpBaselineDTO struct {
@@ -43,6 +42,9 @@ type httpBaselineUpload struct {
 	Files []httpBaselineFile `json:"files"`
 }
 
+type httpBaselinePath struct {
+	ID int64 `path:"id"`
+}
 type httpBaselineController struct{}
 
 func (*httpBaselineController) Bind(dto *httpBaselineDTO) httpx.Response[httpBaselineDTO] {
@@ -53,9 +55,9 @@ func (*httpBaselineController) Form(dto *httpBaselineForm) httpx.Response[httpBa
 	return httpx.Response[httpBaselineForm]{Body: *dto}
 }
 
-func (*httpBaselineController) Path(id path.Int) httpx.Response[map[string]int] {
+func (*httpBaselineController) Path(p *httpBaselinePath) httpx.Response[map[string]int] {
 	return httpx.Response[map[string]int]{Body: map[string]int{
-		"id": int(id.Value),
+		"id": int(p.ID),
 	}}
 }
 

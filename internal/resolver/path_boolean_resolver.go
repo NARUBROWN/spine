@@ -40,11 +40,11 @@ func (r *PathBooleanResolver) Resolve(ctx core.ExecutionContext, parameterMeta P
 
 	value, err := parseBool(raw)
 	if err != nil {
-		return nil, &httperr.HTTPError{
+		return nil, &httperr.InputError{Source: "path", Cause: &httperr.HTTPError{
 			Status:  http.StatusBadRequest,
 			Message: fmt.Sprintf("Invalid path parameter: %s", parameterMeta.PathKey),
 			Cause:   err,
-		}
+		}}
 	}
 
 	return path.Boolean{Value: value}, nil

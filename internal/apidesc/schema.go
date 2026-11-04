@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"mime/multipart"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -87,6 +88,9 @@ func (c *catalog) schemaValue(t reflect.Type, mode string) any {
 		return map[string]any{"type": "string", "format": "date-time"}
 	}
 	if t.Kind() == reflect.Pointer {
+		if strings.HasSuffix(mode, "/path") {
+			return c.schema(t.Elem(), mode)
+		}
 		return nullable(c.schema(t.Elem(), mode))
 	}
 	if customCodec(t) {
@@ -209,7 +213,7 @@ func customCodec(t reflect.Type) bool {
 
 func (c *catalog) structure(t reflect.Type, mode string) any {
 	fields := wireFields(t, strings.HasSuffix(mode, "/form"))
-	for _, source := range []string{"query", "header"} {
+	for _, source := range []string{"path", "query", "header"} {
 		if strings.HasSuffix(mode, "/"+source) {
 			selected, err := input.Fields(t, source)
 			if err != nil {
@@ -267,12 +271,13 @@ func (c *catalog) structure(t reflect.Type, mode string) any {
 				}
 			}
 		}
-		if strings.HasPrefix(mode, "response/") && !field.optional && !field.indirect {
+		if strings.HasSuffix(mode, "/path") || strings.HasPrefix(mode, "response/") && !field.optional && !field.indirect {
 			required = append(required, field.name)
 		}
 		properties[field.name] = schema
 	}
 	sort.Strings(required)
+	required = slices.Compact(required)
 	result := map[string]any{"type": "object", "properties": properties}
 	if len(required) > 0 {
 		result["required"] = required

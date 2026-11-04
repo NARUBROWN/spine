@@ -54,7 +54,7 @@ func TestDTOParameterIssuesUseTypeIdentityAndExcludeNonDTOBindings(t *testing.T)
 			if !ok {
 				t.Fatal("메서드를 찾을 수 없습니다")
 			}
-			issues := DTOParameterIssues(method, "Routes[3]")
+			issues := DTOParameterIssues(method, "Routes[3]", "/:id/:name")
 			if test.index < 0 {
 				if len(issues) != 0 {
 					t.Fatalf("서로 다른 타입이나 비 DTO 입력은 중복이 아닙니다: %+v", issues)

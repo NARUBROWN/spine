@@ -102,4 +102,4 @@ bash scripts/check-module-boundaries.sh
 
 `WithFieldTags(ctx, tags...)`와 `FieldTags(ctx)`는 한 번의 검증에서 외부 필드명에 사용할 태그 우선순위를 전달합니다. 규칙 태그와 공유 검증기 설정은 바꾸지 않습니다. 구현체는 요청에 지정된 태그를 우선하고, 지정되지 않았으면 자신의 기본 필드명 설정을 사용합니다.
 
-HTTP는 실제 바인딩에 따라 json, form, xml, query 또는 header를 선택합니다. 이 계약에는 HTTP 출처나 상태 코드를 넣지 않습니다. 코어가 HTTP 응답을 만들 때만 오류에 body, query, header 출처를 덧붙이며 WebSocket과 소비자의 공통 검증 오류 형식은 유지합니다.
+HTTP는 실제 바인딩에 따라 json, form, xml, path, query 또는 header를 선택합니다. 이 계약에는 HTTP 출처나 상태 코드를 넣지 않습니다. 코어가 HTTP 응답을 만들 때만 오류에 body, path, query, header 출처를 덧붙이며 WebSocket과 소비자의 공통 검증 오류 형식은 유지합니다.

@@ -279,7 +279,7 @@ Use this map instead of searching the entire repository blindly:
 - `app.go`: public `spine.App` assembly API.
 - `application.go`: optional preparation API and listener-free Handler/Close ownership.
 - `pkg/boot`: HTTP, WebSocket, common event retry/settlement, lifecycle, and validation options.
-- `pkg/path`, `pkg/query`, `pkg/multipart`: built-in HTTP inputs; ordinary pointer DTOs use query/header tags for source-specific binding.
+- Ordinary pointer DTOs use path/query/header tags for source-specific binding. `pkg/path` wrappers are deprecated migration inputs; `pkg/query` and `pkg/multipart` provide pagination and uploads.
 - `pkg/httpx`, `pkg/httperr`: supported HTTP outputs and expected HTTP errors.
 - `pkg/ws`: WebSocket connection identity and sending.
 - `pkg/event/publish`: domain-event contract and request-scoped publishing.
@@ -348,7 +348,7 @@ On an error, event dispatch and `PostHandle` are skipped; `BeforeResponse`, erro
 - Enable HTTP explicitly with `HTTP: &boot.HTTPOptions{}`. `HTTP: nil` means no HTTP server.
 - Return `httpx.Response[T]`, `httpx.Binary`, or `httpx.Redirect` for successful HTTP responses. Do not return a raw DTO or raw string.
 - Use `httperr.*` or `*httperr.HTTPError` for expected HTTP failures. Generic errors become a non-leaking HTTP 500.
-- Use Spine semantic input types. Do not replace `path.Int`, `path.String`, or `path.Boolean` with primitive handler arguments.
+- Use ordinary struct pointer arguments with path/query/header tags. Do not use primitive handler arguments. Legacy path wrappers remain migration-only inputs and cannot be mixed with a path DTO in one handler.
 - Keep Kafka/RabbitMQ consumers idempotent. Delivery is at least once, not exactly once.
 - Use an outbox when a database write and external event publication must form one durable business operation.
 - Never enable plaintext broker compatibility in production.
@@ -366,7 +366,6 @@ import (
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
-	"github.com/NARUBROWN/spine/pkg/path"
 )
 
 type Health struct {
@@ -374,18 +373,20 @@ type Health struct {
 	Status string `json:"status"`
 }
 
+type HealthPath struct { ID int64 `path:"id"` }
+
 type HealthController struct{}
 
 func NewHealthController() *HealthController {
 	return &HealthController{}
 }
 
-func (c *HealthController) Get(id path.Int) (httpx.Response[Health], error) {
-	if id.Value <= 0 {
+func (c *HealthController) Get(p *HealthPath) (httpx.Response[Health], error) {
+	if p.ID <= 0 {
 		return httpx.Response[Health]{}, httperr.BadRequest("id must be positive")
 	}
 	return httpx.Response[Health]{
-		Body: Health{ID: id.Value, Status: "ok"},
+		Body: Health{ID: p.ID, Status: "ok"},
 	}, nil
 }
 
@@ -463,13 +464,18 @@ Register a route with:
 app.Route("GET", "/users/:user_id", (*UserController).Get)
 ```
 
-HTTP methods are trimmed and uppercased. Route paths use `:name` parameters. Path semantic arguments consume path parameters from left to right, not by Go parameter name:
+HTTP methods are trimmed and uppercased. Route paths use `:name` parameters. Ordinary path DTO fields bind by exact tag name, independently of field or argument order:
 
 ```go
 app.Route("GET", "/orgs/:org_id/users/:user_id", (*UserController).Get)
 
-func (c *UserController) Get(orgID path.Int, userID path.Int) httpx.Response[User] {
-	// orgID binds :org_id; userID binds :user_id.
+type UserPath struct {
+    UserID int64 `path:"user_id"`
+    OrgID int64 `path:"org_id"`
+}
+
+func (c *UserController) Get(p *UserPath) httpx.Response[User] {
+    return httpx.Response[User]{Body: User{ID: p.UserID}}
 }
 ```
 
@@ -495,13 +501,12 @@ app.Route(
 | Handler parameter | Value supplied by Spine | Important rule |
 |---|---|---|
 | `context.Context` | Request context plus request-scoped event publisher | Use this with `publish.Event` and database calls. |
-| `path.Int` | Parsed `int64` from the next `:segment` | Read `.Value`; malformed input returns HTTP 400. |
-| `path.String` | Raw string from the next `:segment` | Read `.Value`. |
-| `path.Boolean` | Parsed boolean from the next `:segment` | Accepts true/false forms supported by Spine; malformed input returns HTTP 400. |
+| `*PathDTO` with path tags | Fields bound to exact route variable names | Direct field access; required URL presence; conversion errors return 400; validator handles value constraints. |
+| Deprecated `path.Int`, `path.String`, `path.Boolean` | Positional migration inputs | Supported alone during migration; mixing with a Path DTO fails at boot. |
 | `*QueryDTO` with query tags | Query-only fields | Direct field access; conversion errors return 400; selected validator runs before the handler. |
 | `query.Pagination` | `page` and `size` | Defaults to page 1 and size 20; validate non-positive or excessive values yourself. |
-| `*HeadersDTO` with header tags | Header-only fields | Direct field access; header names are case-insensitive; keep this DTO separate from query and body. |
-| `*SomeDTO` without query/header/form tags | Bound request DTO | HTTP DTOs must be pointers to structs; the Echo binder and request `Content-Type` select the body format. Malformed input returns HTTP 400. |
+| `*HeadersDTO` with header tags | Header-only fields | Direct field access; header names are case-insensitive; keep this DTO separate from path, query and body. |
+| `*SomeDTO` without path/query/header/form tags | Bound request DTO | HTTP DTOs must be pointers to structs; the Echo binder and request `Content-Type` select the body format. Malformed input returns HTTP 400. |
 | `*SomeForm` with at least one `form` tag | Bound form DTO | The presence of a form tag selects form binding. |
 | `multipart.UploadedFiles` | Uploaded file descriptors | Call each file's `Open` and close the returned stream. |
 | `pkg/spine.Ctx` or `core.ControllerContext` | Read-only view of values set by interceptors | Only `Get` is exposed; custom interfaces with extra methods are unsupported. |
@@ -625,7 +630,7 @@ explicit diagnostics. See contract/description/README.md for supported types and
 
 Keep existing *DTO parameters, direct field access and httpx.Response[T] returns. Documentation does not
 require input wrappers or duplicate response declarations. Native DTO Bind remains platform-dependent;
-Separate query/header pointer DTOs bind only their declared source and validate before the handler. Without a validator, OpenAPI only lists registered paths and methods, with minimum structural placeholders. It omits input and response details. With a validator, detailed input schemas require SchemaDescriber; runtime status/media retain diagnostics.
+Separate path/query/header pointer DTOs bind only their declared source and validate before the handler. Path tags match route names exactly; required URL presence does not force a nonzero value. Without a validator, OpenAPI only lists registered paths and methods, with minimum structural placeholders. It omits input and response details. With a validator, detailed input schemas require SchemaDescriber; runtime status/media retain diagnostics.
 query.Values/header.Values are removed. Migrate using docs/migration/structured-inputs.md; preserve missing values with pointer fields and handle defaults explicitly.
 Form-tagged standard mime/multipart.FileHeader pointers and slices describe named file uploads; file DTOs
 advertise multipart/form-data. Dynamic UploadedFiles keeps an unresolved-field diagnostic.
@@ -784,7 +789,7 @@ Zero values select bounded defaults for HTTP timeouts, header size, request body
 Important exceptions and rules:
 
 - `HTTPOptions.MaxBodyBytes < 0` explicitly disables the request-body limit.
-- Invalid JSON/form/multipart and invalid `path.Int`/`path.Boolean` produce HTTP 400.
+- Invalid JSON/form/multipart and path field conversion failures produce HTTP 400. Path errors carry `in: "path"`. Unknown DTO path keys and repeated route variable names fail before boot initialization.
 - Request bodies above the configured maximum produce HTTP 413.
 - `DisableRecover: false` (the zero value) keeps recovery enabled.
 - Use `EnableGracefulShutdown: true` for signal-driven HTTP shutdown.

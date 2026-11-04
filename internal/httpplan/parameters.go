@@ -11,7 +11,16 @@ import (
 
 // DTOParameterIssues는 한 핸들러 안에서 같은 입력 DTO를 중복 주입하지 않도록 합니다.
 // 실제 실행과 같은 리졸버 순서로 DTO를 식별하며 생성자나 요청 처리는 실행하지 않습니다.
-func DTOParameterIssues(method reflect.Method, prefix string) []boot.ConfigIssue {
+func DTOParameterIssues(method reflect.Method, prefix, routePath string) []boot.ConfigIssue {
+	pathKeys, err := PathKeys(routePath)
+	if err != nil {
+		return []boot.ConfigIssue{{Path: prefix + ".Path", Code: "HTTP_PATH_TEMPLATE_INVALID", Message: err.Error(), Hint: "Use a distinct name for each path parameter."}}
+	}
+	declaredPathKeys := map[string]bool{}
+	for _, name := range pathKeys {
+		declaredPathKeys[name] = true
+	}
+	legacyIndex, pathDTOIndex, legacyCount := -1, -1, 0
 	seen := map[reflect.Type]int{}
 	keys := map[string]int{}
 	bodyIndex := -1
@@ -19,6 +28,13 @@ func DTOParameterIssues(method reflect.Method, prefix string) []boot.ConfigIssue
 	resolvers := Resolvers(nil)
 	for index := 1; index < method.Type.NumIn(); index++ {
 		parameter := resolver.ParameterMeta{Index: index - 1, Type: method.Type.In(index)}
+		if resolver.IsLegacyPath(parameter.Type) {
+			legacyIndex, legacyCount = parameter.Index, legacyCount+1
+			if parameter.Type.Kind() == reflect.Pointer {
+				issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_INPUT_CONTRACT_INVALID", Message: "Legacy path wrappers must be values.", Hint: "Migrate to a struct pointer with path tags."})
+			}
+			continue
+		}
 		var fields []input.Field
 		var source string
 		if payload, name, ok := input.DTO(parameter.Type); ok {
@@ -31,6 +47,14 @@ func DTOParameterIssues(method reflect.Method, prefix string) []boot.ConfigIssue
 			if err != nil {
 				issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_INPUT_CONTRACT_INVALID", Message: err.Error(), Hint: "Use fields from one input source and mark excluded fields with '-'."})
 				continue
+			}
+			if source == "path" {
+				pathDTOIndex = parameter.Index
+				for _, field := range fields {
+					if !declaredPathKeys[field.Name] {
+						issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_PATH_KEY_UNDECLARED", Message: fmt.Sprintf("Handler %s binds path key %q that its route does not declare.", method.Name, field.Name), Hint: "Match path tags to this route's named parameters."})
+					}
+				}
 			}
 		}
 		for _, candidate := range resolvers {
@@ -61,7 +85,7 @@ func DTOParameterIssues(method reflect.Method, prefix string) []boot.ConfigIssue
 				}
 				if source == "" {
 					if err := input.CheckBody(typ); err != nil {
-						issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_INPUT_CONTRACT_INVALID", Message: err.Error(), Hint: "Separate body, query and header DTOs and correct input tag names."})
+						issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_INPUT_CONTRACT_INVALID", Message: err.Error(), Hint: "Separate body, path, query and header DTOs and correct input tag names."})
 					}
 					if bodyIndex >= 0 {
 						issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_BODY_PARAMETERS_DUPLICATED", Message: fmt.Sprintf("Handler %s declares body parameters at indexes %d and %d.", method.Name, bodyIndex, parameter.Index), Hint: "Use at most one body DTO, including JSON and form inputs."})
@@ -80,6 +104,11 @@ func DTOParameterIssues(method reflect.Method, prefix string) []boot.ConfigIssue
 			}
 			break
 		}
+	}
+	if legacyIndex >= 0 && pathDTOIndex >= 0 {
+		issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, pathDTOIndex), Code: "HTTP_PATH_INPUT_MIXED", Message: fmt.Sprintf("Handler %s mixes legacy path wrappers and path DTOs.", method.Name), Hint: "Move every path binding in this handler to path-tagged struct fields."})
+	} else if legacyCount > len(pathKeys) {
+		issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, legacyIndex), Code: "HTTP_PATH_ARGUMENT_UNBOUND", Message: fmt.Sprintf("Handler %s declares more legacy path arguments than its route has keys.", method.Name), Hint: "Migrate to named path fields or remove the unbound argument."})
 	}
 	return issues
 }

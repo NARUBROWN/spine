@@ -11,18 +11,20 @@ import (
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	"github.com/NARUBROWN/spine/pkg/openapi"
-	"github.com/NARUBROWN/spine/pkg/path"
 )
 
 type descriptionDTO struct {
 	Name string `json:"name" validate:"required"`
+}
+type descriptionPath struct {
+	ID int64 `path:"id"`
 }
 type descriptionController struct{}
 
 func (*descriptionController) Create(*descriptionDTO) httpx.Response[descriptionDTO] {
 	panic("핸들러를 실행하면 안 됩니다")
 }
-func (*descriptionController) Get(path.Int) httpx.Response[*descriptionDTO] {
+func (*descriptionController) Get(*descriptionPath) httpx.Response[*descriptionDTO] {
 	panic("핸들러를 실행하면 안 됩니다")
 }
 

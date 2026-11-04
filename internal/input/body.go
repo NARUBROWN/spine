@@ -42,7 +42,7 @@ func CheckBody(t reflect.Type) error {
 				if err := CheckTagNames(field); err != nil {
 					return err
 				}
-				for _, source := range []string{"query", "header", "param"} {
+				for _, source := range []string{"path", "query", "header", "param"} {
 					if tag, exists := field.Tag.Lookup(source); exists && tag != "-" {
 						return fmt.Errorf("body DTO field %s contains %s input; use separate handler parameters", field.Name, source)
 					}
@@ -66,9 +66,9 @@ func HasForm(t reflect.Type) bool {
 // CheckTagNames는 지원하는 입력 태그의 흔한 복수형 오타가 본문으로 처리되지 않도록 합니다.
 // 알 수 없는 일반 메타데이터 태그를 입력 출처로 추측하지 않습니다.
 func CheckTagNames(field reflect.StructField) error {
-	for _, name := range []string{"headers", "queries", "querys", "params", "forms"} {
+	for _, name := range []string{"paths", "headers", "queries", "querys", "params", "forms"} {
 		if _, exists := field.Tag.Lookup(name); exists {
-			return fmt.Errorf("field %s uses unsupported input tag %q; use json, query, header, form or param", field.Name, name)
+			return fmt.Errorf("field %s uses unsupported input tag %q; use json, path, query, header or form", field.Name, name)
 		}
 	}
 	return nil

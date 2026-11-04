@@ -1,4 +1,4 @@
-# 쿼리와 헤더 구조체 입력으로 전환하기
+# 경로, 쿼리와 헤더 구조체 입력으로 전환하기
 
 이 개발 변경에서는 `query.Values`, `header.Values`와 각 타입의 조회 API 및 `NewValues` 생성 함수를 제거합니다. 쿼리와 헤더를 각각 일반 구조체 포인터로 받고 필드에 직접 접근하세요. 필드마다 함수 인자를 추가하거나 문서용 래퍼를 만들 필요가 없습니다.
 
@@ -54,11 +54,38 @@ func (c *Controller) Search(q *SearchQuery, headers *RequestHeaders) httpx.Respo
 
 핸들러는 `q *SearchQuery`, `headers *RequestHeaders`를 별도 인자로 받습니다. 함수 안에서는 `q.Keyword`, `q.Page`, `headers.RequestID`를 읽습니다. 본문이 필요하면 기존 본문 DTO도 별도 인자로 받습니다. 라우트의 메서드, 경로와 핸들러 등록 방식은 유지합니다.
 
-`query` 태그가 있는 구조체는 HTTP 메서드와 무관하게 쿼리에서만 바인딩합니다. `header` 태그가 있는 구조체는 헤더에서만 바인딩합니다. JSON 본문이 이 값을 덮어쓰지 않습니다. 쿼리와 헤더 DTO에 다른 query, header, form, param 입력 출처를 섞으면 사전 검사에서 `HTTP_INPUT_CONTRACT_INVALID`로 거부합니다. 해당 출처의 태그가 없는 공개 필드는 조용히 무시하지 않습니다. 제외할 필드는 `query:"-"` 또는 `header:"-"`로 명시하세요. `headers`, `queries` 같은 지원하지 않는 복수형 입력 태그도 거부합니다. `json` 태그는 명명이나 직렬화에 사용할 수 있지만 출처를 다시 본문으로 바꾸지 않습니다.
+`query` 태그가 있는 구조체는 HTTP 메서드와 무관하게 쿼리에서만 바인딩합니다. `header` 태그가 있는 구조체는 헤더에서만 바인딩합니다. JSON 본문이 이 값을 덮어쓰지 않습니다. 쿼리와 헤더 DTO에 다른 path, query, header, form, param 입력 출처를 섞으면 사전 검사에서 `HTTP_INPUT_CONTRACT_INVALID`로 거부합니다. 해당 출처의 태그가 없는 공개 필드는 조용히 무시하지 않습니다. 제외할 필드는 `query:"-"` 또는 `header:"-"`로 명시하세요. `headers`, `queries` 같은 지원하지 않는 복수형 입력 태그도 거부합니다. `json` 태그는 명명이나 직렬화에 사용할 수 있지만 출처를 다시 본문으로 바꾸지 않습니다.
 
-본문 DTO의 query, header, param 입력 태그도 사전 검사에서 거부합니다. 경로 값은 기존 `path.Int` 같은 별도 경로 인자로 받으세요.
+본문 DTO의 path, query, header, param 입력 태그도 사전 검사에서 거부합니다. 경로 값은 path 태그가 있는 별도 구조체 인자로 받으세요. param 태그는 path 태그의 별칭으로 지원하지 않습니다.
 
 기존 DTO에 `json`과 `query` 태그를 함께 넣고 플랫폼의 병합 바인딩에 의존했다면, 쿼리 DTO와 본문 DTO를 분리하세요. 특히 이전 Echo 바인딩의 GET, DELETE 제한과 본문 덮어쓰기 동작은 새 쿼리 구조체에 적용하지 않습니다.
+
+## 경로 인자를 이름 기반 구조체로 전환하기
+
+```go
+type UserPath struct {
+    UserID int64 `path:"user_id" validate:"gt=0"`
+    OrgID  int64 `path:"org_id" validate:"gt=0"`
+}
+
+func (*UserController) Get(p *UserPath) httpx.Response[map[string]int64] {
+    return httpx.Response[map[string]int64]{Body: map[string]int64{
+        "org_id": p.OrgID, "user_id": p.UserID,
+    }}
+}
+
+app.Route("GET", "/orgs/:org_id/users/:user_id", (*UserController).Get)
+```
+
+위 코드는 앱에 정의한 UserController와 pkg/httpx를 사용하는 선언 및 라우트 등록 예입니다. 경로의 이름과 path 태그를 대소문자까지 정확히 연결합니다. 구조체 필드 순서나 함수 인자 이름으로 연결하지 않습니다. 본문, 쿼리와 헤더는 별도 구조체 인자로 유지합니다.
+
+URL 구간의 존재 여부는 라우팅 계약입니다. 경로 구간이 없는 URL은 별도 라우트가 등록되지 않았다면 404입니다. 일반 값 필드를 기본으로 사용하고, 양수나 형식 같은 값 제약은 등록한 validator가 검사합니다. 포인터 필드도 허용하지만 경로를 선택적이거나 null로 만들지는 않습니다. 예를 들어 `*int`는 경로 값 0에도 값이 있는 포인터가 됩니다. validator가 없으면 validate 태그를 실행하지 않으며, 변환과 경로 설정 검사는 유지합니다.
+
+일반 스칼라, 스칼라 포인터, time.Time과 단일 값을 처리하는 TextUnmarshaler를 지원합니다. 일반 슬라이스, 배열, map과 중첩 객체는 경로 필드로 받지 않습니다. 공개 익명 값 구조체는 쿼리와 헤더처럼 펼칠 수 있습니다. UUID처럼 TextUnmarshaler를 구현한 타입은 내부 Go 표현이 배열이어도 하나의 경로 값으로 처리합니다. 라우터가 제공한 값을 추가로 URL 디코딩하거나 쉼표로 나누지 않습니다.
+
+라우트에 없는 이름을 DTO에 선언하면 `HTTP_PATH_KEY_UNDECLARED`, 라우트 안의 빈 이름이나 중복된 이름은 `HTTP_PATH_TEMPLATE_INVALID`로 부팅 전에 거부합니다. 동일 DTO 인자와 동일 출처의 키 중복은 기존 공통 입력 검사도 적용합니다. 사용하지 않는 라우트 키까지 DTO에 선언할 필요는 없습니다. 상세 명세에서는 그 키의 타입을 추정하지 않고 PATH_TYPE_UNRESOLVED 진단을 남깁니다.
+
+`path.Int`, `path.String`, `path.Boolean`은 Deprecated로 표시하고 전환 기간에 단독 사용을 유지합니다. 새 Path DTO와 같은 핸들러에서 함께 받으면 `HTTP_PATH_INPUT_MIXED`로 거부합니다. 기존 래퍼가 라우트 키보다 많으면 `HTTP_PATH_ARGUMENT_UNBOUND`로 거부합니다. 기존 코드는 일반 구조체의 path 태그 필드와 직접 필드 접근으로 전환하세요. 새 bool 필드는 쿼리와 헤더처럼 strconv.ParseBool을 사용하므로 기존 path.Boolean의 yes, on 같은 표기는 지원하지 않습니다. 별도 형식이 필요하면 TextUnmarshaler로 정의하세요.
 
 ## 같은 DTO를 중복 인자로 선언하지 않기
 
@@ -72,9 +99,9 @@ Validate, Prepare와 Run은 생성자, 검증기, 어댑터 초기화와 본문 
 
 본문 DTO는 타입이 달라도 하나만 허용합니다. JSON DTO와 폼 DTO를 각각 받는 경우도 `HTTP_BODY_PARAMETERS_DUPLICATED`로 부팅 전에 거부합니다.
 
-본문 DTO 내부에서 JSON 이름이 같은 깊이에서 모호하게 겹치거나 폼 입력 키가 중복되어도 `HTTP_INPUT_CONTRACT_INVALID`로 거부합니다. 정상적인 JSON 익명 임베딩의 필드 가리기 규칙은 유지합니다. json 태그로 제외한 중첩 구조체도 다른 본문 형식의 바인더가 읽을 수 있으므로 query, header, param 태그 혼합 검사에서 제외하지 않습니다.
+본문 DTO 내부에서 JSON 이름이 같은 깊이에서 모호하게 겹치거나 폼 입력 키가 중복되어도 `HTTP_INPUT_CONTRACT_INVALID`로 거부합니다. 정상적인 JSON 익명 임베딩의 필드 가리기 규칙은 유지합니다. json 태그로 제외한 중첩 구조체도 다른 본문 형식의 바인더가 읽을 수 있으므로 path, query, header, param 태그 혼합 검사에서 제외하지 않습니다.
 
-서로 다른 쿼리 DTO나 헤더 DTO가 같은 입력 키를 선언하면 `HTTP_INPUT_KEY_DUPLICATED`로 거부합니다. 헤더 이름은 대소문자를 구분하지 않습니다. `query.Pagination`의 page, size도 같은 검사에 포함합니다. 본문, 쿼리, 헤더처럼 출처가 다른 동일 이름은 충돌로 취급하지 않습니다. 이 검사는 validator 등록 여부와 OpenAPI 활성화 여부에 관계없이 적용합니다.
+서로 다른 쿼리 DTO나 헤더 DTO가 같은 입력 키를 선언하면 `HTTP_INPUT_KEY_DUPLICATED`로 거부합니다. 헤더 이름은 대소문자를 구분하지 않습니다. `query.Pagination`의 page, size도 같은 검사에 포함합니다. 본문, 경로, 쿼리, 헤더처럼 출처가 다른 동일 이름은 충돌로 취급하지 않습니다. 이 검사는 validator 등록 여부와 OpenAPI 활성화 여부에 관계없이 적용합니다.
 
 본문의 json 태그와 검증 태그는 필수 조건이 아닙니다. 태그 없는 본문 필드는 Go JSON 기본 필드명을 그대로 사용합니다. 검증 태그를 요구하지 않으며, 선택한 validator가 있으면 실제 설정된 규칙만 적용합니다.
 
@@ -109,7 +136,7 @@ HTTP 수정은 이 규칙을 적용한 Echo 플랫폼과 코어를 함께 사용
 
 기존 `spine.WithValidator(...)` 연결을 유지하세요. 변환 실패 시 validator를 호출하지 않습니다. 검증기는 쿼리와 헤더 구조체를 각각 검증하며 사용자 규칙도 기존 계약을 따릅니다. Playground 개발 변경은 요청에서 선택한 실제 출처의 태그를 오류 이름에 사용합니다. 요청별 선택이 없는 호출은 생성 시 지정한 WithFieldTags 기본값을 유지합니다.
 
-query 또는 header에서 `"-"`로 제외한 필드를 선택한 validator가 필수로 요구하면 `HTTP_INPUT_VALIDATION_CONFLICT`로 부팅 전에 거부합니다. 검증 태그를 강제하지 않으며 validator가 없으면 이 규칙도 적용하지 않습니다. 이 검사는 SchemaDescriber가 설명한 필수 제약에 적용하며 사용자 규칙의 실행 결과를 추측하지 않습니다. OpenAPI를 꺼도 같은 검사를 수행합니다.
+path, query 또는 header에서 `"-"`로 제외한 필드를 선택한 validator가 필수로 요구하면 `HTTP_INPUT_VALIDATION_CONFLICT`로 부팅 전에 거부합니다. 검증 태그를 강제하지 않으며 validator가 없으면 이 규칙도 적용하지 않습니다. 이 검사는 SchemaDescriber가 설명한 필수 제약에 적용하며 사용자 규칙의 실행 결과를 추측하지 않습니다. OpenAPI를 꺼도 같은 검사를 수행합니다.
 
 기본 Echo 본문 바인딩은 경로와 URL 쿼리를 병합하지 않습니다. urlencoded 폼도 본문 값만 사용합니다. 익명 임베딩과 태그 없는 중첩 값 구조체 안의 form 필드도 같은 필드 계획으로 판별하고 명세에 펼칩니다. 사용자 지정 Binder는 해당 구현의 바인딩 규칙을 따릅니다.
 
@@ -145,7 +172,7 @@ Host, Content-Type, Authorization, Cookie 같은 단일값 또는 별도 문법�
 
 ## 오류의 출처와 필드명
 
-검증 오류의 각 필드에는 body, query, header 중 하나인 `in`을 덧붙입니다. 이름은 실제 바인딩에 사용한 json, form, xml, query 또는 header 태그를 따릅니다. 헤더 DTO에 직렬화용 json 태그가 함께 있어도 검증 오류에는 header 태그의 이름을 사용합니다.
+검증 오류의 각 필드에는 body, path, query, header 중 하나인 `in`을 덧붙입니다. 이름은 실제 바인딩에 사용한 json, form, xml, path, query 또는 header 태그를 따릅니다. 헤더 DTO에 직렬화용 json 태그가 함께 있어도 검증 오류에는 header 태그의 이름을 사용합니다.
 
 ```json
 {"message":"Validation failed","fields":[{"in":"header","field":"/X-ID","rule":"required"}]}

@@ -15,7 +15,6 @@ import (
 	playground "github.com/NARUBROWN/spine-validator-playground"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httpx"
-	"github.com/NARUBROWN/spine/pkg/path"
 )
 
 type sourceBody struct {
@@ -37,6 +36,9 @@ type sourceEncoding struct {
 	Encoding string `header:"Accept-Encoding"`
 }
 type bareBody struct{ Name string }
+type sourcePath struct {
+	ID int64 `path:"id"`
+}
 type sourceController struct{}
 
 func (*sourceController) Body(input *sourceBody) httpx.Response[sourceBody] {
@@ -57,7 +59,7 @@ func (*sourceController) Match(input *sourceMatch) httpx.Response[[]string] {
 func (*sourceController) Encoding(input *sourceEncoding) httpx.Response[string] {
 	return httpx.Response[string]{Body: input.Encoding}
 }
-func (*sourceController) Plain(_ path.Int, input *bareBody) httpx.Response[bareBody] {
+func (*sourceController) Plain(_ *sourcePath, input *bareBody) httpx.Response[bareBody] {
 	return httpx.Response[bareBody]{Body: *input}
 }
 

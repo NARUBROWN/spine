@@ -184,7 +184,7 @@ func OpenAPI(contract description.HTTP, options boot.OpenAPIOptions) (json.RawMe
 }
 
 func errorSchema(validation bool) any {
-	location := map[string]any{"type": "string", "enum": []string{"body", "query", "header"}}
+	location := map[string]any{"type": "string", "enum": []string{"body", "path", "query", "header"}}
 	properties := map[string]any{"message": map[string]any{"type": "string"}, "in": location}
 	if validation {
 		properties["fields"] = map[string]any{"type": "array", "items": map[string]any{"type": "object", "required": []string{"field", "rule"}, "properties": map[string]any{"in": location, "field": map[string]any{"type": "string"}, "rule": map[string]any{"type": "string"}, "param": map[string]any{"type": "string"}, "message": map[string]any{"type": "string"}}}}

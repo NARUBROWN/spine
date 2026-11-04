@@ -30,7 +30,12 @@ func (r *InputDTOResolver) Resolve(ctx core.ExecutionContext, parameter Paramete
 		return nil, fmt.Errorf("context is not an HTTP request context")
 	}
 	values := httpCtx.Queries()
-	if source == "header" {
+	if source == "path" {
+		values = map[string][]string{}
+		for name, value := range httpCtx.Params() {
+			values[name] = []string{value}
+		}
+	} else if source == "header" {
 		values = map[string][]string{}
 		for name, list := range httpCtx.Headers() {
 			key := http.CanonicalHeaderKey(name)

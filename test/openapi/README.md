@@ -12,4 +12,6 @@ GOWORK=off go test -race ./... -count=1
 
 `testdata/openapi-3.1-schema.json`은 [OpenAPI 공식 구조 스키마](https://spec.openapis.org/oas/3.1/schema/2022-10-07)를 보관한 파일입니다. 해당 파일에는 `testdata/OPENAPI-LICENSE.txt`의 Apache 2.0 라이선스를 적용합니다. 각 DTO의 유효성은 별도 JSON Schema 검사로 대조합니다.
 
+경로 검사는 다섯 개의 변수를 구조체 하나로 받는 실제 HTTP 요청, 이름 기반 매핑, 포인터와 0 및 false, 출처별 오류, 사용자 TextUnmarshaler, 미사용 경로 키와 기존 래퍼 전환을 다룹니다.
+
 회귀 검사는 폼 본문과 쿼리의 출처 분리, 임베딩된 폼 필드, 동명 패키지 타입을 담은 익명 응답, 배열과 byte slice의 요청 및 응답 표현, 제외한 입력과 필수 검증의 충돌도 다룹니다. 코어는 replace ../..로 현재 소스를 검사합니다. go.mod의 Echo와 validator 고정 버전에는 아직 최신 로컬 변경이 포함되지 않았습니다.
