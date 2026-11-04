@@ -6,10 +6,20 @@ import json
 import os
 from pathlib import Path
 
-from release import GitHub, ReleaseError, run
+from release import GitHub, ReleaseError, run, approval_environment
 
 
 BRANCHES = ("preview", "rc", "main")
+
+
+def bootstrap(github, apply=False):
+    source = github.api("git/ref/heads/main")["object"]["sha"]
+    for branch in ("preview", "rc"):
+        if github.api("git/ref/heads/" + branch, missing=True) is None:
+            print(f"초기 채널 생성 계획: {github.repository} / {branch} / {source}")
+            if apply:
+                github.api("git/refs", method="POST", data={"ref": "refs/heads/" + branch, "sha": source})
+    print("기존 브랜치는 이동하지 않습니다. 첫 작업 PR을 preview에 반영한 후 보호 규칙을 적용하세요.")
 
 
 def specification(branch):
@@ -55,7 +65,7 @@ def verify_rule(actual, expected):
                 raise ReleaseError("브랜치 보호 매개변수가 다릅니다: " + key)
 
 
-def configure(github, apply=False):
+def configure(github, apply=False, policy=None):
     # 기본 브랜치를 바꾸기 전에 신뢰할 PR 방향 검사 코드가 preview에 있어야 합니다.
     github.api("contents/.github/workflows/branch-flow.yml?ref=preview")
     for branch in BRANCHES:
@@ -95,6 +105,27 @@ def configure(github, apply=False):
             if not any(p["name"] == branch and p.get("type", "branch") == "branch" for p in policies):
                 github.api(f"environments/{environment}/deployment-branch-policies", method="POST",
                            data={"name": branch, "type": "branch"})
+        # 하위 저장소에도 정식 발행 전 지정 리뷰어 승인이 있어야 합니다.
+        if policy is not None and github.api("environments/release-stable", missing=True) is None:
+            reviewer = json.loads(run("gh", "api", "users/" + policy["reviewer_login"]))
+            github.api("environments/release-stable", method="PUT", data={
+                "can_admins_bypass": False, "prevent_self_review": False,
+                "reviewers": [{"type": "User", "id": reviewer["id"]}],
+                "deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True}})
+            github.api("environments/release-stable/deployment-branch-policies", method="POST",
+                       data={"name": "main", "type": "branch"})
+    expected_tags = {"name": "Spine immutable tags", "target": "tag", "enforcement": "active", "bypass_actors": [],
+                     "conditions": {"ref_name": {"include": ["refs/tags/v*"], "exclude": []}},
+                     "rules": [{"type": "deletion"}, {"type": "update"}]}
+    tags = listed.get(expected_tags["name"])
+    if apply:
+        tags = github.api("rulesets" + ("/" + str(tags["id"]) if tags else ""),
+                          method="PUT" if tags else "POST", data=expected_tags)
+    if not tags:
+        raise ReleaseError("버전 태그의 수정과 삭제를 차단하는 규칙이 필요합니다")
+    verify_rule(github.api(f"rulesets/{tags['id']}"), expected_tags)
+    if policy is not None:
+        approval_environment(github, policy)
     repo = github.api("")
     if repo["default_branch"] != "preview":
         raise ReleaseError("저장소 기본 브랜치는 preview여야 합니다")
@@ -106,5 +137,13 @@ def configure(github, apply=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--bootstrap", action="store_true")
     args = parser.parse_args()
-    configure(GitHub(os.environ.get("GITHUB_REPOSITORY", "NARUBROWN/spine")), args.apply)
+    policy = json.loads(Path(".github/release-policy.json").read_text())
+    repository = policy["module"].removeprefix("github.com/")
+    if os.environ.get("GITHUB_REPOSITORY", repository) != repository:
+        raise ReleaseError("정책과 실행 저장소가 다릅니다")
+    if args.bootstrap:
+        bootstrap(GitHub(repository), args.apply)
+    else:
+        configure(GitHub(repository), args.apply, policy)

@@ -5,9 +5,9 @@ go 1.26.0
 replace github.com/NARUBROWN/spine => ../..
 
 require (
-	github.com/NARUBROWN/spine v0.6.6-0.20261103094217-e4dd8f07ce83
-	github.com/NARUBROWN/spine-echo-platform v0.1.0
-	github.com/NARUBROWN/spine-validator-playground v0.1.1-0.20261103094358-5a664f41943b
+	github.com/NARUBROWN/spine v0.7.0-preview.1
+	github.com/NARUBROWN/spine-echo-platform v0.2.0-preview.1
+	github.com/NARUBROWN/spine-validator-playground v0.2.0-preview.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 )
 

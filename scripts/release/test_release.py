@@ -9,9 +9,12 @@ import os
 from pathlib import Path
 import tempfile
 import subprocess
+import sys
 import unittest
 import zipfile
 from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/release"))
 
 import release
 import verify_public
@@ -26,7 +29,7 @@ POLICY = json.loads((Path(__file__).resolve().parents[2] / ".github/release-poli
 
 
 class FakeGitHub:
-    repository = "NARUBROWN/spine"
+    repository = POLICY["module"].removeprefix("github.com/")
 
     def __init__(self):
         self.tags = {}
@@ -58,6 +61,9 @@ class FakeGitHub:
                 "workflow_run": self.api("actions/runs/1")}
 
     def api(self, path, *, missing=False, method="GET", data=None):
+        if path.startswith("git/trees/"):
+            changed = path.split("/")[2].split("?")[0] != TREE
+            return {"tree": [{"path": "source.go", "mode": "100644", "type": "blob", "sha": ("2" if changed else "1") * 40}]}
         if method != "GET":
             self.writes.append((path, data))
             return {}
@@ -102,10 +108,12 @@ class FakeGitHub:
                                "workflow_run": {"id": 1, "head_sha": sha, "head_branch": POLICY["branches"][channel]}}
         self.manifests[tag] = {"schema_version": "spine.release-manifest/v1", "channel": channel,
                                "version": tag, "source_sha": sha, "branch": POLICY["branches"][channel], "source_tree": TREE, "workflow_run_id": "1",
-                               "workflow_run_attempt": "1", "repository": self.repository, "components": release.components(POLICY)}
+                               "workflow_run_attempt": "1", "repository": self.repository, "components": release.components(POLICY, channel),
+                               "kind": POLICY["kind"], "module": POLICY["module"], "source_fingerprint": release.source_fingerprint(self, sha)}
         self.manifests[tag]["validation"] = {"result": "passed", "version": tag, "source_sha": sha,
-                                             "components": release.components(POLICY)}
-        self.run_path = ".github/workflows/"+release.WORKFLOWS[channel]
+                                             "components": release.components(POLICY, channel), "scope": "cohort" if POLICY["kind"] == "core" else "platform"}
+        self.manifests[tag]["validation"]["selected_modules"] = release.expected_modules(self.manifests[tag], self.manifests[tag]["validation"]["scope"])
+        self.run_path = ".github/workflows/" + ("complete.yml" if POLICY["kind"] == "core" else release.WORKFLOWS[channel])
         self.run_branch, self.run_sha = POLICY["branches"][channel], sha
         return tag
 
@@ -160,7 +168,7 @@ class ReleasePolicyTests(unittest.TestCase):
         for condition in ("wrong_parent", "changed_tree", "wrong_direction", "wrong_workflow_branch"):
             with self.subTest(condition=condition):
                 github = copy.deepcopy(self.github)
-                if condition == "wrong_parent": github.promotion_head = "f"*40
+                if condition == "wrong_parent": github.promotion_head = "f"*40; github.comparison = "diverged"
                 if condition == "changed_tree": github.changed_tree = True
                 if condition == "wrong_direction": github.pull_direction = ("feat/bypass", "rc")
                 if condition == "wrong_workflow_branch": github.run_branch = "main"
@@ -223,10 +231,10 @@ class ReleasePolicyTests(unittest.TestCase):
 
     def test_stable_has_weekly_limit_and_mandatory_approval(self):
         source = self.github.candidate("rc", age=25)
-        self.github.release_data["v0.6.5"] = {"tag_name": "v0.6.5", "draft": False, "prerelease": False,
+        self.github.release_data["v0.6.5" if POLICY["kind"] == "core" else "v0.1.0"] = {"tag_name": "v0.6.5" if POLICY["kind"] == "core" else "v0.1.0", "draft": False, "prerelease": False,
                                              "published_at": (NOW-dt.timedelta(days=2)).isoformat()}
         with self.assertRaises(release.ReleaseError): self.plan("stable", self.base, source)
-        self.github.release_data["v0.6.5"]["published_at"] = (NOW-dt.timedelta(days=8)).isoformat()
+        self.github.release_data["v0.6.5" if POLICY["kind"] == "core" else "v0.1.0"]["published_at"] = (NOW-dt.timedelta(days=8)).isoformat()
         self.plan("stable", self.base, source)
         for reviewers, bypass in [([], False), ([POLICY["reviewer_login"]], True)]:
             self.github.reviewers, self.github.bypass = reviewers, bypass
@@ -259,10 +267,11 @@ class ReleasePolicyTests(unittest.TestCase):
             with self.subTest(channel=channel):
                 version = self.base if channel == "stable" else self.base+"-"+channel+".1"
                 plan = {"version": version, "channel": channel, "source_sha": SOURCE,
-                        "source_tag": "", "branch": POLICY["branches"][channel], "components": release.components(POLICY), "observation_override_reason": ""}
-                report = {"result": "passed", "version": version, "source_sha": SOURCE, "components": plan["components"]}
+                        "source_tag": "", "branch": POLICY["branches"][channel], "components": release.components(POLICY, channel), "observation_override_reason": "", "kind": POLICY["kind"], "module": POLICY["module"]}
+                report = {"result": "passed", "version": version, "source_sha": SOURCE, "components": plan["components"], "scope": "cohort" if POLICY["kind"] == "core" else "platform"}
+                report["selected_modules"] = release.expected_modules(plan, report["scope"])
                 self.github.tags[version] = SOURCE
-                with tempfile.TemporaryDirectory() as directory, patch.object(release, "run") as command:
+                with tempfile.TemporaryDirectory() as directory, patch.object(release, "run") as command, patch.object(release, "complete_plan", return_value=plan):
                     manifest_path = Path(directory)/"release-manifest.json"
                     release.finish(self.github, plan, report, manifest_path)
                     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -290,8 +299,9 @@ class ReleasePolicyTests(unittest.TestCase):
                     plan = self.plan(channel, version, previous)
                     self.github.candidate(channel, age=73)
                     manifest_path = Path(directory)/"release-manifest.json"
-                    report = {"result": "passed", "version": version, "source_sha": source_sha, "components": plan["components"]}
-                    with patch.object(release, "run") as command:
+                    report = {"result": "passed", "version": version, "source_sha": source_sha, "components": plan["components"], "scope": "cohort" if POLICY["kind"] == "core" else "platform"}
+                    report["selected_modules"] = release.expected_modules(plan, report["scope"])
+                    with patch.object(release, "run") as command, patch.object(release, "complete_plan", return_value=plan):
                         release.finish(self.github, plan, report, manifest_path)
                         command.assert_not_called()
                     self.github.manifests[version] = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -336,16 +346,9 @@ class ReleasePolicyTests(unittest.TestCase):
         with patch.object(release.subprocess, "run", return_value=result):
             self.assertIsNone(github.api("git/ref/tags/v0.6.6", missing=True))
 
-    def test_public_checks_cannot_silently_skip_brokers_or_old_examples(self):
+    def test_public_checks_cannot_silently_skip_brokers(self):
         with self.assertRaises(release.ReleaseError):
             verify_public.verify({}, Path("."), Path("."), {}, "unused")
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory)
-            (path/"go.mod").write_text("module example.com/test\n\ngo 1.25.5\n\nrequire github.com/NARUBROWN/spine v0.6.0\n")
-            with self.assertRaisesRegex(release.ReleaseError, "전환 전"):
-                verify_public.require_migrated_example(path, dict(os.environ, GOWORK="off"))
-            (path/"go.mod").write_text("module example.com/test\n\ngo 1.25.5\n\nrequire github.com/NARUBROWN/spine v0.6.5\n")
-            verify_public.require_migrated_example(path, dict(os.environ, GOWORK="off"))
 
     def test_public_go_tests_reject_skip_and_empty_test_selection(self):
         for events in [[], [{"Action": "skip", "Test": "TestBroker"}], [{"Action": "run", "Test": "TestBroker"}, {"Action": "skip", "Test": "TestBroker"}]]:

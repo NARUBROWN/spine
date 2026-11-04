@@ -400,7 +400,7 @@ func waitConsumerError(errors <-chan error, done <-chan struct{}) error {
 }
 
 const (
-	spineVersion = "v0.6.6"
+	spineVersion = "v0.7.0"
 	spineBanner  = `
 ________       _____             
 __  ___/__________(_)___________ 

@@ -1,4 +1,4 @@
-name: Release Public Installation Check
+name: Public Module Check
 on:
   workflow_call:
     inputs:
@@ -11,32 +11,30 @@ on:
       artifact:
         type: string
         required: true
+      scope:
+        type: string
+        required: true
 permissions:
   contents: read
   actions: read
 jobs:
   public:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 20
     services:
       rabbitmq:
         image: rabbitmq:3-management
-        ports:
-          - 5672:5672
+        ports: ['5672:5672']
         options: >-
-          --health-cmd "rabbitmq-diagnostics -q ping"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
+          --health-cmd "rabbitmq-diagnostics -q check_port_connectivity"
+          --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
-      - name: Checkout release controller
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           path: control
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Checkout exact candidate
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           path: candidate
           ref: ${{ inputs.source_sha }}
@@ -47,23 +45,24 @@ jobs:
           path: control
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.27.3'
-      - name: Start Redpanda
+          go-version: '1.26.0'
+      - name: Start Kafka-compatible broker
+        if: ${{ inputs.scope != 'core' }}
         run: |
           docker run -d --name release-kafka -p 127.0.0.1:19092:9092 redpandadata/redpanda:v24.3.18 redpanda start --overprovisioned --smp 1 --memory 512M --reserve-memory 0M --node-id 0 --check=false --kafka-addr 0.0.0.0:9092 --advertise-kafka-addr 127.0.0.1:19092
           for attempt in $(seq 1 60); do
             if docker exec release-kafka rpk cluster info -X brokers=127.0.0.1:9092 >/dev/null 2>&1; then exit 0; fi
             sleep 1
           done
-          docker logs release-kafka
           exit 1
-      - name: Verify actual public installation and applications
+      - name: Verify published modules with an isolated cache
         working-directory: control
         env:
           RELEASE_QUERY: ${{ inputs.query }}
+          RELEASE_SCOPE: ${{ inputs.scope }}
           SPINE_TEST_KAFKA_BROKER: 127.0.0.1:19092
           SPINE_TEST_RABBITMQ_URL: amqp://guest:guest@127.0.0.1:5672/
-        run: python3 scripts/release/verify_public.py --plan release-plan.json --source ../candidate --query "$RELEASE_QUERY" --output release-validation.json
+        run: python3 scripts/release/verify_public.py --plan release-plan.json --source ../candidate --query "$RELEASE_QUERY" --scope "$RELEASE_SCOPE" --output release-validation.json
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.artifact }}

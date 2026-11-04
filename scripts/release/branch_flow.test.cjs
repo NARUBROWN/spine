@@ -33,3 +33,16 @@ test("서로 다른 대상 브랜치의 필수 상태를 공유하지 않습니�
   const contexts = ["preview", "rc", "main"].map(base => evaluate({ head: "feat/order", base, sameRepository: true }).context);
   assert.equal(new Set(contexts).size, 3);
 });
+
+test("의존성 메타데이터 승격 브랜치는 해당 채널만 대상으로 합니다", () => {
+  for (const [head, target] of [["promote/rc/v0.7.0-rc.1", "rc"], ["promote/stable/v0.7.0", "main"]]) {
+    for (const base of ["preview", "rc", "main"]) {
+      assert.equal(evaluate({ head, base, sameRepository: true }).allowed, base === target);
+      assert.equal(evaluate({ head, base, sameRepository: false }).allowed, base === "preview");
+    }
+  }
+  for (const head of ["promote/rc/v0.7.0", "promote/stable/v0.7.0-rc.1"]) {
+    assert.equal(evaluate({ head, base: "main", sameRepository: true }).allowed, false);
+    assert.equal(evaluate({ head, base: "rc", sameRepository: true }).allowed, false);
+  }
+});

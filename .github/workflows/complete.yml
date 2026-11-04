@@ -1,0 +1,76 @@
+name: Complete Core Release Cohort
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 코어 후보와 다섯 플랫폼의 공개 검증을 완료할 태그
+        type: string
+        required: true
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: release-publication
+  cancel-in-progress: false
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.plan.outputs.sha }}
+      channel: ${{ steps.plan.outputs.channel }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check core candidate and all platform manifests
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: python3 scripts/release/release.py complete-plan --version "$RELEASE_VERSION"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-plan
+          path: release-plan.json
+          if-no-files-found: error
+  ci:
+    needs: plan
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.plan.outputs.sha }}
+      public_dependencies: true
+  public:
+    needs: plan
+    uses: ./.github/workflows/release-public-check.yml
+    with:
+      source_sha: ${{ needs.plan.outputs.sha }}
+      query: ${{ inputs.version }}
+      artifact: cohort-public-validation
+      scope: cohort
+  finish:
+    needs: [plan, ci, public]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    environment: ${{ needs.plan.outputs.channel == 'stable' && 'release-stable' || format('release-{0}', needs.plan.outputs.channel) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-plan
+      - uses: actions/download-artifact@v4
+        with:
+          name: cohort-public-validation
+      - name: Recheck evidence and complete the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release/release.py finish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest-${{ inputs.version }}
+          path: release-manifest.json
+          if-no-files-found: error
+          retention-days: 90

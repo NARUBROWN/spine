@@ -866,3 +866,10 @@ After publishing a core/platform snapshot, run `bash scripts/check-published-dem
 The script copies the real cmd/demo outside the checkout and removes local replacements and the direct Spine requirement. With go.work disabled and a fresh module cache, it downloads the pinned public platform and checks that its transitive dependency selects the expected Spine version. It then runs vet and the complete demo race tests, using the existing HTTP/WebSocket, SIGINT, and Prepare E2E tests. Temporary sources and the module cache are removed afterwards.
 
 Run on Unix for complete signal coverage. Report this published snapshot check separately from local source checks. It does not publish tags or verify production infrastructure.
+
+## Coordinated release channels
+
+Core targets v0.7.0 and each platform targets its independent v0.2.0 line. Every platform follows Preview, RC and stable channels and pins the matching core channel. Source CI may use immutable ci_sources/ci_core commits and an ephemeral workspace before tags exist; public verification always disables go.work and core/platform replacements.
+Core candidate publication records core-candidate-<tag> after kernel checks and a public core consumer build. Publish all five platform tags against that exact core tag, then run Complete Core Release Cohort. Only the completed release-manifest-<tag> permits promotion. Preview/RC have tags and artifacts; GitHub Releases are stable-only.
+Use promote/rc/<rc-tag> or promote/stable/<stable-tag> PR branches for dependency-only promotion. The controller checks ancestry, merged PR direction, normalized code fingerprints, exact channel pins and public verification. General dependency/code changes require a new Preview. pin_channel.py prints a local pin plan unless --apply is supplied; --tidy runs only after the required core tag is public.
+Release examples stay on stable versions and are updated and verified after stable publication through post-release-examples.yml. Do not make old release-only example commits block Preview or RC. See RELEASING.md for branch/environment bootstrap and publication stages.

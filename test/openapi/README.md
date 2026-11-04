@@ -2,7 +2,7 @@
 
 코어의 외부 의존성을 늘리지 않고 실제 Echo 바인딩과 JSON Schema 판정을 대조합니다. Go 1.26 이상이 필요합니다.
 
-현재 작업 소스는 함께 수정한 코어, Echo 플랫폼과 validator를 포함하는 임시 go.work로 검증합니다. 기존 공개 의존성만으로는 최신 출처별 검증과 바인딩 변경을 검사할 수 없습니다. 공개 버전 고정을 갱신한 뒤 다음 명령으로 독립 조합을 검증해야 합니다.
+현재 작업 소스는 함께 수정한 코어, Echo 플랫폼과 validator를 포함하는 임시 go.work로 검증합니다. go.mod의 Preview 태그는 코어와 플랫폼의 후보 발행 단계에서 생성됩니다. 태그가 모두 공개된 뒤 다음 명령으로 독립 조합을 검증합니다.
 
 ```sh
 GOWORK=off go test -race ./... -count=1
@@ -18,4 +18,4 @@ GOWORK=off go test -race ./... -count=1
 
 Deprecated query.Values와 header.Values는 실제 HTTP 요청에서 기존 조회와 변환 기본값, 반복 값, 빈 헤더와 Host를 확인합니다. Deprecated query.Pagination의 기존 기본값과 page, size 명세도 확인합니다. context.Context와 컨트롤러 컨텍스트의 주입도 함께 확인하며 동적 입력 키는 명세에서 추측하지 않는지 검사합니다. Pagination을 포함한 기존 API와 새 출처 DTO의 혼용은 별도의 코어 부팅 검사로 거부합니다.
 
-회귀 검사는 폼 본문과 쿼리의 출처 분리, 임베딩된 폼 필드, 동명 패키지 타입을 담은 익명 응답, 배열과 byte slice의 요청 및 응답 표현, 제외한 입력과 필수 검증의 충돌도 다룹니다. 코어는 replace ../..로 현재 소스를 검사합니다. go.mod의 Echo와 validator 고정 버전에는 아직 최신 로컬 변경이 포함되지 않았습니다.
+회귀 검사는 폼 본문과 쿼리의 출처 분리, 임베딩된 폼 필드, 동명 패키지 타입을 담은 익명 응답, 배열과 byte slice의 요청 및 응답 표현, 제외한 입력과 필수 검증의 충돌도 다룹니다. 코어는 replace ../..로 현재 소스를 검사합니다. go.mod의 Echo와 validator는 같은 채널의 Preview 태그를 참조합니다. 발행 전 workspace 검증과 발행 후 공개 조합 검증은 별도의 증거입니다.
