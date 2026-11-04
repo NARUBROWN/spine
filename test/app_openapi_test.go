@@ -152,7 +152,7 @@ func TestOpenAPIFromStandaloneExecutableWithoutSourcesOrCLI(t *testing.T) {
 		Paths   map[string]any `json:"paths"`
 	}
 	if err := json.Unmarshal(output, &document); err != nil || document.OpenAPI != "3.1.2" || document.Paths["/hello"] == nil {
-		t.Fatalf("CLI·소스 없는 실행: %s %v", output, err)
+		t.Fatalf("CLI와 소스 없는 실행: %s %v", output, err)
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil || len(entries) != 1 {

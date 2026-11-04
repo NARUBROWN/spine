@@ -225,6 +225,8 @@ JSON 요청의 고정 배열은 Go 디코딩처럼 부족한 원소를 기본값
 
 명세 리소스는 기본 공개입니다. 부팅 옵션의 `HTTP.OpenAPI.Disabled`를 true로 설정하면 자동 생성과 HTTP 제공을 끕니다. 문서 요청은 업무용 Spine 인터셉터를 실행하지 않습니다.
 
+기존 앱의 GET, HEAD 또는 WebSocket 경로가 명세 경로와 겹치면 부팅 시 `OPENAPI_PATH_CONFLICT`를 반환합니다. `/openapi.json`과 직접 겹치는 경우뿐 아니라 `/:slug`처럼 기본 명세 경로에 매칭되는 경로도 포함합니다. 전환할 때는 `HTTP.OpenAPI.Path`를 겹치지 않는 정적 경로로 바꾸거나 `HTTP.OpenAPI.Disabled`를 true로 설정하세요. 명세 경로는 `GlobalPrefix`와 독립적이므로 실제 등록된 전체 경로를 기준으로 확인해야 합니다.
+
 ```sh
 go run ./scripts/test test ./...
 ```
