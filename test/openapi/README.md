@@ -14,4 +14,6 @@ GOWORK=off go test -race ./... -count=1
 
 경로 검사는 다섯 개의 변수를 구조체 하나로 받는 실제 HTTP 요청, 이름 기반 매핑, 포인터와 0 및 false, 출처별 오류, 사용자 TextUnmarshaler, 미사용 경로 키와 기존 래퍼 전환을 다룹니다.
 
+Deprecated query.Values와 header.Values는 실제 HTTP 요청에서 기존 조회와 변환 기본값, 반복 값, 빈 헤더와 Host를 확인합니다. context.Context와 컨트롤러 컨텍스트 및 query.Pagination의 기존 주입도 함께 확인하며 동적 입력 키는 명세에서 추측하지 않는지 검사합니다. 기존 API와 새 출처 DTO의 혼용은 별도의 코어 부팅 검사로 거부합니다.
+
 회귀 검사는 폼 본문과 쿼리의 출처 분리, 임베딩된 폼 필드, 동명 패키지 타입을 담은 익명 응답, 배열과 byte slice의 요청 및 응답 표현, 제외한 입력과 필수 검증의 충돌도 다룹니다. 코어는 replace ../..로 현재 소스를 검사합니다. go.mod의 Echo와 validator 고정 버전에는 아직 최신 로컬 변경이 포함되지 않았습니다.

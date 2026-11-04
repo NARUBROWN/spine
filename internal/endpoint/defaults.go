@@ -10,9 +10,10 @@ import (
 func Resolvers(validator validation.Validator) []resolver.ArgumentResolver {
 	return []resolver.ArgumentResolver{
 		&resolver.StdContextResolver{}, &resolver.ControllerContextResolver{},
-		&resolver.PathIntResolver{},
+		&resolver.HeaderResolver{}, &resolver.PathIntResolver{},
 		&resolver.PathStringResolver{}, &resolver.PathBooleanResolver{},
-		&resolver.PaginationResolver{}, &resolver.InputDTOResolver{Validator: validator},
+		&resolver.PaginationResolver{}, &resolver.QueryValuesResolver{},
+		&resolver.InputDTOResolver{Validator: validator},
 		&resolver.DTOResolver{Validator: validator}, &resolver.FormDTOResolver{Validator: validator},
 		&resolver.UploadedFilesResolver{},
 	}

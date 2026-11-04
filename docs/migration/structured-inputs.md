@@ -1,6 +1,6 @@
 # 경로, 쿼리와 헤더 구조체 입력으로 전환하기
 
-이 개발 변경에서는 `query.Values`, `header.Values`와 각 타입의 조회 API 및 `NewValues` 생성 함수를 제거합니다. 쿼리와 헤더를 각각 일반 구조체 포인터로 받고 필드에 직접 접근하세요. 필드마다 함수 인자를 추가하거나 문서용 래퍼를 만들 필요가 없습니다.
+이 개발 변경에서는 `query.Values`, `header.Values`와 각 타입의 조회 API 및 `NewValues` 생성 함수를 Deprecated로 표시하고 전환 기간에 유지합니다. 기존 함수 시그니처와 조회 동작은 계속 사용할 수 있습니다. 새 코드는 쿼리와 헤더를 각각 일반 구조체 포인터로 받고 필드에 직접 접근하세요. 필드마다 함수 인자를 추가하거나 문서용 래퍼를 만들 필요가 없습니다.
 
 현재 안내는 작업 브랜치의 변경을 대상으로 합니다. 전환을 포함한 정식 릴리스 버전은 아직 정해지지 않았습니다. 이전 공개 버전의 동작이 소급 변경되는 것은 아닙니다.
 
@@ -10,7 +10,7 @@
 rg -n 'query\.Values|header\.Values|query\.NewValues|header\.NewValues|pkg/header' --glob '*.go'
 ```
 
-구버전에서는 `query.Values`와 `header.Values`를 주입받은 뒤 함수 내부에서 이름으로 조회했습니다. 다음은 구버전 전용 코드입니다.
+기존 `query.Values`와 `header.Values`는 값 인자로 주입받은 뒤 함수 내부에서 이름으로 조회합니다. 다음 코드는 전환 기간에도 계속 동작합니다.
 
 ```go
 func (c *Controller) Search(q query.Values, headers header.Values) httpx.Response[map[string]any] {
@@ -53,6 +53,16 @@ func (c *Controller) Search(q *SearchQuery, headers *RequestHeaders) httpx.Respo
 ```
 
 핸들러는 `q *SearchQuery`, `headers *RequestHeaders`를 별도 인자로 받습니다. 함수 안에서는 `q.Keyword`, `q.Page`, `headers.RequestID`를 읽습니다. 본문이 필요하면 기존 본문 DTO도 별도 인자로 받습니다. 라우트의 메서드, 경로와 핸들러 등록 방식은 유지합니다.
+
+### 전환 기간의 호환 정책
+
+한 핸들러에서 Deprecated된 `path.Int`, `path.String`, `path.Boolean`, `query.Values`, `header.Values`와 새 Path, Query, Header DTO를 함께 받으면 부팅 전에 거부합니다. 출처가 달라도 같은 규칙을 적용합니다. 기존 Path 래퍼와 Path DTO의 혼용은 `HTTP_PATH_INPUT_MIXED`, 그 밖의 혼용은 `HTTP_INPUT_API_MIXED`입니다. 핸들러 단위로 입력 인자를 함께 전환하세요. 서로 다른 핸들러에서 기존 입력과 새 DTO를 각각 사용하는 것은 허용합니다.
+
+기존 본문 DTO, context.Context, 컨트롤러 컨텍스트와 query.Pagination은 Deprecated 입력과 함께 사용할 수 있습니다. Values는 기존과 같이 값으로 주입하며 `*query.Values`, `*header.Values`는 `HTTP_INPUT_CONTRACT_INVALID`로 거부합니다. 제거 버전은 아직 정하지 않았습니다.
+
+기존 쿼리 조회는 반복 키의 첫 번째 값을 사용하며 쉼표를 나누지 않습니다. Int는 누락과 변환 실패 모두에 기본값을 반환하고 GetBoolByKey는 yes, no, on, off 같은 기존 표기를 유지합니다. 헤더 조회도 http.Header의 첫 번째 값과 빈 헤더 존재 여부를 유지합니다. 새 구조체 바인딩의 엄격한 변환 규칙을 기존 조회 API에 소급 적용하지 않습니다.
+
+Values가 읽는 키와 제약은 함수 안에서 결정되므로 OpenAPI 입력 파라미터를 추측하지 않습니다. validator가 설정된 상세 명세에는 `LEGACY_QUERY_VALUES_UNRESOLVED`, `LEGACY_HEADER_VALUES_UNRESOLVED`로 이유를 남깁니다. 같은 핸들러의 query.Pagination처럼 선언된 기존 입력은 계속 설명합니다.
 
 `query` 태그가 있는 구조체는 HTTP 메서드와 무관하게 쿼리에서만 바인딩합니다. `header` 태그가 있는 구조체는 헤더에서만 바인딩합니다. JSON 본문이 이 값을 덮어쓰지 않습니다. 쿼리와 헤더 DTO에 다른 path, query, header, form, param 입력 출처를 섞으면 사전 검사에서 `HTTP_INPUT_CONTRACT_INVALID`로 거부합니다. 해당 출처의 태그가 없는 공개 필드는 조용히 무시하지 않습니다. 제외할 필드는 `query:"-"` 또는 `header:"-"`로 명시하세요. `headers`, `queries` 같은 지원하지 않는 복수형 입력 태그도 거부합니다. `json` 태그는 명명이나 직렬화에 사용할 수 있지만 출처를 다시 본문으로 바꾸지 않습니다.
 

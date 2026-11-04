@@ -87,7 +87,9 @@ app.Route("POST", "/users", (*UserController).Create)
 
 위 코드는 앱이 정의한 `UserController`, `UserDTO`와 `pkg/httpx`를 사용하는 예입니다. 입력 필드는 `input.Name`으로 직접 읽습니다. 명세는 등록된 메서드와 경로, JSON 필드, 반환형의 본문 타입을 추출합니다. 검증기를 등록하면 설명 가능한 `validate` 규칙도 반영합니다.
 
-경로, 쿼리와 헤더는 각각 별도 구조체 포인터로 받습니다. path 태그는 라우트의 경로 변수 이름과 정확히 연결하며 구조체 필드 순서에 의존하지 않습니다. 경로 파라미터는 검증 태그와 무관하게 required로 설명하고 포인터 필드도 null로 표시하지 않습니다. `query` 필드 태그가 있는 DTO는 쿼리에서, `header` 필드 태그가 있는 DTO는 헤더에서만 읽습니다. 함수 안에서는 일반 필드로 직접 접근하며 본문이 값을 덮어쓰지 않습니다. 서로 다른 출처의 필드는 한 DTO에 섞지 않습니다. query.Values와 header.Values는 제거했습니다. 기존 path.Int, path.String, path.Boolean은 전환 기간에 단독 사용을 유지하며 새 Path DTO와 혼용하면 거부합니다. [구조체 입력 전환 안내](../../docs/migration/structured-inputs.md)를 참고하세요.
+경로, 쿼리와 헤더는 각각 별도 구조체 포인터로 받습니다. path 태그는 라우트의 경로 변수 이름과 정확히 연결하며 구조체 필드 순서에 의존하지 않습니다. 경로 파라미터는 검증 태그와 무관하게 required로 설명하고 포인터 필드도 null로 표시하지 않습니다. `query` 필드 태그가 있는 DTO는 쿼리에서, `header` 필드 태그가 있는 DTO는 헤더에서만 읽습니다. 함수 안에서는 일반 필드로 직접 접근하며 본문이 값을 덮어쓰지 않습니다. 서로 다른 출처의 필드는 한 DTO에 섞지 않습니다.
+
+기존 query.Values와 header.Values, 조회 메서드와 NewValues는 Deprecated로 유지합니다. path.Int, path.String, path.Boolean도 같은 전환 정책을 따릅니다. 같은 핸들러에서 Deprecated 입력과 새 Path, Query, Header DTO를 함께 받으면 출처와 무관하게 부팅 전에 거부합니다. 본문 DTO, 컨텍스트와 query.Pagination은 기존 입력과 함께 사용할 수 있습니다. Values가 함수 안에서 읽는 키는 추측하지 않으며 `LEGACY_QUERY_VALUES_UNRESOLVED`, `LEGACY_HEADER_VALUES_UNRESOLVED`로 상세 입력 명세의 한계를 남깁니다. [구조체 입력 전환 안내](../../docs/migration/structured-inputs.md)를 참고하세요.
 
 파일은 기존 `form` 태그와 표준 라이브러리의 `*mime/multipart.FileHeader`, `[]*mime/multipart.FileHeader`, `[]mime/multipart.FileHeader`에서 필드 이름과 개수를 추출합니다. 파일 필드가 있는 DTO는 multipart/form-data로만 기술합니다. 현재 Echo 기본 바인더와 대조했으며 다른 플랫폼은 자체 바인더의 지원 여부를 확인해야 합니다. 동적인 `multipart.UploadedFiles`는 필드 이름을 추측하지 않습니다.
 

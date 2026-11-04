@@ -3,7 +3,9 @@ package resolver
 import (
 	"reflect"
 
+	"github.com/NARUBROWN/spine/pkg/header"
 	"github.com/NARUBROWN/spine/pkg/path"
+	"github.com/NARUBROWN/spine/pkg/query"
 )
 
 // Parameters는 실행과 명세가 같은 순서로 경로 키를 배정하도록 합니다.
@@ -30,4 +32,12 @@ func IsLegacyPath(t reflect.Type) bool {
 		t = t.Elem()
 	}
 	return t == reflect.TypeFor[path.Int]() || t == reflect.TypeFor[path.String]() || t == reflect.TypeFor[path.Boolean]()
+}
+
+// IsLegacyValues는 Deprecated 쿼리와 헤더 조회 타입을 식별합니다.
+func IsLegacyValues(t reflect.Type) bool {
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	return t == reflect.TypeFor[query.Values]() || t == reflect.TypeFor[header.Values]()
 }

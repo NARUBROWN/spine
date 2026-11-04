@@ -114,6 +114,12 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 					}
 				case *resolver.StdContextResolver, *resolver.ControllerContextResolver:
 					input.Binding = "context"
+				case *resolver.QueryValuesResolver:
+					input.Binding = "query"
+					c.diagnostic("LEGACY_QUERY_VALUES_UNRESOLVED", route.Handler, "Deprecated query.Values reads keys at runtime; use a query-tagged struct pointer to describe inputs.")
+				case *resolver.HeaderResolver:
+					input.Binding = "header"
+					c.diagnostic("LEGACY_HEADER_VALUES_UNRESOLVED", route.Handler, "Deprecated header.Values reads keys at runtime; use a header-tagged struct pointer to describe inputs.")
 				case *resolver.PathIntResolver, *resolver.PathStringResolver, *resolver.PathBooleanResolver:
 					input.Binding, input.Name, input.Required = "path", parameter.PathKey, true
 					if input.Name == "" {
