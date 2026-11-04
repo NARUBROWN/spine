@@ -3,12 +3,14 @@
 import base64
 import copy
 import datetime as dt
+import io
 import json
 import os
 from pathlib import Path
 import tempfile
 import subprocess
 import unittest
+import zipfile
 from unittest.mock import patch
 
 import release
@@ -30,6 +32,7 @@ class FakeGitHub:
         self.tags = {}
         self.release_data = {}
         self.manifests = {}
+        self.artifacts = {}
         self.writes = []
         self.comparison = "ahead"
         self.heads = {"preview": SOURCE, "rc": RC_SOURCE, "main": MAIN_SOURCE}
@@ -38,6 +41,7 @@ class FakeGitHub:
         self.pull_direction = None
         self.run_conclusion = "success"
         self.run_path = ".github/workflows/preview.yml"
+        self.run_attempt = 1
         self.policy = copy.deepcopy(POLICY)
         self.source_policy = None
         self.reviewers = [POLICY["reviewer_login"]]
@@ -49,8 +53,9 @@ class FakeGitHub:
     def releases(self):
         return list(self.release_data.values())
 
-    def manifest(self, tag):
-        return self.manifests[tag]
+    def candidate_evidence(self, tag):
+        return {"manifest": self.manifests[tag], "artifact": self.artifacts[tag],
+                "workflow_run": self.api("actions/runs/1")}
 
     def api(self, path, *, missing=False, method="GET", data=None):
         if method != "GET":
@@ -74,10 +79,8 @@ class FakeGitHub:
         if path.startswith("git/matching-refs/"):
             prefix = path.removeprefix("git/matching-refs/")
             return [{"ref": "refs/" + tag} for tag in ["tags/"+t for t in self.tags] if tag.startswith(prefix)]
-        if path.startswith("releases/tags/"):
-            return self.release_data[path.removeprefix("releases/tags/")]
         if path.startswith("actions/runs/"):
-            return {"conclusion": self.run_conclusion, "status": "completed", "event": "workflow_dispatch", "path": self.run_path, "head_branch": self.run_branch, "head_sha": self.run_sha}
+            return {"id": 1, "run_attempt": self.run_attempt, "conclusion": self.run_conclusion, "status": "completed", "event": "workflow_dispatch", "path": self.run_path, "head_branch": self.run_branch, "head_sha": self.run_sha}
         if path.endswith("deployment-branch-policies"):
             return {"branch_policies": [{"name": "main", "type": "branch"}]}
         if path.startswith("environments/"):
@@ -93,11 +96,13 @@ class FakeGitHub:
         tag = f"{POLICY['next_version']}-{channel}.1"
         sha = SOURCE if channel == "preview" else RC_SOURCE
         self.tags[tag] = sha
-        self.release_data[tag] = {"tag_name": tag, "draft": False, "prerelease": True,
-                                  "published_at": (NOW-dt.timedelta(hours=age)).isoformat()}
+        self.artifacts[tag] = {"id": 10, "name": "release-manifest-" + tag, "expired": False,
+                               "digest": "sha256:" + "e" * 64,
+                               "created_at": (NOW-dt.timedelta(hours=age)).isoformat(),
+                               "workflow_run": {"id": 1, "head_sha": sha, "head_branch": POLICY["branches"][channel]}}
         self.manifests[tag] = {"schema_version": "spine.release-manifest/v1", "channel": channel,
                                "version": tag, "source_sha": sha, "branch": POLICY["branches"][channel], "source_tree": TREE, "workflow_run_id": "1",
-                               "components": release.components(POLICY)}
+                               "workflow_run_attempt": "1", "repository": self.repository, "components": release.components(POLICY)}
         self.manifests[tag]["validation"] = {"result": "passed", "version": tag, "source_sha": sha,
                                              "components": release.components(POLICY)}
         self.run_path = ".github/workflows/"+release.WORKFLOWS[channel]
@@ -182,14 +187,20 @@ class ReleasePolicyTests(unittest.TestCase):
 
     def test_failed_wrong_or_incomplete_source_evidence_cannot_promote(self):
         source = self.github.candidate()
-        for condition in ["failed", "wrong_workflow", "wrong_sha", "missing_validation", "draft"]:
+        for condition in ["failed", "wrong_workflow", "wrong_sha", "missing_validation", "expired", "wrong_repository",
+                          "wrong_artifact_run", "wrong_artifact_sha", "wrong_attempt", "wrong_tree"]:
             with self.subTest(condition=condition):
                 github = copy.deepcopy(self.github)
                 if condition == "failed": github.run_conclusion = "failure"
                 if condition == "wrong_workflow": github.run_path = ".github/workflows/ci.yml"
                 if condition == "wrong_sha": github.tags[source] = "b"*40
                 if condition == "missing_validation": github.manifests[source].pop("validation")
-                if condition == "draft": github.release_data[source]["draft"] = True
+                if condition == "expired": github.artifacts[source]["expired"] = True
+                if condition == "wrong_repository": github.manifests[source]["repository"] = "elsewhere/spine"
+                if condition == "wrong_artifact_run": github.artifacts[source]["workflow_run"]["id"] = 2
+                if condition == "wrong_artifact_sha": github.artifacts[source]["workflow_run"]["head_sha"] = "f" * 40
+                if condition == "wrong_attempt": github.run_attempt = 2
+                if condition == "wrong_tree": github.manifests[source]["source_tree"] = "f" * 40
                 with self.assertRaises(release.ReleaseError):
                     release.make_plan(github, POLICY, "rc", self.base+"-rc.1", source, now=NOW)
 
@@ -197,7 +208,7 @@ class ReleasePolicyTests(unittest.TestCase):
         source = self.github.candidate("rc", age=23)
         with self.assertRaises(release.ReleaseError):
             self.plan("stable", self.base, source)
-        self.github.release_data[source]["published_at"] = (NOW-dt.timedelta(hours=25)).isoformat()
+        self.github.artifacts[source]["created_at"] = (NOW-dt.timedelta(hours=25)).isoformat()
         self.assertEqual(self.plan("stable", self.base, source)["source_sha"], MAIN_SOURCE)
 
     def test_stable_cannot_skip_rc_or_downgrade(self):
@@ -243,7 +254,7 @@ class ReleasePolicyTests(unittest.TestCase):
             with self.assertRaises(release.ReleaseError): release.finish(self.github, plan, report)
             command.assert_not_called()
 
-    def test_publication_marks_preview_and_rc_but_not_stable(self):
+    def test_all_channels_record_manifest_and_only_stable_creates_github_release(self):
         for channel in ("preview", "rc", "stable"):
             with self.subTest(channel=channel):
                 version = self.base if channel == "stable" else self.base+"-"+channel+".1"
@@ -251,12 +262,62 @@ class ReleasePolicyTests(unittest.TestCase):
                         "source_tag": "", "branch": POLICY["branches"][channel], "components": release.components(POLICY), "observation_override_reason": ""}
                 report = {"result": "passed", "version": version, "source_sha": SOURCE, "components": plan["components"]}
                 self.github.tags[version] = SOURCE
-                with patch.object(release, "run") as command:
-                    release.finish(self.github, plan, report)
-                    arguments = command.call_args.args
-                    self.assertIn("--verify-tag", arguments)
-                    self.assertEqual("--prerelease" in arguments, channel != "stable")
-                    self.assertEqual("--latest" in arguments, channel == "stable")
+                with tempfile.TemporaryDirectory() as directory, patch.object(release, "run") as command:
+                    manifest_path = Path(directory)/"release-manifest.json"
+                    release.finish(self.github, plan, report, manifest_path)
+                    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    self.assertEqual(manifest["version"], version)
+                    self.assertEqual(manifest["validation"], report)
+                    if channel == "stable":
+                        command.assert_called_once()
+                        arguments = command.call_args.args
+                        self.assertEqual(arguments[:3], ("gh", "release", "create"))
+                        self.assertIn("--verify-tag", arguments)
+                        self.assertIn("--latest", arguments)
+                        self.assertNotIn("--prerelease", arguments)
+                        self.assertIn(str(manifest_path.resolve()), arguments)
+                    else:
+                        command.assert_not_called()
+
+    def test_exported_candidate_manifest_promotes_without_a_github_release(self):
+        with patch.dict(os.environ, {"GITHUB_RUN_ID": "1", "GITHUB_RUN_ATTEMPT": "1"}):
+            for channel, next_channel, source_sha, version in [
+                ("preview", "rc", SOURCE, self.base+"-preview.1"),
+                ("rc", "stable", RC_SOURCE, self.base+"-rc.1"),
+            ]:
+                with self.subTest(channel=channel), tempfile.TemporaryDirectory() as directory:
+                    previous = SOURCE if channel == "preview" else self.github.candidate("preview")
+                    plan = self.plan(channel, version, previous)
+                    self.github.candidate(channel, age=73)
+                    manifest_path = Path(directory)/"release-manifest.json"
+                    report = {"result": "passed", "version": version, "source_sha": source_sha, "components": plan["components"]}
+                    with patch.object(release, "run") as command:
+                        release.finish(self.github, plan, report, manifest_path)
+                        command.assert_not_called()
+                    self.github.manifests[version] = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    next_version = self.base if next_channel == "stable" else self.base+"-rc.1"
+                    promoted = self.plan(next_channel, next_version, version)
+                    self.assertEqual(promoted["upstream_source_sha"], source_sha)
+                    self.assertEqual(self.github.release_data, {})
+
+    def test_candidate_observation_uses_artifact_time_and_rejects_future_evidence(self):
+        source = self.github.candidate(age=71)
+        self.github.release_data[source] = {"published_at": (NOW-dt.timedelta(days=10)).isoformat()}
+        with self.assertRaisesRegex(release.ReleaseError, "관찰 기간 부족"):
+            self.plan("rc", self.base+"-rc.1", source)
+        self.github.artifacts[source]["created_at"] = (NOW+dt.timedelta(hours=1)).isoformat()
+        with self.assertRaisesRegex(release.ReleaseError, "현재보다 뒤"):
+            self.plan("rc", self.base+"-rc.1", source, "서비스 장애 대응을 위한 긴급 수정으로 관찰 기간을 단축합니다")
+
+    def test_replacing_source_artifact_while_approval_is_pending_stops_tag_write(self):
+        source = self.github.candidate()
+        plan = self.plan("rc", self.base+"-rc.1", source)
+        self.github.artifacts[source]["id"] = 11
+        with patch.dict(os.environ, {"GITHUB_REF": "refs/heads/rc"}), patch.object(release.dt, "datetime", wraps=dt.datetime) as clock:
+            clock.now.return_value = NOW
+            with self.assertRaisesRegex(release.ReleaseError, "승인한 계획"):
+                release.publish(self.github, POLICY, plan, RC_SOURCE)
+        self.assertEqual(self.github.writes, [])
 
     def test_repository_settings_endpoint_has_no_trailing_slash(self):
         result = subprocess.CompletedProcess([], 0, '{"default_branch":"preview"}', "")
@@ -294,6 +355,80 @@ class ReleasePolicyTests(unittest.TestCase):
         result = subprocess.CompletedProcess([], 0, json.dumps({"Action": "run", "Test": "TestBroker"})+"\n"+json.dumps({"Action": "pass", "Test": "TestBroker"}), "")
         with patch.object(verify_public.subprocess, "run", return_value=result):
             verify_public.go_tests(["./..."], Path("."), {})
+
+
+class CandidateArtifactTests(unittest.TestCase):
+    def setUp(self):
+        self.github = release.GitHub("NARUBROWN/spine")
+        self.tag = POLICY["next_version"] + "-preview.1"
+        self.payload = {"version": self.tag, "source_sha": SOURCE}
+        self.archive = self.package("release-manifest.json", json.dumps(self.payload))
+        self.artifact = {"id": 42, "name": "release-manifest-"+self.tag, "expired": False,
+                         "digest": "sha256:"+release.hashlib.sha256(self.archive).hexdigest(),
+                         "workflow_run": {"id": 7}}
+        self.items = [self.artifact]
+        self.paths = []
+
+    def package(self, name, content):
+        data = io.BytesIO()
+        with zipfile.ZipFile(data, "w") as archive:
+            archive.writestr(name, content)
+        return data.getvalue()
+
+    def api(self, path):
+        self.paths.append(path)
+        if path.startswith("actions/artifacts?"):
+            return {"artifacts": self.items}
+        if path == "actions/runs/7":
+            return {"id": 7, "conclusion": "success"}
+        raise AssertionError(path)
+
+    def download(self, *args, **kwargs):
+        self.assertEqual(args[0], ["gh", "api", "repos/NARUBROWN/spine/actions/artifacts/42/zip"])
+        kwargs["stdout"].write(self.archive)
+        return subprocess.CompletedProcess(args[0], 0, stderr=b"")
+
+    def test_downloads_exact_artifact_id_and_checks_archive_digest(self):
+        with patch.object(self.github, "api", side_effect=self.api), patch.object(release.subprocess, "run", side_effect=self.download):
+            evidence = self.github.candidate_evidence(self.tag)
+        self.assertEqual(evidence["manifest"], self.payload)
+        self.assertEqual(evidence["workflow_run"]["id"], 7)
+        self.assertTrue(all("releases" not in path for path in self.paths))
+
+    def test_missing_duplicate_or_expired_artifacts_cannot_promote(self):
+        for items in ([], [self.artifact, self.artifact], [dict(self.artifact, expired=True)]):
+            with self.subTest(items=items):
+                self.items = items
+                with patch.object(self.github, "api", side_effect=self.api), patch.object(release.subprocess, "run") as command:
+                    with self.assertRaises(release.ReleaseError):
+                        self.github.candidate_evidence(self.tag)
+                    command.assert_not_called()
+
+    def test_corrupt_or_replaced_archive_and_missing_manifest_are_rejected(self):
+        original = self.archive
+        for condition in ("replaced", "corrupt", "missing_manifest"):
+            with self.subTest(condition=condition):
+                self.archive = b"corrupt" if condition != "missing_manifest" else self.package("wrong.json", "{}")
+                self.artifact["digest"] = "sha256:" + release.hashlib.sha256(original if condition == "replaced" else self.archive).hexdigest()
+                with patch.object(self.github, "api", side_effect=self.api), patch.object(release.subprocess, "run", side_effect=self.download):
+                    with self.assertRaises(release.ReleaseError):
+                        self.github.candidate_evidence(self.tag)
+
+    def test_download_failure_is_not_treated_as_candidate_evidence(self):
+        failed = subprocess.CompletedProcess([], 1, stderr=b"artifact unavailable")
+        with patch.object(self.github, "api", side_effect=self.api), patch.object(release.subprocess, "run", return_value=failed):
+            with self.assertRaisesRegex(release.ReleaseError, "다운로드"):
+                self.github.candidate_evidence(self.tag)
+
+    def test_artifact_search_reads_later_pages(self):
+        def api(path):
+            if path.endswith("&page=1"):
+                return {"artifacts": [dict(self.artifact, name="unrelated") for _ in range(100)]}
+            if path.endswith("&page=2"):
+                return {"artifacts": [self.artifact]}
+            return self.api(path)
+        with patch.object(self.github, "api", side_effect=api), patch.object(release.subprocess, "run", side_effect=self.download):
+            self.assertEqual(self.github.candidate_evidence(self.tag)["manifest"], self.payload)
 
 
 if __name__ == "__main__":
