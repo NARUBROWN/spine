@@ -232,14 +232,18 @@ spine context --root cmd/demo --json
 spine contract check --root cmd/demo --warnings-as-errors --json
 spine verify --root cmd/demo --warnings-as-errors --json
 spine contract probe --root cmd/demo --json
-go -C cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=90s
-spine check --root .
+go run ./scripts/test -module cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=90s
+go run ./scripts/test test ./... -count=1
 ```
 
 The CLI, entrypoint, and HTTP/WS E2E share `cmd/demo/application.BuildApplication`. Keep static analysis,
-partial runtime probe, and real-network E2E evidence separate. Root `go test ./...` skips all nested modules. Run tests separately in
-../spine-echo-platform, test, cmd/demo, cmd/reference and examples/security-config. CI runs it on Linux and macOS. Keep all framework
-unit and integration tests in addition to this demo gate.
+partial runtime probe, and real-network E2E evidence separate. All Go test files live under the repository-root `test/`.
+Package tests mirror source paths under `test/unit/`, including `test/unit/cmd/demo/` and `test/unit/cmd/reference/`.
+The standard-library runner `go run ./scripts/test` uses Go's build overlay to preserve access to package-private code.
+Root `go test ./...` does not run these relocated tests. Select nested source modules with `-module` before `test` or `vet`.
+The existing `test`, `test/openapi`, and `test/platform-e2e` integration modules retain their direct Go commands.
+Do not run tests or tidy inside `test/unit`: its go.mod only excludes stored test sources from integration package discovery.
+See `test/README.md` for commands. CLI default Go checks do not replace this framework test runner.
 
 The platform's standalone CI vet/unit/race commands use a temporary Go workspace under RUNNER_TEMP to select
 the two checkouts. Each job verifies that Spine is a main workspace module before running platform checks.
@@ -279,7 +283,7 @@ Use this map instead of searching the entire repository blindly:
 - `app.go`: public `spine.App` assembly API.
 - `application.go`: optional preparation API and listener-free Handler/Close ownership.
 - `pkg/boot`: HTTP, WebSocket, common event retry/settlement, lifecycle, and validation options.
-- `pkg/path`, `pkg/query`, `pkg/header`, `pkg/multipart`: supported HTTP handler inputs.
+- Ordinary pointer DTOs use path/query/header tags for source-specific binding. `pkg/path` wrappers, `query.Values`, `header.Values` and `query.Pagination` are deprecated migration inputs; use ordinary query DTOs for new pagination. `pkg/multipart` provides uploads.
 - `pkg/httpx`, `pkg/httperr`: supported HTTP outputs and expected HTTP errors.
 - `pkg/ws`: WebSocket connection identity and sending.
 - `pkg/event/publish`: domain-event contract and request-scoped publishing.
@@ -348,7 +352,7 @@ On an error, event dispatch and `PostHandle` are skipped; `BeforeResponse`, erro
 - Enable HTTP explicitly with `HTTP: &boot.HTTPOptions{}`. `HTTP: nil` means no HTTP server.
 - Return `httpx.Response[T]`, `httpx.Binary`, or `httpx.Redirect` for successful HTTP responses. Do not return a raw DTO or raw string.
 - Use `httperr.*` or `*httperr.HTTPError` for expected HTTP failures. Generic errors become a non-leaking HTTP 500.
-- Use Spine semantic input types. Do not replace `path.Int`, `path.String`, or `path.Boolean` with primitive handler arguments.
+- Use ordinary struct pointer arguments with path/query/header tags. Do not use primitive handler arguments. Legacy path wrappers remain migration-only inputs and cannot be mixed with a path DTO in one handler.
 - Keep Kafka/RabbitMQ consumers idempotent. Delivery is at least once, not exactly once.
 - Use an outbox when a database write and external event publication must form one durable business operation.
 - Never enable plaintext broker compatibility in production.
@@ -366,7 +370,6 @@ import (
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
-	"github.com/NARUBROWN/spine/pkg/path"
 )
 
 type Health struct {
@@ -374,18 +377,20 @@ type Health struct {
 	Status string `json:"status"`
 }
 
+type HealthPath struct { ID int64 `path:"id"` }
+
 type HealthController struct{}
 
 func NewHealthController() *HealthController {
 	return &HealthController{}
 }
 
-func (c *HealthController) Get(id path.Int) (httpx.Response[Health], error) {
-	if id.Value <= 0 {
+func (c *HealthController) Get(p *HealthPath) (httpx.Response[Health], error) {
+	if p.ID <= 0 {
 		return httpx.Response[Health]{}, httperr.BadRequest("id must be positive")
 	}
 	return httpx.Response[Health]{
-		Body: Health{ID: id.Value, Status: "ok"},
+		Body: Health{ID: p.ID, Status: "ok"},
 	}, nil
 }
 
@@ -463,13 +468,18 @@ Register a route with:
 app.Route("GET", "/users/:user_id", (*UserController).Get)
 ```
 
-HTTP methods are trimmed and uppercased. Route paths use `:name` parameters. Path semantic arguments consume path parameters from left to right, not by Go parameter name:
+HTTP methods are trimmed and uppercased. Route paths use `:name` parameters. Ordinary path DTO fields bind by exact tag name, independently of field or argument order:
 
 ```go
 app.Route("GET", "/orgs/:org_id/users/:user_id", (*UserController).Get)
 
-func (c *UserController) Get(orgID path.Int, userID path.Int) httpx.Response[User] {
-	// orgID binds :org_id; userID binds :user_id.
+type UserPath struct {
+    UserID int64 `path:"user_id"`
+    OrgID int64 `path:"org_id"`
+}
+
+func (c *UserController) Get(p *UserPath) httpx.Response[User] {
+    return httpx.Response[User]{Body: User{ID: p.UserID}}
 }
 ```
 
@@ -495,13 +505,14 @@ app.Route(
 | Handler parameter | Value supplied by Spine | Important rule |
 |---|---|---|
 | `context.Context` | Request context plus request-scoped event publisher | Use this with `publish.Event` and database calls. |
-| `path.Int` | Parsed `int64` from the next `:segment` | Read `.Value`; malformed input returns HTTP 400. |
-| `path.String` | Raw string from the next `:segment` | Read `.Value`. |
-| `path.Boolean` | Parsed boolean from the next `:segment` | Accepts true/false forms supported by Spine; malformed input returns HTTP 400. |
-| `query.Values` | All query values | `Int(key, default)` falls back on missing or invalid input; validate business ranges yourself. |
-| `query.Pagination` | `page` and `size` | Defaults to page 1 and size 20; validate non-positive or excessive values yourself. |
-| `header.Values` | HTTP headers | Use `Get` and `Has`. |
-| `*SomeDTO` with no `form` tags | Bound request DTO | HTTP DTOs must be pointers to structs; the Echo binder and request `Content-Type` select the body format. Malformed input returns HTTP 400. |
+| `*PathDTO` with path tags | Fields bound to exact route variable names | Direct field access; required URL presence; conversion errors return 400; validator handles value constraints. |
+| Deprecated `path.Int`, `path.String`, `path.Boolean` | Positional migration inputs | Kept during migration; cannot share a handler with any new path/query/header DTO. |
+| `*QueryDTO` with query tags | Query-only fields | Direct field access; conversion errors return 400; selected validator runs before the handler. |
+| Deprecated `query.Values` | Existing dynamic query view | First value and conversion fallback behavior remain; use a value parameter and migrate the handler to a query DTO. |
+| Deprecated `query.Pagination` | Existing `page` and `size` input | Missing or malformed numbers retain page 1 and size 20. Cannot share a handler with any new path/query/header DTO; migrate to a query DTO with explicit defaults and validation. |
+| `*HeadersDTO` with header tags | Header-only fields | Direct field access; header names are case-insensitive; keep this DTO separate from path, query and body. |
+| Deprecated `header.Values` | Existing dynamic header view | Get/Has and NewValues remain; use a value parameter and migrate the handler to a header DTO. |
+| `*SomeDTO` without path/query/header/form tags | Bound request DTO | HTTP DTOs must be pointers to structs; the Echo binder and request `Content-Type` select the body format. Malformed input returns HTTP 400. |
 | `*SomeForm` with at least one `form` tag | Bound form DTO | The presence of a form tag selects form binding. |
 | `multipart.UploadedFiles` | Uploaded file descriptors | Call each file's `Open` and close the returned stream. |
 | `pkg/spine.Ctx` or `core.ControllerContext` | Read-only view of values set by interceptors | Only `Get` is exposed; custom interfaces with extra methods are unsupported. |
@@ -610,13 +621,37 @@ The Bun demo uses this safe boundary:
 
 Response serialization, cookie validation, event dispatch, and post-processing happen before `BeforeResponse`, so their framework-controlled failures can trigger rollback. This also means a broker event can be published before the transaction commit, and a later commit failure cannot recall it. A database commit is atomic with neither broker publication nor the physical socket write. Use an outbox for database-plus-broker atomicity.
 
-## Swagger and transport extensions
+## Runtime OpenAPI and transport extensions
 
-Spine does not generate OpenAPI automatically. The Bun demo uses Swaggo annotations and generated `docs/docs.go`, `docs/swagger.json`, and `docs/swagger.yaml`. It imports the generated package to register the specification.
+HTTP apps generate OpenAPI 3.1.2 during preparation only when `boot.HTTPOptions.OpenAPI.Enabled` is true.
+The zero value and omitted options disable automatic generation, serving, document path collision checks
+and document URL logs. Path/title/API version settings alone do not enable it. Once enabled, the default
+path is `/openapi.json`, independent of GlobalPrefix. CLI, source files, swaggo and documentation
+annotations are not required. The work-in-progress Disabled field has been replaced by Enabled.
+When enabled, the resource uses server middleware but bypasses business controllers, DTO validation
+and Spine transaction/interceptor pipelines.
 
-The published v1 demo mounts Swagger through `app.Transport`. For adapter v2, mount `httpSwagger.WrapHandler` at `/swagger/*` with `platform.WithEcho(func(e *echo.Echo) { ... })` when constructing the app. Keep annotations and generated `docs/*` in sync. The v1 demo's `main.go` shows the previous hook; use the v2 platform option in new code. Generated Swagger is supporting output, not the authority for route behavior.
+Use `spine.DescribeHTTP(app, options)` for listener-free, constructor-free descriptions and
+`pkg/openapi.Generate` to serialize them. The existing App interface is unchanged; standard apps expose
+an optional HTTPDescriber. Validation constraints come only from the registered validator's optional
+contract/validator.SchemaDescriber. Missing description support and dynamic/unsupported behavior remain
+explicit diagnostics. See contract/description/README.md for supported types and boundaries.
 
-Use `App.RegisterTransport` only for an independent custom transport implementing `core.CustomTransport` (`Init`, `Start`, and `Stop`).
+Keep existing *DTO parameters, direct field access and httpx.Response[T] returns. Documentation does not
+require input wrappers or duplicate response declarations. Native DTO Bind remains platform-dependent;
+Separate path/query/header pointer DTOs bind only their declared source and validate before the handler. Path tags match route names exactly; required URL presence does not force a nonzero value. Without a validator, OpenAPI only lists registered paths and methods, with minimum structural placeholders. It omits input and response details. With a validator, detailed input schemas require SchemaDescriber; runtime status/media retain diagnostics.
+query.Values/header.Values, their getter APIs and NewValues, and query.Pagination are Deprecated and retained during migration. In one handler, deprecated path/query/header inputs cannot coexist with any new path/query/header DTO, even across sources; body DTOs and contexts remain compatible. Deprecated query.Pagination follows the same mixing restriction while retaining its old parsing and documented page/size defaults. Dynamic legacy query/header keys are omitted from detailed parameters and reported as LEGACY_QUERY_VALUES_UNRESOLVED or LEGACY_HEADER_VALUES_UNRESOLVED. Migrate using docs/migration/structured-inputs.md; preserve missing values with pointer fields and handle defaults explicitly. No removal release is set.
+Form-tagged standard mime/multipart.FileHeader pointers and slices describe named file uploads; file DTOs
+advertise multipart/form-data. Dynamic UploadedFiles keeps an unresolved-field diagnostic.
+Managed Run prints the OpenAPI URL using the bound listener port only when enabled. CLI integration is deferred until the
+core input specification is finalized and will be tracked separately. test/openapi independently compares
+official structure, schemas and actual HTTP behavior.
+
+The Bun demo's existing Swaggo UI can remain on `/swagger/*` through platform.WithEcho. Its generated
+Swagger document remains separate from the runtime OpenAPI endpoint. Swagger UI and ReDoc integration
+with the new JSON are follow-up work.
+
+Use App.RegisterTransport only for an independent core.CustomTransport.
 
 ## WebSocket
 
@@ -763,7 +798,7 @@ Zero values select bounded defaults for HTTP timeouts, header size, request body
 Important exceptions and rules:
 
 - `HTTPOptions.MaxBodyBytes < 0` explicitly disables the request-body limit.
-- Invalid JSON/form/multipart and invalid `path.Int`/`path.Boolean` produce HTTP 400.
+- Invalid JSON/form/multipart and path field conversion failures produce HTTP 400. Path errors carry `in: "path"`. Unknown DTO path keys and repeated route variable names fail before boot initialization.
 - Request bodies above the configured maximum produce HTTP 413.
 - `DisableRecover: false` (the zero value) keeps recovery enabled.
 - Use `EnableGracefulShutdown: true` for signal-driven HTTP shutdown.
@@ -809,12 +844,12 @@ For Go changes, run:
 
 ```sh
 gofmt -w <changed-go-files>
-for module in . ../spine-echo-platform test cmd/demo cmd/reference examples/security-config; do
-  go -C "$module" test ./... -count=1
-  go -C "$module" test -race ./... -count=1
+for module in . test cmd/demo cmd/reference examples/security-config; do
+  go run ./scripts/test -module "$module" test -race ./... -count=1
+  go run ./scripts/test -module "$module" vet ./...
 done
+go -C ../spine-echo-platform test -race ./... -count=1
 bash scripts/check-module-boundaries.sh
-go vet ./...
 ```
 
 Run relevant broker/database/WebSocket E2E separately. Translate POSIX environment syntax for PowerShell:
@@ -831,3 +866,10 @@ After publishing a core/platform snapshot, run `bash scripts/check-published-dem
 The script copies the real cmd/demo outside the checkout and removes local replacements and the direct Spine requirement. With go.work disabled and a fresh module cache, it downloads the pinned public platform and checks that its transitive dependency selects the expected Spine version. It then runs vet and the complete demo race tests, using the existing HTTP/WebSocket, SIGINT, and Prepare E2E tests. Temporary sources and the module cache are removed afterwards.
 
 Run on Unix for complete signal coverage. Report this published snapshot check separately from local source checks. It does not publish tags or verify production infrastructure.
+
+## Coordinated release channels
+
+Core targets v0.7.0 and each platform targets its independent v0.2.0 line. Every platform follows Preview, RC and stable channels and pins the matching core channel. Source CI may use immutable ci_sources/ci_core commits and an ephemeral workspace before tags exist; public verification always disables go.work and core/platform replacements.
+Core candidate publication records core-candidate-<tag> after kernel checks and a public core consumer build. Publish all five platform tags against that exact core tag, then run Complete Core Release Cohort. Only the completed release-manifest-<tag> permits promotion. Preview/RC have tags and artifacts; GitHub Releases are stable-only.
+Use promote/rc/<rc-tag> or promote/stable/<stable-tag> PR branches for dependency-only promotion. The controller checks ancestry, merged PR direction, normalized code fingerprints, exact channel pins and public verification. General dependency/code changes require a new Preview. pin_channel.py prints a local pin plan unless --apply is supplied; --tidy runs only after the required core tag is public.
+Release examples stay on stable versions and are updated and verified after stable publication through post-release-examples.yml. Do not make old release-only example commits block Preview or RC. See RELEASING.md for branch/environment bootstrap and publication stages.

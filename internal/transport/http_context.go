@@ -42,6 +42,14 @@ func (c *HTTPContext) Method() string               { return c.scope.Method() }
 func (c *HTTPContext) Path() string                 { return c.scope.Path() }
 func (c *HTTPContext) Query(name string) string     { return c.scope.Query(name) }
 func (c *HTTPContext) Queries() map[string][]string { return c.scope.Queries() }
+
+func (c *HTTPContext) RawQuery() (string, bool) {
+	if source, ok := c.scope.(adapter.RawQueryContext); ok {
+		return source.RawQuery()
+	}
+	return "", false
+}
+
 func (c *HTTPContext) Header(name string) string    { return c.scope.Header(name) }
 func (c *HTTPContext) Headers() map[string][]string { return c.scope.Headers() }
 func (c *HTTPContext) Set(key string, value any)    { c.store[key] = value }

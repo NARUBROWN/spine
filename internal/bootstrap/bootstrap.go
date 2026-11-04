@@ -14,6 +14,7 @@ import (
 	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
+	"github.com/NARUBROWN/spine/internal/endpoint"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	eventResolver "github.com/NARUBROWN/spine/internal/event/consumer/resolver"
 	"github.com/NARUBROWN/spine/internal/event/hook"
@@ -144,8 +145,12 @@ func Validate(config Config) error {
 			})
 		}
 		issues = append(issues, config.HTTP.ValidateIssues("HTTP")...)
+		issues = append(issues, openAPICollisionIssues(config)...)
 	}
 	for i, route := range config.Routes {
+		if meta, err := spineRouter.NewHandlerMeta(route.Handler); err == nil {
+			issues = append(issues, endpoint.DTOParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", i), route.Path)...)
+		}
 		if _, err := spineRouter.NewHandlerMeta(route.Handler); err != nil {
 			issues = append(issues, boot.ConfigIssue{
 				Path:    fmt.Sprintf("Routes[%d].Handler", i),
@@ -177,6 +182,13 @@ func Validate(config Config) error {
 		if err := validation.CheckValidator(config.Validator); err != nil {
 			return err
 		}
+	}
+	for i, route := range config.Routes {
+		meta, _ := spineRouter.NewHandlerMeta(route.Handler)
+		issues = append(issues, endpoint.ValidationParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", i), config.Validator)...)
+	}
+	if err := boot.ValidationError(issues...); err != nil {
+		return err
 	}
 	if config.HTTP != nil {
 		hasWebSocketRoutes := config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0
@@ -296,19 +308,7 @@ func globalInterceptorIdentity(interceptor core.Interceptor) (interceptorIdentit
 }
 
 func joinPath(prefix, path string) (string, error) {
-	if path == "" {
-		return "", fmt.Errorf("route path cannot be empty")
-	}
-
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-
-	if prefix == "" {
-		return path, nil
-	}
-
-	return prefix + path, nil
+	return endpoint.Path(prefix, path)
 }
 
 func assertNoAmbiguousRoute(method, newPath string, existing []string) error {
@@ -400,7 +400,7 @@ func waitConsumerError(errors <-chan error, done <-chan struct{}) error {
 }
 
 const (
-	spineVersion = "v0.6.6"
+	spineVersion = "v0.7.0"
 	spineBanner  = `
 ________       _____             
 __  ___/__________(_)___________ 

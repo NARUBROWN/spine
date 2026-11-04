@@ -6,7 +6,7 @@ import (
 )
 
 func TestRuntimeVersionUsesPublishedModuleMetadata(t *testing.T) {
-	for _, version := range []string{"v0.6.6-preview.1", "v0.6.6-rc.2", "v0.6.6"} {
+	for _, version := range []string{"v0.7.0-preview.1", "v0.7.0-rc.2", "v0.7.0"} {
 		for _, info := range []*debug.BuildInfo{
 			{Main: debug.Module{Path: spineModulePath, Version: version}},
 			{Main: debug.Module{Path: "example.com/app"}, Deps: []*debug.Module{{Path: spineModulePath, Version: version}}},

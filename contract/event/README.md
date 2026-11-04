@@ -132,7 +132,7 @@ nil 반환은 구현과 설정에 명시된 전송 확인 정책이 끝났다는
 ## 검증
 
 ```sh
-go test ./contract/event -count=1
+go run ./scripts/test test ./contract/event -count=1
 bash scripts/check-module-boundaries.sh
 ```
 

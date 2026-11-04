@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/NARUBROWN/spine/pkg/httpx"
-	"github.com/NARUBROWN/spine/pkg/path"
 	"github.com/NARUBROWN/spine/pkg/ws"
 )
 
@@ -22,8 +21,12 @@ type UserResponse struct {
 	ID int64 `json:"id"`
 }
 
-func (*Controller) User(id path.Int) httpx.Response[UserResponse] {
-	return httpx.Response[UserResponse]{Body: UserResponse{ID: id.Value}}
+type UserPath struct {
+	ID int64 `path:"id"`
+}
+
+func (*Controller) User(p *UserPath) httpx.Response[UserResponse] {
+	return httpx.Response[UserResponse]{Body: UserResponse{ID: p.ID}}
 }
 
 // EchoMessage는 JSON 바인딩과 응답 직렬화가 함께 사용하는 DTO입니다.

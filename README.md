@@ -2,7 +2,7 @@
   한국어 | <a href="README.en.md">English</a> | <a href="README.ja.md">日本語</a> | <a href="README.zh-Hans.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a>
 </p>
 
-> **릴리스 채널: Preview → RC → Stable.** 이 소스의 대상 버전은 `v0.6.6`입니다. [출시 절차](RELEASING.md)와 [경로 변경 안내](docs/migration/v0.6.6.md)를 확인하고, 공개된 버전은 [Releases](https://github.com/NARUBROWN/spine/releases)에서 확인하세요.
+> **릴리스 채널: Preview → RC → Stable.** 이 소스의 대상 버전은 `v0.7.0`입니다. [출시 절차](RELEASING.md)와 [경로 변경 안내](docs/migration/v0.7.0.md)를 확인하고, 공개된 버전은 [Releases](https://github.com/NARUBROWN/spine/releases)에서 확인하세요.
 
 > **v0.6.5**는 HTTP·WebSocket·event·validator의 공개 계약과 독립 구현 선택을 하나로 통합합니다. 코어는 표준 라이브러리만 사용합니다. [v0.6.5 전환 안내](docs/migration/v0.6.5.md)를 참고하세요.
 
@@ -108,6 +108,8 @@ spine g resource order --root . --if-match <base_hash> --json
 ```
 
 CLI는 HTTP, DI, 인터셉터, 메시지 소비자와 WebSocket 등록을 분석하고 계약 스냅샷 비교와 OpenAPI/AsyncAPI 내보내기를 지원합니다. 수동 플랫폼 연결과 App API는 [전환 안내](docs/migration/http-adapter-modules.md), 전체 명령과 분석 범위는 [CLI 문서](https://github.com/NARUBROWN/spine-cli#readme)를 참고하세요.
+
+개발 브랜치에서는 쿼리와 헤더를 각각 일반 구조체 포인터로 받도록 전환합니다. 기존 `query.Values`, `header.Values`와 조회 API, `query.Pagination`은 Deprecated로 유지합니다. 같은 핸들러에서 Deprecated 입력과 새 Path, Query, Header DTO는 함께 사용할 수 없습니다. [구조체 입력 전환 안내](docs/migration/structured-inputs.md)를 참고하세요. 정식 전환 버전과 기존 API 제거 버전은 아직 정해지지 않았습니다.
 
 ## 문서와 예제
 

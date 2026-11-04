@@ -22,11 +22,24 @@ type HTTPContext interface {
 	Params() map[string]string
 	Query(string) string
 	Queries() map[string][]string
+	// Header와 Headers는 Host를 Request.Host에서 보충한 조회 뷰를 제공합니다.
+	// Host에는 포트를 포함한 요청 값을 그대로 사용하며 전달 헤더로 대체하지 않습니다.
 	Header(string) string
+	// Headers의 반환값을 바꾸어도 원래 요청 헤더가 변경되면 안 됩니다.
 	Headers() map[string][]string
+	// Bind는 본문만 읽으며 경로 값이나 URL 쿼리를 병합하지 않습니다.
+	// JSON 바인딩은 일반 값 타입의 명시적 null을 거부합니다.
+	// nil을 표현할 수 있는 타입과 사용자 정의 JSON 디코더는 각자의 규칙을 따릅니다.
 	Bind(any) error
 	MultipartForm() (*multipart.Form, error)
 	Writer() ResponseWriter
+}
+
+// RawQueryContext는 URL 디코딩 전의 쿼리를 제공하는 선택적 입력 계약입니다.
+// bool은 원시 쿼리 제공 여부이며 빈 쿼리도 제공할 수 있으면 true를 반환합니다.
+// 슬라이스 바인딩은 이를 사용해 구분자 쉼표와 값 안의 %2C를 구별합니다.
+type RawQueryContext interface {
+	RawQuery() (string, bool)
 }
 
 // ResponseWriter는 실제 HTTP 출력 계약입니다. 응답 staging은 커널이 수행합니다.
