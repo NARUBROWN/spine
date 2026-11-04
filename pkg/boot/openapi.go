@@ -6,14 +6,15 @@ import (
 	"unicode"
 )
 
-// OpenAPIOptions는 기본 HTTP 명세 리소스를 설정합니다.
-// 기본 경로는 /openapi.json이며 API GlobalPrefix와 독립적입니다.
+// OpenAPIOptions는 명시적으로 활성화하는 HTTP 명세 리소스를 설정합니다.
+// Enabled가 true일 때만 자동 생성하고 제공합니다. 기본값은 비활성화입니다.
+// 활성화 시 기본 경로는 /openapi.json이며 API GlobalPrefix와 독립적입니다.
 // 명세는 준비 단위로 메모리에 보관하고 파일을 자동으로 쓰지 않습니다.
 type OpenAPIOptions struct {
-	Disabled bool
-	Path     string
-	Title    string
-	Version  string
+	Enabled bool
+	Path    string
+	Title   string
+	Version string
 }
 
 func (o OpenAPIOptions) DocumentPath() string {
@@ -24,7 +25,7 @@ func (o OpenAPIOptions) DocumentPath() string {
 }
 
 func (o OpenAPIOptions) ValidateIssues(prefix string) []ConfigIssue {
-	if o.Disabled {
+	if !o.Enabled {
 		return nil
 	}
 	p := o.DocumentPath()

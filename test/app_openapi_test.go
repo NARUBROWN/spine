@@ -1,18 +1,22 @@
 package test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
 
+	"github.com/NARUBROWN/spine"
 	platform "github.com/NARUBROWN/spine-echo-platform"
+	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/pkg/boot"
 )
@@ -29,11 +33,98 @@ func (*openAPIInterceptor) BeforeResponse(core.ExecutionContext, core.HandlerMet
 }
 func (*openAPIInterceptor) AfterCompletion(core.ExecutionContext, core.HandlerMeta, error) {}
 
+func TestOpenAPIIsOffWithoutExplicitActivation(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		options boot.HTTPOptions
+	}{
+		{"omitted", boot.HTTPOptions{}},
+		{"metadata_only", boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Path: "/internal/spec.json", Title: "Custom API", Version: "1"}}},
+		{"inactive_invalid_path", boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Path: "relative"}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			app := platform.New()
+			app.Constructor(func() *appCtrl { return &appCtrl{} })
+			app.Route("GET", "/hello", (*appCtrl).Hello)
+			h := newTestHandlerFromAppWithOptions(t, app, boot.Options{HTTP: &test.options})
+			for _, method := range []string{"GET", "HEAD"} {
+				for _, path := range []string{"/openapi.json", "/internal/spec.json"} {
+					w := httptest.NewRecorder()
+					h.ServeHTTP(w, httptest.NewRequest(method, path, nil))
+					if w.Code != http.StatusNotFound {
+						t.Fatalf("명시적으로 켜기 전에는 명세를 제공하면 안 됩니다: %s %s = %d", method, path, w.Code)
+					}
+				}
+			}
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, httptest.NewRequest("GET", "/hello", nil))
+			if w.Code != http.StatusOK {
+				t.Fatalf("HTTP 앱은 계속 동작해야 합니다: %d", w.Code)
+			}
+		})
+	}
+}
+
+func TestOpenAPIDefaultPreservesExistingRoutes(t *testing.T) {
+	for _, test := range []struct {
+		path, target, body string
+		handler            any
+	}{
+		{"/openapi.json", "/openapi.json", "hello", (*appCtrl).Hello},
+		{"/:id", "/42", "42", (*appCtrl).GetUser},
+	} {
+		t.Run(test.path, func(t *testing.T) {
+			app := platform.New()
+			app.Constructor(func() *appCtrl { return &appCtrl{} })
+			app.Route("GET", test.path, test.handler)
+			h := newTestHandlerFromAppWithOptions(t, app, boot.Options{HTTP: &boot.HTTPOptions{}})
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, httptest.NewRequest("GET", test.target, nil))
+			if w.Code != http.StatusOK || strings.TrimSpace(w.Body.String()) != test.body {
+				t.Fatalf("기존 경로의 동작을 유지해야 합니다: %d %s", w.Code, w.Body)
+			}
+		})
+	}
+}
+
+type openAPIDescriptionProbe struct{ describes atomic.Int32 }
+
+func (*openAPIDescriptionProbe) Validate(context.Context, any) error {
+	panic("준비 중 요청 검증을 실행하면 안 됩니다")
+}
+
+func (p *openAPIDescriptionProbe) DescribeSchema(reflect.Type) (validation.SchemaDescription, error) {
+	p.describes.Add(1)
+	return validation.SchemaDescription{}, nil
+}
+
+func TestOpenAPIGenerationOnlyRunsWhenEnabled(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		probe := &openAPIDescriptionProbe{}
+		app := spine.New(platform.Option(), spine.WithValidator(probe))
+		app.Constructor(func() *appCtrl { return &appCtrl{} })
+		app.Route("POST", "/echo", (*appCtrl).Echo)
+		h := newTestHandlerFromAppWithOptions(t, app, boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Enabled: enabled}}})
+		if described := probe.describes.Load() > 0; described != enabled {
+			t.Fatalf("명세 생성 여부가 설정과 달라졌습니다: enabled=%v calls=%d", enabled, probe.describes.Load())
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest("GET", "/openapi.json", nil))
+		want := http.StatusNotFound
+		if enabled {
+			want = http.StatusOK
+		}
+		if w.Code != want {
+			t.Fatalf("명세 제공 여부가 설정과 달라졌습니다: enabled=%v status=%d", enabled, w.Code)
+		}
+	}
+}
+
 func TestOpenAPIResourceUsesPreparedSnapshotAndSkipsBusinessInterceptors(t *testing.T) {
 	app := setupApp()
 	interceptor := &openAPIInterceptor{}
 	app.Interceptor(interceptor)
-	h := newTestHandlerFromAppWithOptions(t, app, boot.Options{HTTP: &boot.HTTPOptions{GlobalPrefix: "/api"}})
+	h := newTestHandlerFromAppWithOptions(t, app, boot.Options{HTTP: &boot.HTTPOptions{GlobalPrefix: "/api", OpenAPI: boot.OpenAPIOptions{Enabled: true}}})
 	request := func(method, path string) *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest(method, path, nil))
@@ -65,12 +156,12 @@ func TestOpenAPIResourceUsesPreparedSnapshotAndSkipsBusinessInterceptors(t *test
 }
 
 func TestOpenAPIPathConfigurationAndCollision(t *testing.T) {
-	for _, disabled := range []bool{false, true} {
+	for _, enabled := range []bool{false, true} {
 		app := setupApp()
 		app.Route("GET", "/openapi.json", (*appCtrl).Hello)
-		opts := boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Disabled: disabled}}}
+		opts := boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Enabled: enabled}}}
 		err := app.Validate(opts)
-		if disabled {
+		if !enabled {
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -81,7 +172,7 @@ func TestOpenAPIPathConfigurationAndCollision(t *testing.T) {
 		}
 	}
 	app := setupApp()
-	h := newTestHandlerFromAppWithOptions(t, app, boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Path: "/internal/spec.json", Title: "Custom API", Version: "1"}}})
+	h := newTestHandlerFromAppWithOptions(t, app, boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Enabled: true, Path: "/internal/spec.json", Title: "Custom API", Version: "1"}}})
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest("GET", "/internal/spec.json", nil))
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"title":"Custom API"`) {
@@ -90,7 +181,7 @@ func TestOpenAPIPathConfigurationAndCollision(t *testing.T) {
 	app = platform.New()
 	app.Constructor(func() *appCtrl { return &appCtrl{} })
 	app.Route("GET", "/hello", (*appCtrl).Hello)
-	h = newTestHandlerFromAppWithOptions(t, app, boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Disabled: true}}})
+	h = newTestHandlerFromAppWithOptions(t, app, boot.Options{HTTP: &boot.HTTPOptions{}})
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest("GET", "/openapi.json", nil))
 	if w.Code != http.StatusNotFound {
@@ -99,14 +190,14 @@ func TestOpenAPIPathConfigurationAndCollision(t *testing.T) {
 }
 
 func TestOpenAPIPreservesDuplicateRouteRejection(t *testing.T) {
-	for _, disabled := range []bool{false, true} {
+	for _, enabled := range []bool{false, true} {
 		app := setupApp()
 		app.Route("GET", "/repeat", (*appCtrl).Hello)
 		app.Route("GET", "/repeat", (*appCtrl).Hello)
-		prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Disabled: disabled}}})
+		prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Enabled: enabled}}})
 		if err == nil {
 			prepared.Close(t.Context())
-			t.Fatalf("기존 중복 경로 거부 정책을 유지해야 합니다: disabled=%v", disabled)
+			t.Fatalf("기존 중복 경로 거부 정책을 유지해야 합니다: enabled=%v", enabled)
 		}
 	}
 }
@@ -114,10 +205,13 @@ func TestOpenAPIPreservesDuplicateRouteRejection(t *testing.T) {
 func TestOpenAPIPathAlsoDetectsParameterRouteOverlap(t *testing.T) {
 	app := setupApp()
 	app.Route("GET", "/:id", (*appCtrl).GetUser)
-	if err := app.Validate(boot.Options{HTTP: &boot.HTTPOptions{}}); err == nil || !strings.Contains(err.Error(), "OPENAPI_PATH_CONFLICT") {
+	if err := app.Validate(boot.Options{HTTP: &boot.HTTPOptions{}}); err != nil {
+		t.Fatalf("기본 비활성화 상태에서는 명세 경로를 예약하면 안 됩니다: %v", err)
+	}
+	if err := app.Validate(boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Enabled: true}}}); err == nil || !strings.Contains(err.Error(), "OPENAPI_PATH_CONFLICT") {
 		t.Fatalf("경로 인자의 명세 리소스 가림을 거부해야 합니다: %v", err)
 	}
-	if err := app.Validate(boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Path: "/internal/openapi.json"}}}); err != nil {
+	if err := app.Validate(boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Enabled: true, Path: "/internal/openapi.json"}}}); err != nil {
 		t.Fatal(err)
 	}
 }

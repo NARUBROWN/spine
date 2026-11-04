@@ -71,7 +71,7 @@ func (*legacyValuesInterceptor) AfterCompletion(core.ExecutionContext, core.Hand
 
 func TestDeprecatedValuesWorkOverHTTPAndLeaveDynamicInputsUnresolved(t *testing.T) {
 	for _, configured := range []bool{false, true} {
-		for _, disabled := range []bool{false, true} {
+		for _, enabled := range []bool{false, true} {
 			v := &legacyValuesValidator{}
 			opts := []spine.Option{platform.Option()}
 			if configured {
@@ -81,7 +81,7 @@ func TestDeprecatedValuesWorkOverHTTPAndLeaveDynamicInputsUnresolved(t *testing.
 			app.Constructor(func() *legacyValuesController { return &legacyValuesController{} })
 			app.Interceptor(&legacyValuesInterceptor{})
 			app.Route("GET", "/legacy", (*legacyValuesController).Get)
-			prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Disabled: disabled}}})
+			prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Enabled: enabled}}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -115,14 +115,14 @@ func TestDeprecatedValuesWorkOverHTTPAndLeaveDynamicInputsUnresolved(t *testing.
 				_ = response.Body.Close()
 				want := legacyValuesResult{Tag: "a,b", Count: 7, Enabled: true, Header: "first", Empty: true, Host: "legacy.example:8443", Page: test.page, Size: test.size, Context: "request-context", User: "stored-user"}
 				if err != nil || response.StatusCode != 200 || got != want {
-					t.Fatalf("validator=%v disabled=%v: status=%d got=%+v err=%v", configured, disabled, response.StatusCode, got, err)
+					t.Fatalf("validator=%v enabled=%v: status=%d got=%+v err=%v", configured, enabled, response.StatusCode, got, err)
 				}
 			}
 			if v.calls.Load() != 0 || v.describes.Load() != 0 {
 				t.Fatal("기존 조회 타입에 DTO 검증이나 스키마 추정을 추가하면 안 됩니다")
 			}
 			resource := serve(prepared.Handler(), "GET", "/openapi.json", "", nil)
-			if disabled {
+			if !enabled {
 				if resource.Code != 404 {
 					t.Fatalf("명세 비활성화: %d", resource.Code)
 				}

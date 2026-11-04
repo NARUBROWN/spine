@@ -57,7 +57,7 @@ func TestPathConfigurationFailsBeforeInitializationAndSchemaCallbacks(t *testing
 		{(*pathContractController).TooManyLegacy, "/:id", "HTTP_PATH_ARGUMENT_UNBOUND"},
 	} {
 		for _, configured := range []bool{false, true} {
-			for _, disabled := range []bool{false, true} {
+			for _, enabled := range []bool{false, true} {
 				opts := []Option{WithHTTPAdapter(&repeatedInputFactory{})}
 				if configured {
 					opts = append(opts, WithValidator(&repeatedInputValidator{}))
@@ -67,7 +67,7 @@ func TestPathConfigurationFailsBeforeInitializationAndSchemaCallbacks(t *testing
 					panic("부팅 검사보다 먼저 생성자를 실행하면 안 됩니다")
 				})
 				app.Route("GET", test.route, test.handler)
-				options := boot.Options{HTTP: &boot.HTTPOptions{GlobalPrefix: "/api", OpenAPI: boot.OpenAPIOptions{Disabled: disabled}}}
+				options := boot.Options{HTTP: &boot.HTTPOptions{GlobalPrefix: "/api", OpenAPI: boot.OpenAPIOptions{Enabled: enabled}}}
 				check := func(err error) {
 					t.Helper()
 					var failure *boot.ConfigError

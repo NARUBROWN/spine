@@ -117,7 +117,7 @@ func pathApplication(t *testing.T, configured bool) (http.Handler, map[string]an
 	app.Route("GET", "/embedded/:org/:id", (*pathController).Embedded)
 	app.Route("GET", "/token/:token", (*pathController).Token)
 	app.Route("GET", "/legacy/:id", (*pathController).Legacy)
-	p, e := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{}})
+	p, e := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Enabled: true}}})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -252,10 +252,10 @@ func TestExcludedPathValidationConflictsAtBootEvenWhenDocsAreDisabled(t *testing
 	if e != nil {
 		t.Fatal(e)
 	}
-	for _, disabled := range []bool{false, true} {
+	for _, enabled := range []bool{false, true} {
 		app := spine.New(platform.Option(), spine.WithValidator(v))
 		app.Route("GET", "/excluded/:id", (*pathController).Excluded)
-		e = app.Validate(boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Disabled: disabled}}})
+		e = app.Validate(boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Enabled: enabled}}})
 		if e == nil || !strings.Contains(e.Error(), "HTTP_INPUT_VALIDATION_CONFLICT") {
 			t.Fatalf("제외한 경로 필드의 필수 검증 충돌: %v", e)
 		}

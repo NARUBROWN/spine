@@ -82,7 +82,7 @@ func sourceApplication(t *testing.T, configured bool) http.Handler {
 	app.Route("GET", "/match", (*sourceController).Match)
 	app.Route("GET", "/encoding", (*sourceController).Encoding)
 	app.Route("POST", "/plain/:id", (*sourceController).Plain)
-	prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{}})
+	prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Enabled: true}}})
 	if err != nil {
 		t.Fatal(err)
 	}

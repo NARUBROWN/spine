@@ -21,7 +21,7 @@ func DescribeHTTP(config Config) (description.HTTP, error) {
 }
 
 func openAPICollisionIssues(config Config) []boot.ConfigIssue {
-	if config.HTTP == nil || config.HTTP.OpenAPI.Disabled {
+	if config.HTTP == nil || !config.HTTP.OpenAPI.Enabled {
 		return nil
 	}
 	documentPath := config.HTTP.OpenAPI.DocumentPath()

@@ -105,7 +105,7 @@ URL 구간의 존재 여부는 라우팅 계약입니다. 경로 구간이 없�
 
 검사는 핸들러마다 독립적으로 수행합니다. 같은 DTO를 다른 핸들러나 라우트에서 사용하는 것은 허용합니다. context.Context와 ControllerContext 같은 컨텍스트, 서로 다른 경로 키를 받는 path.Int 같은 내장 경로 인자는 DTO 중복 검사 대상이 아닙니다.
 
-Validate, Prepare와 Run은 생성자, 검증기, 어댑터 초기화와 본문 읽기 전에 이 설정 오류를 반환합니다. HTTP를 활성화한 DescribeHTTP도 같은 검사를 사용합니다. OpenAPI 리소스를 Disabled로 설정해도 앱 사전 검사의 중복 규칙은 유지됩니다. 오류의 Routes[i].Parameters[j]는 receiver를 제외한 0부터 시작하는 인자 위치입니다.
+Validate, Prepare와 Run은 생성자, 검증기, 어댑터 초기화와 본문 읽기 전에 이 설정 오류를 반환합니다. HTTP를 활성화한 DescribeHTTP도 같은 검사를 사용합니다. OpenAPI 리소스를 비활성화해도 앱 사전 검사의 중복 규칙은 유지됩니다. 오류의 Routes[i].Parameters[j]는 receiver를 제외한 0부터 시작하는 인자 위치입니다.
 
 본문 DTO는 타입이 달라도 하나만 허용합니다. JSON DTO와 폼 DTO를 각각 받는 경우도 `HTTP_BODY_PARAMETERS_DUPLICATED`로 부팅 전에 거부합니다.
 
@@ -223,9 +223,9 @@ validator가 있으면 해당 구현의 SchemaDescriber로 상세 입력을 설�
 
 JSON 요청의 고정 배열은 Go 디코딩처럼 부족한 원소를 기본값으로 채우고 길이를 넘는 원소를 버립니다. 요청 명세는 처리할 위치만 prefixItems로 설명하고, 응답은 고정 길이 배열로 설명합니다. 실제 배열 원소에 적용한 검증 제약은 유지합니다. byte slice 요청은 base64 문자열과 숫자 배열을 모두 설명하며 응답은 base64 문자열로 설명합니다. 익명 구조체의 스키마 식별에는 필드 타입의 전체 패키지 경로를 포함합니다.
 
-명세 리소스는 기본 공개입니다. 부팅 옵션의 `HTTP.OpenAPI.Disabled`를 true로 설정하면 자동 생성과 HTTP 제공을 끕니다. 문서 요청은 업무용 Spine 인터셉터를 실행하지 않습니다.
+명세 자동 생성과 HTTP 제공은 기본 비활성화입니다. 부팅 옵션에 `OpenAPI: boot.OpenAPIOptions{Enabled: true}`를 지정하면 기본 경로 `/openapi.json`에서 명세를 제공합니다. Path, Title과 Version만 지정하면 활성화되지 않습니다. 활성화한 명세는 공개 리소스이며 문서 요청은 업무용 Spine 인터셉터를 실행하지 않습니다. 끄려면 Enabled를 false로 설정하거나 OpenAPI 설정을 생략하세요. 기존 작업 소스의 Disabled 필드는 Enabled로 변경되었습니다.
 
-기존 앱의 GET, HEAD 또는 WebSocket 경로가 명세 경로와 겹치면 부팅 시 `OPENAPI_PATH_CONFLICT`를 반환합니다. `/openapi.json`과 직접 겹치는 경우뿐 아니라 `/:slug`처럼 기본 명세 경로에 매칭되는 경로도 포함합니다. 전환할 때는 `HTTP.OpenAPI.Path`를 겹치지 않는 정적 경로로 바꾸거나 `HTTP.OpenAPI.Disabled`를 true로 설정하세요. 명세 경로는 `GlobalPrefix`와 독립적이므로 실제 등록된 전체 경로를 기준으로 확인해야 합니다.
+명세를 활성화했을 때 기존 앱의 GET, HEAD 또는 WebSocket 경로가 명세 경로와 겹치면 부팅 시 `OPENAPI_PATH_CONFLICT`를 반환합니다. `/openapi.json`과 직접 겹치는 경우뿐 아니라 `/:slug`처럼 기본 명세 경로에 매칭되는 경로도 포함합니다. 전환할 때는 `HTTP.OpenAPI.Path`를 겹치지 않는 정적 경로로 바꾸거나 `HTTP.OpenAPI.Enabled`를 false로 설정하세요. 명세 경로는 `GlobalPrefix`와 독립적이므로 실제 등록된 전체 경로를 기준으로 확인해야 합니다. 명세를 활성화하지 않은 앱은 문서 경로 충돌 검사도 수행하지 않습니다.
 
 ```sh
 go run ./scripts/test test ./...

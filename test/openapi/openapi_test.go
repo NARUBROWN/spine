@@ -108,7 +108,7 @@ func application(t *testing.T) (http.Handler, map[string]any) {
 	app.Route("GET", "/string", (*controller).String)
 	app.Route("GET", "/binary", (*controller).Binary)
 	app.Route("GET", "/conflict", (*controller).Conflict)
-	prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{}})
+	prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Enabled: true}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -403,7 +403,7 @@ func TestUnconfiguredValidatorSkipsRequiredRulesButStillRejectsConversionErrors(
 	app := spine.New(platform.Option())
 	app.Constructor(func() *controller { return &controller{} })
 	app.Route("POST", "/search", (*controller).Search)
-	prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{}})
+	prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Enabled: true}}})
 	if err != nil {
 		t.Fatal(err)
 	}

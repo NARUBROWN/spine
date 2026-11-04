@@ -62,11 +62,11 @@ func TestRepeatedInputDTOsFailBeforeApplicationInitialization(t *testing.T) {
 		(*repeatedInputController).Body, (*repeatedInputController).Query,
 		(*repeatedInputController).Header, (*repeatedInputController).Alias,
 	} {
-		for _, disabled := range []bool{false, true} {
+		for _, enabled := range []bool{false, true} {
 			app := New(WithHTTPAdapter(&repeatedInputFactory{}), WithValidator(&repeatedInputValidator{}))
 			app.Constructor(func() *repeatedInputController { panic("생성자를 실행하면 안 됩니다") })
 			app.Route("POST", "/repeat", handler)
-			options := boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Disabled: disabled}}}
+			options := boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Enabled: enabled}}}
 			assertDuplicateInput := func(err error) {
 				t.Helper()
 				var failure *boot.ConfigError

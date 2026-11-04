@@ -623,10 +623,13 @@ Response serialization, cookie validation, event dispatch, and post-processing h
 
 ## Runtime OpenAPI and transport extensions
 
-HTTP apps now generate OpenAPI 3.1.2 at `/openapi.json` by default during preparation. CLI, source files,
-swaggo and documentation annotations are not required. The resource is independent of GlobalPrefix;
-`boot.HTTPOptions.OpenAPI` changes its path/title/API version or disables it. It uses server middleware
-but bypasses business controllers, DTO validation and Spine transaction/interceptor pipelines.
+HTTP apps generate OpenAPI 3.1.2 during preparation only when `boot.HTTPOptions.OpenAPI.Enabled` is true.
+The zero value and omitted options disable automatic generation, serving, document path collision checks
+and document URL logs. Path/title/API version settings alone do not enable it. Once enabled, the default
+path is `/openapi.json`, independent of GlobalPrefix. CLI, source files, swaggo and documentation
+annotations are not required. The work-in-progress Disabled field has been replaced by Enabled.
+When enabled, the resource uses server middleware but bypasses business controllers, DTO validation
+and Spine transaction/interceptor pipelines.
 
 Use `spine.DescribeHTTP(app, options)` for listener-free, constructor-free descriptions and
 `pkg/openapi.Generate` to serialize them. The existing App interface is unchanged; standard apps expose
@@ -640,7 +643,7 @@ Separate path/query/header pointer DTOs bind only their declared source and vali
 query.Values/header.Values, their getter APIs and NewValues, and query.Pagination are Deprecated and retained during migration. In one handler, deprecated path/query/header inputs cannot coexist with any new path/query/header DTO, even across sources; body DTOs and contexts remain compatible. Deprecated query.Pagination follows the same mixing restriction while retaining its old parsing and documented page/size defaults. Dynamic legacy query/header keys are omitted from detailed parameters and reported as LEGACY_QUERY_VALUES_UNRESOLVED or LEGACY_HEADER_VALUES_UNRESOLVED. Migrate using docs/migration/structured-inputs.md; preserve missing values with pointer fields and handle defaults explicitly. No removal release is set.
 Form-tagged standard mime/multipart.FileHeader pointers and slices describe named file uploads; file DTOs
 advertise multipart/form-data. Dynamic UploadedFiles keeps an unresolved-field diagnostic.
-Managed Run prints the OpenAPI URL using the bound listener port. CLI integration is deferred until the
+Managed Run prints the OpenAPI URL using the bound listener port only when enabled. CLI integration is deferred until the
 core input specification is finalized and will be tracked separately. test/openapi independently compares
 official structure, schemas and actual HTTP behavior.
 

@@ -99,7 +99,7 @@ func (a *Application) run(ctx context.Context) error {
 		}
 		httpErrors = make(chan error, 1)
 		log.Printf("[Bootstrap] Server listening on: %s", listener.Addr())
-		if a.config.HTTP != nil && !a.config.HTTP.OpenAPI.Disabled {
+		if a.config.HTTP != nil && a.config.HTTP.OpenAPI.Enabled {
 			log.Printf("[OpenAPI] %s", openAPIURL(listener.Addr(), a.config.HTTP.OpenAPI.DocumentPath()))
 		}
 		go func() {

@@ -116,7 +116,7 @@ func (*descriptionController) Mixed(*mixedInputDTO) error { return nil }
 func TestMixedInputSourcesAreRejectedEvenWithOpenAPIDisabled(t *testing.T) {
 	app := New()
 	app.Route("GET", "/mixed", (*descriptionController).Mixed)
-	err := app.Validate(boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Disabled: true}}})
+	err := app.Validate(boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{}}})
 	if err == nil || !strings.Contains(err.Error(), "HTTP_INPUT_CONTRACT_INVALID") {
 		t.Fatalf("출처를 분리해야 합니다: %v", err)
 	}

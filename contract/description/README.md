@@ -1,6 +1,6 @@
 # 런타임 OpenAPI
 
-이 개발 소스의 HTTP 앱은 `Run`, `RunContext`, `Prepare`에서 기본적으로 `/openapi.json`을 제공합니다. 실제 등록한 라우트와 Go 타입으로 OpenAPI 3.1.2 JSON을 생성합니다. CLI, 소스 파일, 문서 주석과 swaggo는 필요하지 않습니다. 문서 생성과 요청 처리는 같은 기본 리졸버 목록, 반환 처리 목록과 경로 인자 배정 규칙을 사용합니다. 정식 공개 여부는 릴리스와 사용하는 코어 버전으로 확인하세요.
+이 개발 소스의 HTTP 앱은 `HTTP.OpenAPI.Enabled: true`로 설정하면 `Run`, `RunContext`, `Prepare`에서 `/openapi.json`을 제공합니다. 옵션을 생략하면 명세 자동 생성과 HTTP 제공은 비활성화됩니다. 실제 등록한 라우트와 Go 타입으로 OpenAPI 3.1.2 JSON을 생성하며 CLI, 소스 파일, 문서 주석과 swaggo는 필요하지 않습니다. 문서 생성과 요청 처리는 같은 기본 리졸버 목록, 반환 처리 목록과 경로 인자 배정 규칙을 사용합니다. 정식 공개 여부는 릴리스와 사용하는 코어 버전으로 확인하세요.
 
 ## 기본 동작과 설정
 
@@ -12,6 +12,7 @@ options := boot.Options{
     HTTP: &boot.HTTPOptions{
         GlobalPrefix: "/api",
         OpenAPI: boot.OpenAPIOptions{
+            Enabled: true,
             Path:    "/openapi.json",
             Title:   "User API",
             Version: "1.0.0",
@@ -24,20 +25,20 @@ options := boot.Options{
 
 | 옵션 | 기본값 | 동작 |
 | --- | --- | --- |
-| `Disabled` | `false` | `true`이면 명세 자동 생성과 HTTP 제공을 끔 |
-| `Path` | `/openapi.json` | GET, HEAD를 제공하는 정적 절대 경로 |
+| `Enabled` | `false` | `true`이면 명세 자동 생성과 HTTP 제공을 켬 |
+| `Path` | `/openapi.json` | 활성화 시 GET, HEAD를 제공하는 정적 절대 경로 |
 | `Title` | `Spine API` | OpenAPI `info.title` |
 | `Version` | `unversioned` | API 문서 버전. OpenAPI 규격 버전과 별개 |
 
-명세 경로에 매칭되는 앱 GET, HEAD 또는 WebSocket 경로는 `OPENAPI_PATH_CONFLICT`로 거부합니다. `/:id`처럼 경로 인자가 겹치는 경우도 포함합니다. 플랫폼에 직접 등록한 native 경로는 코어가 검사할 수 없습니다.
+명세를 활성화했을 때 명세 경로에 매칭되는 앱 GET, HEAD 또는 WebSocket 경로는 `OPENAPI_PATH_CONFLICT`로 거부합니다. `/:id`처럼 경로 인자가 겹치는 경우도 포함합니다. 비활성화 상태에서는 명세 경로를 예약하거나 검사하지 않습니다. 플랫폼에 직접 등록한 native 경로는 코어가 검사할 수 없습니다.
 
 명세는 준비 전에 생성자나 외부 자원을 초기화하지 않고 생성한 뒤, 준비 단위로 고정합니다. 준비가 끝난 뒤 원본 앱의 등록이나 설명 결과를 수정해도 이미 실행 중인 명세는 바뀌지 않습니다.
 
-관리 실행은 실제로 바인딩한 포트의 명세 URL을 앱 로그에 출력합니다. `spine run`, `spine dev`에서도 이 로그를 확인할 수 있습니다.
+명세를 활성화한 관리 실행은 실제로 바인딩한 포트의 명세 URL을 앱 로그에 출력합니다. `spine run`, `spine dev`에서도 이 로그를 확인할 수 있습니다.
 
 ## 문서 요청의 실행 정책
 
-명세는 기본 공개 리소스입니다. 요청은 HTTP 플랫폼의 서버 미들웨어를 통과하지만 비즈니스 컨트롤러, DTO 바인딩, validator와 Spine 인터셉터 파이프라인은 실행하지 않습니다. 문서를 조회하면서 트랜잭션을 열거나 이벤트를 발행하지 않습니다. 부팅 옵션의 `HTTP.OpenAPI.Disabled`를 true로 설정하면 명세 자동 생성, HTTP 제공과 문서 경로 충돌 검사를 끕니다. 앱을 명시적으로 설명하는 DescribeHTTP와 openapi.Generate는 계속 사용할 수 있습니다.
+활성화한 명세는 공개 리소스입니다. 요청은 HTTP 플랫폼의 서버 미들웨어를 통과하지만 비즈니스 컨트롤러, DTO 바인딩, validator와 Spine 인터셉터 파이프라인은 실행하지 않습니다. 문서를 조회하면서 트랜잭션을 열거나 이벤트를 발행하지 않습니다. 부팅 옵션의 `HTTP.OpenAPI.Enabled`가 false이면 명세 자동 생성, HTTP 제공, 문서 경로 충돌 검사와 명세 URL 로그를 끕니다. Path, Title과 Version만 지정해도 자동 활성화되지 않습니다. 앱을 명시적으로 설명하는 DescribeHTTP와 openapi.Generate는 활성화 여부와 무관하게 사용할 수 있습니다.
 
 ## 앱을 실행하지 않고 설명하거나 내보내기
 

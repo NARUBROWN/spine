@@ -63,7 +63,7 @@ func TestDeprecatedInputsCannotMixWithAnyNewSourceDTO(t *testing.T) {
 		{(*legacyInputController).PaginationPointer, "HTTP_INPUT_CONTRACT_INVALID"},
 	} {
 		for _, configured := range []bool{false, true} {
-			for _, disabled := range []bool{false, true} {
+			for _, enabled := range []bool{false, true} {
 				opts := []Option{WithHTTPAdapter(&repeatedInputFactory{})}
 				if configured {
 					opts = append(opts, WithValidator(&repeatedInputValidator{}))
@@ -71,12 +71,12 @@ func TestDeprecatedInputsCannotMixWithAnyNewSourceDTO(t *testing.T) {
 				app := New(opts...)
 				app.Constructor(func() *legacyInputController { panic("부팅 검사 전에 초기화하면 안 됩니다") })
 				app.Route("GET", "/:id", test.handler)
-				options := boot.Options{HTTP: &boot.HTTPOptions{GlobalPrefix: "/api", OpenAPI: boot.OpenAPIOptions{Disabled: disabled}}}
+				options := boot.Options{HTTP: &boot.HTTPOptions{GlobalPrefix: "/api", OpenAPI: boot.OpenAPIOptions{Enabled: enabled}}}
 				check := func(err error) {
 					t.Helper()
 					var failure *boot.ConfigError
 					if !errors.As(err, &failure) || len(failure.Issues) != 1 || failure.Issues[0].Code != test.code {
-						t.Fatalf("code=%s validator=%v disabled=%v: %v", test.code, configured, disabled, err)
+						t.Fatalf("code=%s validator=%v enabled=%v: %v", test.code, configured, enabled, err)
 					}
 				}
 				check(app.Validate(options))

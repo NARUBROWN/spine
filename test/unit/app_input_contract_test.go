@@ -95,7 +95,7 @@ func TestHTTPInputContractsFailBeforeBootAndDescriptionCallbacks(t *testing.T) {
 		{(*contractController).HiddenNestedQuery, "HTTP_INPUT_CONTRACT_INVALID"},
 	} {
 		for _, configured := range []bool{false, true} {
-			for _, disabled := range []bool{false, true} {
+			for _, enabled := range []bool{false, true} {
 				options := []Option{WithHTTPAdapter(&repeatedInputFactory{})}
 				if configured {
 					options = append(options, WithValidator(&repeatedInputValidator{}))
@@ -103,12 +103,12 @@ func TestHTTPInputContractsFailBeforeBootAndDescriptionCallbacks(t *testing.T) {
 				app := New(options...)
 				app.Constructor(func() *contractController { panic("오류가 있는 앱의 생성자를 호출하면 안 됩니다") })
 				app.Route("POST", "/invalid", test.handler)
-				bootOptions := boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Disabled: disabled}}}
+				bootOptions := boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Enabled: enabled}}}
 				check := func(err error) {
 					t.Helper()
 					var failure *boot.ConfigError
 					if !errors.As(err, &failure) || len(failure.Issues) != 1 || failure.Issues[0].Code != test.code || !strings.HasPrefix(failure.Issues[0].Path, "Routes[0].Parameters[") {
-						t.Fatalf("code=%s validator=%v disabled=%v: %v", test.code, configured, disabled, err)
+						t.Fatalf("code=%s validator=%v enabled=%v: %v", test.code, configured, enabled, err)
 					}
 				}
 				check(app.Validate(bootOptions))

@@ -42,7 +42,7 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 		return nil, err
 	}
 	var openAPIDocument []byte
-	if config.HTTP != nil && !config.HTTP.OpenAPI.Disabled {
+	if config.HTTP != nil && config.HTTP.OpenAPI.Enabled {
 		description, describeErr := DescribeHTTP(config)
 		if describeErr != nil {
 			return nil, describeErr

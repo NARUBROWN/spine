@@ -18,7 +18,7 @@ func main() {
 	app := platform.New()
 	app.Constructor(func() *controller { return &controller{} })
 	app.Route("GET", "/hello", (*controller).Hello)
-	prepared, err := app.Prepare(context.Background(), boot.Options{HTTP: &boot.HTTPOptions{}})
+	prepared, err := app.Prepare(context.Background(), boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Enabled: true}}})
 	if err != nil {
 		panic(err)
 	}

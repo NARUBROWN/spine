@@ -84,7 +84,7 @@ func regressionApplication(t *testing.T, configured bool) (http.Handler, map[str
 	app.Route("POST", "/array-rules", (*regressionController).ArrayRules)
 	app.Route("GET", "/left", (*regressionController).Left)
 	app.Route("GET", "/right", (*regressionController).Right)
-	p, e := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{}})
+	p, e := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Enabled: true}}})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -176,7 +176,7 @@ func TestExcludedRequiredInputFieldsFailDuringBootWithOrWithoutOpenAPI(t *testin
 	}
 	for _, handler := range []any{(*regressionController).ExcludedQuery, (*regressionController).ExcludedHeader} {
 		for _, configured := range []bool{false, true} {
-			for _, disabled := range []bool{false, true} {
+			for _, enabled := range []bool{false, true} {
 				opts := []spine.Option{platform.Option()}
 				if configured {
 					opts = append(opts, spine.WithValidator(v))
@@ -186,7 +186,7 @@ func TestExcludedRequiredInputFieldsFailDuringBootWithOrWithoutOpenAPI(t *testin
 				app.Constructor(func() *regressionController {
 					panic("설정 충돌보다 먼저 생성자를 실행하면 안 됩니다")
 				})
-				options := boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Disabled: disabled}}}
+				options := boot.Options{HTTP: &boot.HTTPOptions{OpenAPI: boot.OpenAPIOptions{Enabled: enabled}}}
 				check := func(e error) {
 					t.Helper()
 					if !configured {
