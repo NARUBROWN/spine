@@ -1,4 +1,4 @@
-package apidesc
+package endpoint
 
 import (
 	"crypto/sha256"

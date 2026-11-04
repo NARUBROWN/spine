@@ -14,10 +14,10 @@ import (
 	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
+	"github.com/NARUBROWN/spine/internal/endpoint"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	eventResolver "github.com/NARUBROWN/spine/internal/event/consumer/resolver"
 	"github.com/NARUBROWN/spine/internal/event/hook"
-	"github.com/NARUBROWN/spine/internal/httpplan"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/internal/resolver"
@@ -149,7 +149,7 @@ func Validate(config Config) error {
 	}
 	for i, route := range config.Routes {
 		if meta, err := spineRouter.NewHandlerMeta(route.Handler); err == nil {
-			issues = append(issues, httpplan.DTOParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", i), route.Path)...)
+			issues = append(issues, endpoint.DTOParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", i), route.Path)...)
 		}
 		if _, err := spineRouter.NewHandlerMeta(route.Handler); err != nil {
 			issues = append(issues, boot.ConfigIssue{
@@ -185,7 +185,7 @@ func Validate(config Config) error {
 	}
 	for i, route := range config.Routes {
 		meta, _ := spineRouter.NewHandlerMeta(route.Handler)
-		issues = append(issues, httpplan.ValidationParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", i), config.Validator)...)
+		issues = append(issues, endpoint.ValidationParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", i), config.Validator)...)
 	}
 	if err := boot.ValidationError(issues...); err != nil {
 		return err
@@ -308,7 +308,7 @@ func globalInterceptorIdentity(interceptor core.Interceptor) (interceptorIdentit
 }
 
 func joinPath(prefix, path string) (string, error) {
-	return httpplan.Path(prefix, path)
+	return endpoint.Path(prefix, path)
 }
 
 func assertNoAmbiguousRoute(method, newPath string, existing []string) error {

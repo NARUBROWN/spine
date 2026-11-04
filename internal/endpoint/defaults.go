@@ -1,5 +1,5 @@
-// Package httpplan은 HTTP 실행과 설명이 공유하는 기본 처리 목록을 제공합니다.
-package httpplan
+// Package endpoint는 HTTP 엔드포인트의 입력과 반환 규칙, 사전 검사와 명세 생성을 제공합니다.
+package endpoint
 
 import (
 	validation "github.com/NARUBROWN/spine/contract/validator"

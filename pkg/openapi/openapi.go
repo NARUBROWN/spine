@@ -6,11 +6,11 @@ import (
 	"encoding/json"
 
 	"github.com/NARUBROWN/spine/contract/description"
-	"github.com/NARUBROWN/spine/internal/apidesc"
+	"github.com/NARUBROWN/spine/internal/endpoint"
 	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 // Generate는 복사된 HTTP 설명에서 OpenAPI 3.1.2 JSON을 생성합니다.
 func Generate(contract description.HTTP, options boot.OpenAPIOptions) (json.RawMessage, error) {
-	return apidesc.OpenAPI(contract, options)
+	return endpoint.OpenAPI(contract, options)
 }

@@ -1,5 +1,4 @@
-// Package apidesc는 등록된 타입을 부작용 없이 HTTP 설명으로 변환합니다.
-package apidesc
+package endpoint
 
 import (
 	"crypto/sha256"
@@ -283,15 +282,6 @@ func (c *catalog) structure(t reflect.Type, mode string) any {
 		result["required"] = required
 	}
 	return result
-}
-
-func describeValidation(describer validation.SchemaDescriber, t reflect.Type) (result validation.SchemaDescription, err error) {
-	defer func() {
-		if recover() != nil {
-			err = fmt.Errorf("validation description panicked")
-		}
-	}()
-	return describer.DescribeSchema(t)
 }
 
 type wireField struct {

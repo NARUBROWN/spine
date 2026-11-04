@@ -1,4 +1,4 @@
-package httpplan
+package endpoint
 
 import (
 	"fmt"

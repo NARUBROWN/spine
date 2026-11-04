@@ -13,12 +13,11 @@ import (
 	adapter "github.com/NARUBROWN/spine/contract/http"
 	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
-	"github.com/NARUBROWN/spine/internal/apidesc"
 	"github.com/NARUBROWN/spine/internal/container"
+	"github.com/NARUBROWN/spine/internal/endpoint"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	"github.com/NARUBROWN/spine/internal/event/hook"
 	eventPublish "github.com/NARUBROWN/spine/internal/event/publish"
-	"github.com/NARUBROWN/spine/internal/httpplan"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	spineRouter "github.com/NARUBROWN/spine/internal/router"
@@ -48,7 +47,7 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 		if describeErr != nil {
 			return nil, describeErr
 		}
-		openAPIDocument, err = apidesc.OpenAPI(description, config.HTTP.OpenAPI)
+		openAPIDocument, err = endpoint.OpenAPI(description, config.HTTP.OpenAPI)
 		if err != nil {
 			return nil, err
 		}
@@ -229,8 +228,8 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 		}
 
 		log.Println("[Bootstrap] Registering argument resolvers")
-		httpPipeline.AddArgumentResolver(httpplan.Resolvers(config.Validator)...)
-		httpPipeline.AddReturnValueHandler(httpplan.Returns()...)
+		httpPipeline.AddArgumentResolver(endpoint.Resolvers(config.Validator)...)
+		httpPipeline.AddReturnValueHandler(endpoint.Returns()...)
 
 		log.Println("[Bootstrap] Registering interceptors")
 

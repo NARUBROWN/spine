@@ -1,4 +1,4 @@
-package httpplan
+package endpoint
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/NARUBROWN/spine/core"
-	left "github.com/NARUBROWN/spine/internal/httpplan/testdata/left"
-	right "github.com/NARUBROWN/spine/internal/httpplan/testdata/right"
+	left "github.com/NARUBROWN/spine/internal/endpoint/testdata/left"
+	right "github.com/NARUBROWN/spine/internal/endpoint/testdata/right"
 	"github.com/NARUBROWN/spine/pkg/path"
 )
 

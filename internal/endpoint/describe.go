@@ -1,4 +1,4 @@
-package apidesc
+package endpoint
 
 import (
 	"encoding/json"
@@ -10,7 +10,6 @@ import (
 	"github.com/NARUBROWN/spine/contract/description"
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/internal/handler"
-	"github.com/NARUBROWN/spine/internal/httpplan"
 	inputbinding "github.com/NARUBROWN/spine/internal/input"
 	"github.com/NARUBROWN/spine/internal/resolver"
 	"github.com/NARUBROWN/spine/internal/router"
@@ -42,14 +41,14 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 		if err != nil {
 			return result, err
 		}
-		inputIssues = append(inputIssues, httpplan.DTOParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", index), spec.Path)...)
+		inputIssues = append(inputIssues, DTOParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", index), spec.Path)...)
 	}
 	if err := boot.ValidationError(inputIssues...); err != nil {
 		return result, err
 	}
 	for index, spec := range routes {
 		meta, _ := router.NewHandlerMeta(spec.Handler)
-		inputIssues = append(inputIssues, httpplan.ValidationParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", index), validator)...)
+		inputIssues = append(inputIssues, ValidationParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", index), validator)...)
 	}
 	if err := boot.ValidationError(inputIssues...); err != nil {
 		return result, err
@@ -59,7 +58,7 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 		if err != nil {
 			return result, err
 		}
-		fullPath, err := httpplan.Path(prefix, spec.Path)
+		fullPath, err := Path(prefix, spec.Path)
 		if err != nil {
 			return result, err
 		}
@@ -88,7 +87,7 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 		for _, parameter := range resolver.Parameters(meta.Method, pathKeys) {
 			input := description.Input{Index: parameter.Index, Type: parameter.Type.String()}
 			matched := false
-			for _, candidate := range httpplan.Resolvers(nil) {
+			for _, candidate := range Resolvers(nil) {
 				if !candidate.Supports(parameter) {
 					continue
 				}
@@ -193,7 +192,7 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 		for i := 0; i < meta.Method.Type.NumOut(); i++ {
 			t := meta.Method.Type.Out(i)
 			output := description.Return{Type: t.String(), Kind: "unresolved"}
-			for _, candidate := range httpplan.Returns() {
+			for _, candidate := range Returns() {
 				if !candidate.Supports(t) {
 					continue
 				}

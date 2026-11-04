@@ -5,7 +5,7 @@ import (
 
 	"github.com/NARUBROWN/spine/contract/description"
 	validation "github.com/NARUBROWN/spine/contract/validator"
-	"github.com/NARUBROWN/spine/internal/apidesc"
+	"github.com/NARUBROWN/spine/internal/endpoint"
 	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
@@ -17,7 +17,7 @@ func DescribeHTTP(config Config) (description.HTTP, error) {
 			return description.HTTP{}, err
 		}
 	}
-	return apidesc.Describe(config.Routes, config.HTTP, config.Validator)
+	return endpoint.Describe(config.Routes, config.HTTP, config.Validator)
 }
 
 func openAPICollisionIssues(config Config) []boot.ConfigIssue {

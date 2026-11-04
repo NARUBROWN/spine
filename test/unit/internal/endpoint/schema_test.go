@@ -1,4 +1,4 @@
-package apidesc
+package endpoint
 
 import (
 	"encoding/json"
@@ -8,8 +8,8 @@ import (
 	"time"
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
-	left "github.com/NARUBROWN/spine/internal/apidesc/testdata/left"
-	right "github.com/NARUBROWN/spine/internal/apidesc/testdata/right"
+	left "github.com/NARUBROWN/spine/internal/endpoint/testdata/left"
+	right "github.com/NARUBROWN/spine/internal/endpoint/testdata/right"
 )
 
 type sharedA struct {
