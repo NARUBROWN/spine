@@ -83,7 +83,7 @@ func TestHTTPInputContractsFailBeforeBootAndDescriptionCallbacks(t *testing.T) {
 		{(*contractController).BodyForm, "HTTP_BODY_PARAMETERS_DUPLICATED"},
 		{(*contractController).QueryKeys, "HTTP_INPUT_KEY_DUPLICATED"},
 		{(*contractController).HeaderKeys, "HTTP_INPUT_KEY_DUPLICATED"},
-		{(*contractController).Pagination, "HTTP_INPUT_KEY_DUPLICATED"},
+		{(*contractController).Pagination, "HTTP_INPUT_API_MIXED"},
 		{(*contractController).Missing, "HTTP_INPUT_CONTRACT_INVALID"},
 		{(*contractController).Typo, "HTTP_INPUT_CONTRACT_INVALID"},
 		{(*contractController).Nested, "HTTP_INPUT_CONTRACT_INVALID"},

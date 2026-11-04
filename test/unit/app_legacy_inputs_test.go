@@ -3,6 +3,7 @@ package spine
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/NARUBROWN/spine/core"
@@ -30,6 +31,13 @@ func (*legacyInputController) Legacy(context.Context, core.ControllerContext, pa
 }
 func (*legacyInputController) Typed(*pathContract, *repeatedQuery, *repeatedHeader) {
 }
+func (*legacyInputController) PaginationPath(query.Pagination, *pathContract)        {}
+func (*legacyInputController) PaginationQuery(query.Pagination, *repeatedQuery)      {}
+func (*legacyInputController) PaginationHeader(query.Pagination, *repeatedHeader)    {}
+func (*legacyInputController) NewBeforePagination(*repeatedHeader, query.Pagination) {}
+func (*legacyInputController) PaginationPointer(*query.Pagination)                   {}
+func (*legacyInputController) RepeatedPagination(query.Pagination, query.Pagination) {
+}
 
 func TestDeprecatedInputsCannotMixWithAnyNewSourceDTO(t *testing.T) {
 	for _, test := range []struct {
@@ -48,6 +56,11 @@ func TestDeprecatedInputsCannotMixWithAnyNewSourceDTO(t *testing.T) {
 		{(*legacyInputController).NewFirst, "HTTP_INPUT_API_MIXED"},
 		{(*legacyInputController).QueryPointer, "HTTP_INPUT_CONTRACT_INVALID"},
 		{(*legacyInputController).HeaderPointer, "HTTP_INPUT_CONTRACT_INVALID"},
+		{(*legacyInputController).PaginationPath, "HTTP_INPUT_API_MIXED"},
+		{(*legacyInputController).PaginationQuery, "HTTP_INPUT_API_MIXED"},
+		{(*legacyInputController).PaginationHeader, "HTTP_INPUT_API_MIXED"},
+		{(*legacyInputController).NewBeforePagination, "HTTP_INPUT_API_MIXED"},
+		{(*legacyInputController).PaginationPointer, "HTTP_INPUT_CONTRACT_INVALID"},
 	} {
 		for _, configured := range []bool{false, true} {
 			for _, disabled := range []bool{false, true} {
@@ -89,5 +102,21 @@ func TestDeprecatedInputsCanKeepExistingBodyContextsAndPagination(t *testing.T) 
 	}
 	if _, err := DescribeHTTP(app, boot.Options{HTTP: &boot.HTTPOptions{GlobalPrefix: "/api"}}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDeprecatedPaginationKeepsDuplicateKeyChecks(t *testing.T) {
+	app := New(WithHTTPAdapter(&repeatedInputFactory{}))
+	app.Route("GET", "/legacy", (*legacyInputController).RepeatedPagination)
+	err := app.Validate(boot.Options{HTTP: &boot.HTTPOptions{}})
+	var failure *boot.ConfigError
+	if !errors.As(err, &failure) || len(failure.Issues) != 2 {
+		t.Fatalf("기존 page와 size의 중복을 각각 거부해야 합니다: %v", err)
+	}
+	for i, name := range []string{"page", "size"} {
+		issue := failure.Issues[i]
+		if issue.Code != "HTTP_INPUT_KEY_DUPLICATED" || issue.Path != "Routes[0].Parameters[1]" || !strings.Contains(issue.Message, name) {
+			t.Fatalf("기존 페이지네이션의 키 중복 검사: %+v", issue)
+		}
 	}
 }

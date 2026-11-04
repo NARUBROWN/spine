@@ -1,6 +1,6 @@
 # 경로, 쿼리와 헤더 구조체 입력으로 전환하기
 
-이 개발 변경에서는 `query.Values`, `header.Values`와 각 타입의 조회 API 및 `NewValues` 생성 함수를 Deprecated로 표시하고 전환 기간에 유지합니다. 기존 함수 시그니처와 조회 동작은 계속 사용할 수 있습니다. 새 코드는 쿼리와 헤더를 각각 일반 구조체 포인터로 받고 필드에 직접 접근하세요. 필드마다 함수 인자를 추가하거나 문서용 래퍼를 만들 필요가 없습니다.
+이 개발 변경에서는 `query.Values`, `header.Values`와 각 타입의 조회 API 및 `NewValues` 생성 함수, `query.Pagination`을 Deprecated로 표시하고 전환 기간에 유지합니다. 기존 함수 시그니처와 조회 동작은 계속 사용할 수 있습니다. 새 코드는 쿼리와 헤더를 각각 일반 구조체 포인터로 받고 필드에 직접 접근하세요. 필드마다 함수 인자를 추가하거나 문서용 래퍼를 만들 필요가 없습니다.
 
 현재 안내는 작업 브랜치의 변경을 대상으로 합니다. 전환을 포함한 정식 릴리스 버전은 아직 정해지지 않았습니다. 이전 공개 버전의 동작이 소급 변경되는 것은 아닙니다.
 
@@ -56,9 +56,9 @@ func (c *Controller) Search(q *SearchQuery, headers *RequestHeaders) httpx.Respo
 
 ### 전환 기간의 호환 정책
 
-한 핸들러에서 Deprecated된 `path.Int`, `path.String`, `path.Boolean`, `query.Values`, `header.Values`와 새 Path, Query, Header DTO를 함께 받으면 부팅 전에 거부합니다. 출처가 달라도 같은 규칙을 적용합니다. 기존 Path 래퍼와 Path DTO의 혼용은 `HTTP_PATH_INPUT_MIXED`, 그 밖의 혼용은 `HTTP_INPUT_API_MIXED`입니다. 핸들러 단위로 입력 인자를 함께 전환하세요. 서로 다른 핸들러에서 기존 입력과 새 DTO를 각각 사용하는 것은 허용합니다.
+한 핸들러에서 Deprecated된 `path.Int`, `path.String`, `path.Boolean`, `query.Values`, `header.Values`, `query.Pagination`과 새 Path, Query, Header DTO를 함께 받으면 부팅 전에 거부합니다. 출처가 달라도 같은 규칙을 적용합니다. 기존 Path 래퍼와 Path DTO의 혼용은 `HTTP_PATH_INPUT_MIXED`, 그 밖의 혼용은 `HTTP_INPUT_API_MIXED`입니다. 핸들러 단위로 입력 인자를 함께 전환하세요. 서로 다른 핸들러에서 기존 입력과 새 DTO를 각각 사용하는 것은 허용합니다.
 
-기존 본문 DTO, context.Context, 컨트롤러 컨텍스트와 query.Pagination은 Deprecated 입력과 함께 사용할 수 있습니다. Values는 기존과 같이 값으로 주입하며 `*query.Values`, `*header.Values`는 `HTTP_INPUT_CONTRACT_INVALID`로 거부합니다. 제거 버전은 아직 정하지 않았습니다.
+기존 본문 DTO, context.Context와 컨트롤러 컨텍스트는 Deprecated 입력과 함께 사용할 수 있습니다. query.Pagination도 Deprecated 입력이므로 새 Path, Query, Header DTO와 함께 받을 수 없습니다. Values와 Pagination은 기존과 같이 값으로 주입하며 `*query.Values`, `*header.Values`, `*query.Pagination`은 `HTTP_INPUT_CONTRACT_INVALID`로 거부합니다. 제거 버전은 아직 정하지 않았습니다.
 
 기존 쿼리 조회는 반복 키의 첫 번째 값을 사용하며 쉼표를 나누지 않습니다. Int는 누락과 변환 실패 모두에 기본값을 반환하고 GetBoolByKey는 yes, no, on, off 같은 기존 표기를 유지합니다. 헤더 조회도 http.Header의 첫 번째 값과 빈 헤더 존재 여부를 유지합니다. 새 구조체 바인딩의 엄격한 변환 규칙을 기존 조회 API에 소급 적용하지 않습니다.
 
@@ -111,7 +111,7 @@ Validate, Prepare와 Run은 생성자, 검증기, 어댑터 초기화와 본문 
 
 본문 DTO 내부에서 JSON 이름이 같은 깊이에서 모호하게 겹치거나 폼 입력 키가 중복되어도 `HTTP_INPUT_CONTRACT_INVALID`로 거부합니다. 정상적인 JSON 익명 임베딩의 필드 가리기 규칙은 유지합니다. json 태그로 제외한 중첩 구조체도 다른 본문 형식의 바인더가 읽을 수 있으므로 path, query, header, param 태그 혼합 검사에서 제외하지 않습니다.
 
-서로 다른 쿼리 DTO나 헤더 DTO가 같은 입력 키를 선언하면 `HTTP_INPUT_KEY_DUPLICATED`로 거부합니다. 헤더 이름은 대소문자를 구분하지 않습니다. `query.Pagination`의 page, size도 같은 검사에 포함합니다. 본문, 경로, 쿼리, 헤더처럼 출처가 다른 동일 이름은 충돌로 취급하지 않습니다. 이 검사는 validator 등록 여부와 OpenAPI 활성화 여부에 관계없이 적용합니다.
+서로 다른 쿼리 DTO나 헤더 DTO가 같은 입력 키를 선언하면 `HTTP_INPUT_KEY_DUPLICATED`로 거부합니다. 헤더 이름은 대소문자를 구분하지 않습니다. Deprecated `query.Pagination`을 두 번 받으면 page, size의 중복도 거부합니다. 새 Query DTO와 함께 받으면 키 중복 여부와 무관하게 `HTTP_INPUT_API_MIXED`로 거부합니다. 본문, 경로, 쿼리, 헤더처럼 출처가 다른 동일 이름은 충돌로 취급하지 않습니다. 이 검사는 validator 등록 여부와 OpenAPI 활성화 여부에 관계없이 적용합니다.
 
 본문의 json 태그와 검증 태그는 필수 조건이 아닙니다. 태그 없는 본문 필드는 Go JSON 기본 필드명을 그대로 사용합니다. 검증 태그를 요구하지 않으며, 선택한 validator가 있으면 실제 설정된 규칙만 적용합니다.
 
@@ -126,9 +126,34 @@ Validate, Prepare와 Run은 생성자, 검증기, 어댑터 초기화와 본문 
 | 등록한 validator의 required 위반 | 핸들러 실행 전 HTTP 400 |
 | validator 미등록 | 변환은 수행하고 검증 태그는 적용하지 않음 |
 
-기존 `q.Int("page", 1)`은 누락과 변환 실패 모두에 1을 반환했습니다. 같은 코드를 기계적으로 숫자 필드로 바꾸면 동작이 달라집니다. 누락에만 기본값을 적용하려면 위 예처럼 포인터로 받고 nil일 때 앱의 기본값을 사용하세요. `query.Pagination`은 별도 내장 입력으로 유지되며 기존 page 1, size 20 동작을 유지합니다.
+기존 `q.Int("page", 1)`은 누락과 변환 실패 모두에 1을 반환했습니다. 같은 코드를 기계적으로 숫자 필드로 바꾸면 동작이 달라집니다. 누락에만 기본값을 적용하려면 위 예처럼 포인터로 받고 nil일 때 앱의 기본값을 사용하세요. `query.Pagination`은 Deprecated 호환 입력으로 유지하며, 누락되거나 숫자 변환에 실패하면 기존처럼 page 1, size 20을 사용합니다. 양수와 최대 크기 검사는 자동으로 추가하지 않습니다. 새 코드는 page와 size를 일반 Query DTO의 필드로 선언하세요. 잘못된 숫자는 새 DTO에서 400으로 거부하며 누락 시 기본값은 앱 코드에서 적용합니다.
 
 숫자와 bool의 `required`는 선택한 validator의 규칙을 따릅니다. go-playground 구현에서 0과 false를 허용하면서 누락만 거부하려면 `*int`, `*bool` 필드와 `validate:"required"`를 사용하세요. 존재 여부만 확인하던 `Has`도 포인터 필드로 전환할 수 있습니다.
+
+### Pagination 전환
+
+일반 Query DTO에 페이지네이션 필드를 선언합니다. 값 제약이 필요하면 선택한 validator의 규칙을 추가하세요.
+
+```go
+type ListQuery struct {
+    Page *int `query:"page"`
+    Size *int `query:"size"`
+}
+```
+
+핸들러에서 `q *ListQuery`를 받은 뒤 누락된 값에만 기본값을 적용합니다. 다음은 해당 함수 내부의 코드입니다.
+
+```go
+page, size := 1, 20
+if q.Page != nil {
+    page = *q.Page
+}
+if q.Size != nil {
+    size = *q.Size
+}
+```
+
+명세 생성기는 함수 내부의 기본값을 추측하지 않습니다. `cmd/reference`의 UploadQuery도 같은 전환 방식을 사용합니다.
 
 ## JSON null과 Host 바인딩
 
@@ -168,7 +193,7 @@ path, query 또는 header에서 `"-"`로 제외한 필드를 선택한 validator
 
 일반 문자열 필드는 쉼표를 그대로 받습니다. 필드 전체에 `TextUnmarshaler`를 구현한 사용자 타입도 하나의 입력값을 자신의 디코더에 전달합니다. 각 원소가 TextUnmarshaler를 구현한 슬라이스는 목록을 나눈 뒤 원소별로 디코딩합니다.
 
-자동 바인딩하는 단일 값 쿼리에 같은 키를 여러 번 보내면 값이 같아도 400을 반환합니다. 포인터 필드도 같은 규칙을 따릅니다. 내장 `query.Pagination`의 page와 size에도 적용하며, 누락 시 기본값은 page 1과 size 20을 유지합니다. 이 개수 검사는 validator 등록 여부와 무관합니다.
+자동 바인딩하는 단일 값 쿼리에 같은 키를 여러 번 보내면 값이 같아도 400을 반환합니다. 포인터 필드도 같은 규칙을 따릅니다. Deprecated `query.Pagination`의 page와 size에도 적용하며, 누락 시 기본값은 page 1과 size 20을 유지합니다. 이 개수 검사는 validator 등록 여부와 무관합니다.
 
 쉼표 구분에는 선택적 HTTP 계약인 `RawQueryContext`를 제공하는 플랫폼이 필요합니다. 이 변경을 포함한 Echo 플랫폼은 원시 쿼리를 제공합니다. 기존 플랫폼이 디코딩된 Queries만 제공하면 반복 키 바인딩을 유지하고, 이미 디코딩된 쉼표를 구분자로 추측하지 않습니다. 자동 OpenAPI 명세의 대표 표현은 기존 `style: form`, `explode: true`인 반복 키 방식으로 유지합니다.
 

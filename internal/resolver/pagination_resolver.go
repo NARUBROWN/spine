@@ -10,6 +10,7 @@ import (
 	"github.com/NARUBROWN/spine/pkg/query"
 )
 
+// PaginationResolver는 Deprecated 페이지네이션 입력의 기존 파싱을 유지합니다.
 type PaginationResolver struct{}
 
 func (r *PaginationResolver) Supports(parameterMeta ParameterMeta) bool {

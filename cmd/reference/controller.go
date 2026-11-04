@@ -11,7 +11,6 @@ import (
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	"github.com/NARUBROWN/spine/pkg/multipart"
-	"github.com/NARUBROWN/spine/pkg/query"
 	"github.com/NARUBROWN/spine/pkg/spine"
 	"github.com/NARUBROWN/spine/pkg/ws"
 )
@@ -83,12 +82,24 @@ type CreatePostForm struct {
 	Content string `form:"content"`
 }
 
+type UploadQuery struct {
+	Page *int `query:"page"`
+	Size *int `query:"size"`
+}
+
 func (c *UserController) Upload(
 	ctx context.Context,
 	form *CreatePostForm,
 	files multipart.UploadedFiles,
-	page query.Pagination,
+	q *UploadQuery,
 ) string {
+	page, size := 1, 20
+	if q.Page != nil {
+		page = *q.Page
+	}
+	if q.Size != nil {
+		size = *q.Size
+	}
 
 	if form == nil {
 		fmt.Println("[FORM] nil")
@@ -97,8 +108,8 @@ func (c *UserController) Upload(
 		fmt.Println("[FORM] Content:", form.Content)
 	}
 
-	fmt.Println("[QUERY] Page:", page.Page)
-	fmt.Println("[QUERY] Size:", page.Size)
+	fmt.Println("[QUERY] Page:", page)
+	fmt.Println("[QUERY] Size:", size)
 
 	fmt.Println("[FILES] Count:", len(files.Files))
 	for i, f := range files.Files {

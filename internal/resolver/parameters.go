@@ -41,3 +41,11 @@ func IsLegacyValues(t reflect.Type) bool {
 	}
 	return t == reflect.TypeFor[query.Values]() || t == reflect.TypeFor[header.Values]()
 }
+
+// IsLegacyPagination은 Deprecated 페이지네이션 입력을 식별합니다.
+func IsLegacyPagination(t reflect.Type) bool {
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	return t == reflect.TypeFor[query.Pagination]()
+}

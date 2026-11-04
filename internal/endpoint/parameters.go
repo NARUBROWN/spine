@@ -29,6 +29,16 @@ func DTOParameterIssues(method reflect.Method, prefix, routePath string) []boot.
 	resolvers := Resolvers(nil)
 	for index := 1; index < method.Type.NumIn(); index++ {
 		parameter := resolver.ParameterMeta{Index: index - 1, Type: method.Type.In(index)}
+		legacyPagination := resolver.IsLegacyPagination(parameter.Type)
+		if legacyPagination {
+			if parameter.Type.Kind() == reflect.Pointer {
+				issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_INPUT_CONTRACT_INVALID", Message: "Deprecated query.Pagination must be a value.", Hint: "Keep the existing value parameter or migrate page and size to a query-tagged struct pointer."})
+				continue
+			}
+			if legacyAPIIndex < 0 {
+				legacyAPIIndex = parameter.Index
+			}
+		}
 		if resolver.IsLegacyPath(parameter.Type) {
 			legacyIndex, legacyCount = parameter.Index, legacyCount+1
 			if legacyAPIIndex < 0 {
@@ -111,6 +121,10 @@ func DTOParameterIssues(method reflect.Method, prefix, routePath string) []boot.
 			}
 			for _, field := range fields {
 				key := source + "\x00" + field.Name
+				if legacyPagination {
+					// 기존 API와 새 API의 혼용 오류와 키 중복 오류를 중복해서 반환하지 않습니다.
+					key = "legacy\x00" + key
+				}
 				if first, exists := keys[key]; exists {
 					issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_INPUT_KEY_DUPLICATED", Message: fmt.Sprintf("Handler %s repeats %s key %q at parameter indexes %d and %d.", method.Name, source, field.Name, first, parameter.Index), Hint: "Declare each input key once within its source."})
 				} else {
@@ -123,7 +137,7 @@ func DTOParameterIssues(method reflect.Method, prefix, routePath string) []boot.
 	if legacyIndex >= 0 && pathDTOIndex >= 0 {
 		issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, pathDTOIndex), Code: "HTTP_PATH_INPUT_MIXED", Message: fmt.Sprintf("Handler %s mixes legacy path wrappers and path DTOs.", method.Name), Hint: "Move every path binding in this handler to path-tagged struct fields."})
 	} else if legacyAPIIndex >= 0 && typedAPIIndex >= 0 {
-		issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, typedAPIIndex), Code: "HTTP_INPUT_API_MIXED", Message: fmt.Sprintf("Handler %s mixes deprecated and typed path/query/header inputs at parameter indexes %d and %d.", method.Name, legacyAPIIndex, typedAPIIndex), Hint: "Migrate every deprecated input in this handler to a tagged struct pointer. Existing body DTOs, contexts and query.Pagination may still accompany deprecated inputs."})
+		issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, typedAPIIndex), Code: "HTTP_INPUT_API_MIXED", Message: fmt.Sprintf("Handler %s mixes deprecated and typed path/query/header inputs at parameter indexes %d and %d.", method.Name, legacyAPIIndex, typedAPIIndex), Hint: "Migrate every deprecated input, including query.Pagination, to tagged struct pointers. Existing body DTOs and contexts may still accompany deprecated inputs."})
 	} else if legacyCount > len(pathKeys) {
 		issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, legacyIndex), Code: "HTTP_PATH_ARGUMENT_UNBOUND", Message: fmt.Sprintf("Handler %s declares more legacy path arguments than its route has keys.", method.Name), Hint: "Migrate to named path fields or remove the unbound argument."})
 	}
