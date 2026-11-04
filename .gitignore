@@ -48,5 +48,6 @@ examples/security-config/*
 !examples/security-config/go.mod
 !examples/security-config/go.sum
 !docs/migration/http-adapter-modules.md
+!docs/migration/v0.7.0.md
 
 __pycache__/
