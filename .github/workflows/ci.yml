@@ -28,6 +28,7 @@ permissions:
   actions: read
 
 env:
+  PYTHONUTF8: '1'
   GOWORK: "off"
 
 concurrency:

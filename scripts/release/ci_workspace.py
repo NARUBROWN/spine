@@ -20,7 +20,7 @@ def channel_for(ref):
 
 def prepare(root, output, published=False):
     root = root.resolve()
-    policy = json.loads((root / ".github/release-policy.json").read_text())
+    policy = json.loads((root / ".github/release-policy.json").read_text(encoding="utf-8"))
     validate_policy(policy)
     if policy["kind"] == "core":
         members = [root, *[root.parent / name.removeprefix("github.com/NARUBROWN/") for name in sorted(PLATFORMS)]]
@@ -51,7 +51,7 @@ def prepare(root, output, published=False):
 
 
 def check(root):
-    policy = json.loads((root / ".github/release-policy.json").read_text())
+    policy = json.loads((root / ".github/release-policy.json").read_text(encoding="utf-8"))
     members = [root]
     if policy["kind"] == "core":
         members += [root.parent / name.removeprefix("github.com/NARUBROWN/") for name in sorted(PLATFORMS)]
@@ -79,7 +79,7 @@ def main():
     elif args.command == "check":
         check(root)
     else:
-        policy = json.loads((root / ".github/release-policy.json").read_text())
+        policy = json.loads((root / ".github/release-policy.json").read_text(encoding="utf-8"))
         validate_policy(policy)
         selected = policy["channels"][channel_for(args.ref)]["modules"] if args.published else policy["ci_sources"]
         with open(os.environ["GITHUB_OUTPUT"], "a") as stream:

@@ -506,19 +506,19 @@ def main():
     parser.add_argument("--report", default="release-validation.json")
     parser.add_argument("--manifest", default="release-manifest.json")
     args = parser.parse_args()
-    policy = json.loads(Path(args.policy).read_text())
+    policy = json.loads(Path(args.policy).read_text(encoding="utf-8"))
     validate_policy(policy)
     if args.command == "validate-policy":
         root = Path(__file__).resolve().parents[2]
         if policy["kind"] == "core":
-            bootstrap = (root / "internal/bootstrap/bootstrap.go").read_text()
+            bootstrap = (root / "internal/bootstrap/bootstrap.go").read_text(encoding="utf-8")
             if f'spineVersion = "{policy["next_version"]}"' not in bootstrap:
                 raise ReleaseError("런타임 개발 기준 버전과 next_version이 다릅니다")
         if not (root / "docs/migration" / (policy["next_version"]+".md")).is_file():
             raise ReleaseError("대상 버전의 전환 안내가 필요합니다")
         names = ("README.md", "README.en.md", "README.ja.md", "README.zh-Hans.md", "README.zh-Hant.md") if policy["kind"] == "core" else ("README.md",)
         for name in names:
-            if f'`{policy["next_version"]}`' not in (root / name).read_text():
+            if f'`{policy["next_version"]}`' not in (root / name).read_text(encoding="utf-8"):
                 raise ReleaseError(f"{name}의 대상 버전을 확인하세요")
         print("릴리스 정책 형식 확인 완료")
         return
@@ -556,11 +556,11 @@ def main():
                 stream.write(f"출시 계획: `{plan['version']}` / `{plan['source_sha']}`\n\n"
                              f"관찰 기간 단축 사유: {plan['observation_override_reason'] or '없음'}\n")
     else:
-        plan = json.loads(Path(args.plan).read_text())
+        plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
         if args.command == "tag":
             publish(github, policy, plan, os.environ["VERIFIED_SHA"])
         elif args.command == "record-core":
-            report = json.loads(Path(args.report).read_text())
+            report = json.loads(Path(args.report).read_text(encoding="utf-8"))
             if (plan["kind"] != "core" or report.get("scope") != "core" or report.get("result") != "passed" or
                     report.get("components") != plan["components"] or report.get("source_sha") != plan["source_sha"] or
                     report.get("version") != plan["version"] or github.tag_sha(plan["version"]) != plan["source_sha"]):
@@ -569,7 +569,7 @@ def main():
                 raise ReleaseError("공개 소비자가 계획한 코어 버전을 선택하지 않았습니다")
             Path(args.manifest).write_text(json.dumps(dict(plan, validation=report), ensure_ascii=False, indent=2)+"\n")
         else:
-            finish(github, plan, json.loads(Path(args.report).read_text()), args.manifest)
+            finish(github, plan, json.loads(Path(args.report).read_text(encoding="utf-8")), args.manifest)
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ from release import CORE, components, validate_policy
 
 
 def pin(root, channel, apply=False, tidy=False):
-    policy = json.loads((root / ".github/release-policy.json").read_text())
+    policy = json.loads((root / ".github/release-policy.json").read_text(encoding="utf-8"))
     validate_policy(policy)
     selected = components(policy, channel)
     expected = {CORE: selected["core_version"], **selected["modules"]}
@@ -23,7 +23,7 @@ def pin(root, channel, apply=False, tidy=False):
     env = dict(os.environ, GOWORK="off")
     for directory in directories:
         path = directory / "go.mod"
-        original = path.read_text()
+        original = path.read_text(encoding="utf-8")
         parsed = json.loads(subprocess.check_output(["go", "mod", "edit", "-json"], cwd=directory, env=env, text=True))
         required = {item["Path"] for item in (parsed.get("Require") or [])}
         with tempfile.TemporaryDirectory(prefix="spine-channel-pins-") as temporary:
@@ -32,7 +32,7 @@ def pin(root, channel, apply=False, tidy=False):
             for module, version in expected.items():
                 if module in required:
                     subprocess.run(["go", "mod", "edit", "-modfile=" + str(modfile), "-require=" + module + "@" + version], cwd=directory, env=env, check=True)
-            updated = modfile.read_text()
+            updated = modfile.read_text(encoding="utf-8")
         if updated != original:
             print("".join(difflib.unified_diff(original.splitlines(True), updated.splitlines(True), fromfile=str(path), tofile=str(path))), end="")
             if apply:
