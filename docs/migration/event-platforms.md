@@ -80,7 +80,7 @@ Kafka의 TopicPrefix는 발행 이름과 논리 구독 키 양쪽에 적용됩�
 `cmd/reference`와 `examples/security-config`는 새 App 구성을 사용합니다. `test/app_event_live_test.go`는 실제 HTTP 요청에서 이벤트를 발행하고, 실패한 전달을 재처리하는 워커가 결과 이벤트를 보내는 흐름을 두 브로커에서 검사합니다.
 
 ```sh
-go test -race ./... -count=1
+go run ./scripts/test test -race ./... -count=1
 bash scripts/check-module-boundaries.sh
 # 테스트용 브로커 주소를 설정한 뒤 실행합니다.
 go -C test test -race . -run '^TestAppEventLive_' -count=1 -timeout=2m

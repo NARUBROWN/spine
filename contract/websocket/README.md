@@ -56,7 +56,7 @@ Gorilla 구현은 독립 모듈 `github.com/NARUBROWN/spine-gorilla-platform`에
 검증 오류는 1008과 `invalid message`, 처리 오류는 1011과 `handler error`, 서버 정상 종료는 1000과 `server shutting down`으로 닫습니다. 선택한 validator와 이벤트 publisher는 WS 메시지 실행에도 같은 App 파이프라인으로 연결됩니다.
 
 ```sh
-go test ./contract/websocket -count=1
+go run ./scripts/test test ./contract/websocket -count=1
 bash scripts/check-module-boundaries.sh
 go -C test test -race ./... -count=1
 go -C test/platform-e2e test -race ./... -count=1

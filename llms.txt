@@ -232,14 +232,18 @@ spine context --root cmd/demo --json
 spine contract check --root cmd/demo --warnings-as-errors --json
 spine verify --root cmd/demo --warnings-as-errors --json
 spine contract probe --root cmd/demo --json
-go -C cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=90s
-spine check --root .
+go run ./scripts/test -module cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=90s
+go run ./scripts/test test ./... -count=1
 ```
 
 The CLI, entrypoint, and HTTP/WS E2E share `cmd/demo/application.BuildApplication`. Keep static analysis,
-partial runtime probe, and real-network E2E evidence separate. Root `go test ./...` skips all nested modules. Run tests separately in
-../spine-echo-platform, test, cmd/demo, cmd/reference and examples/security-config. CI runs it on Linux and macOS. Keep all framework
-unit and integration tests in addition to this demo gate.
+partial runtime probe, and real-network E2E evidence separate. All Go test files live under the repository-root `test/`.
+Package tests mirror source paths under `test/unit/`, including `test/unit/cmd/demo/` and `test/unit/cmd/reference/`.
+The standard-library runner `go run ./scripts/test` uses Go's build overlay to preserve access to package-private code.
+Root `go test ./...` does not run these relocated tests. Select nested source modules with `-module` before `test` or `vet`.
+The existing `test`, `test/openapi`, and `test/platform-e2e` integration modules retain their direct Go commands.
+Do not run tests or tidy inside `test/unit`: its go.mod only excludes stored test sources from integration package discovery.
+See `test/README.md` for commands. CLI default Go checks do not replace this framework test runner.
 
 The platform's standalone CI vet/unit/race commands use a temporary Go workspace under RUNNER_TEMP to select
 the two checkouts. Each job verifies that Spine is a main workspace module before running platform checks.
@@ -835,12 +839,12 @@ For Go changes, run:
 
 ```sh
 gofmt -w <changed-go-files>
-for module in . ../spine-echo-platform test cmd/demo cmd/reference examples/security-config; do
-  go -C "$module" test ./... -count=1
-  go -C "$module" test -race ./... -count=1
+for module in . test cmd/demo cmd/reference examples/security-config; do
+  go run ./scripts/test -module "$module" test -race ./... -count=1
+  go run ./scripts/test -module "$module" vet ./...
 done
+go -C ../spine-echo-platform test -race ./... -count=1
 bash scripts/check-module-boundaries.sh
-go vet ./...
 ```
 
 Run relevant broker/database/WebSocket E2E separately. Translate POSIX environment syntax for PowerShell:

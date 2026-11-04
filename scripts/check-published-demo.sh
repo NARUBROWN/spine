@@ -6,6 +6,9 @@ repo_root=$(cd "$(dirname "$0")/.." && pwd)
 workspace=$(mktemp -d "${TMPDIR:-/tmp}/spine-published-demo.XXXXXX")
 trap 'rm -rf "$workspace"' EXIT
 cp -R "$repo_root/cmd/demo" "$workspace/demo"
+mkdir -p "$workspace/demo/test/unit"
+cp -R "$repo_root/test/unit/cmd/demo/." "$workspace/demo/test/unit/"
+cp "$repo_root/test/unit/go.mod" "$workspace/demo/test/unit/go.mod"
 cd "$workspace/demo"
 
 export GOWORK=off
@@ -42,6 +45,6 @@ for module in github.com/NARUBROWN/spine github.com/NARUBROWN/spine-echo-platfor
   printf '%s %s\n' "$module" "$actual"
 done
 
-go vet ./...
+go run "$repo_root/scripts/test/main.go" -root "$workspace/demo" vet ./...
 # 같은 BuildApplication과 기존 HTTP/WS, SIGINT 및 Prepare E2E를 사용합니다.
-go test -race ./... -count=1 -timeout=3m
+go run "$repo_root/scripts/test/main.go" -root "$workspace/demo" test -race ./... -count=1 -timeout=3m

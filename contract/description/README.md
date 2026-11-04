@@ -117,7 +117,7 @@ HTTP 플랫폼에 직접 등록한 native 경로, WS 메시지와 event payload�
 ## 검증
 
 ```sh
-go test ./...
+go run ./scripts/test test ./...
 bash scripts/check-module-boundaries.sh
 go -C test test . -run '^TestOpenAPI' -count=1
 go -C test/openapi test -race ./... -count=1

@@ -35,7 +35,7 @@ Bind는 본문만 읽으며 경로 값과 URL 쿼리를 병합하지 않습니�
 ASGI의 앱과 서버 경계 및 수명 정의를 참고하지만 **Python ASGI 호환을 제공하지 않습니다.** Spine v0.6.0과 Echo 플랫폼 v0.1.0에서 이 계약을 사용합니다.
 
 ```sh
-go test ./contract/http -count=1
+go run ./scripts/test test ./contract/http -count=1
 ```
 
 이전 `github.com/NARUBROWN/spine/adapter` 경로는 같은 타입과 오류의 호환 별칭을 제공합니다. 기존 Echo 플랫폼을 그대로 연결할 수 있으며 새 구현은 `contract/http`를 사용합니다.

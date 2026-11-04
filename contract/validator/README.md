@@ -87,10 +87,10 @@ if errors.As(err, &failure) {
 }
 ```
 
-위 코드는 `errors`와 `validation "github.com/NARUBROWN/spine/contract/validator"`를 import한 함수 내부의 예입니다. 외부 구현이 공개 계약만으로 동작하는 전체 예는 [contract_test.go](contract_test.go)의 `ExampleValidator`에서 확인할 수 있습니다.
+위 코드는 `errors`와 `validation "github.com/NARUBROWN/spine/contract/validator"`를 import한 함수 내부의 예입니다. 외부 구현이 공개 계약만으로 동작하는 전체 예는 [contract_test.go](../../test/unit/contract/validator/contract_test.go)의 `ExampleValidator`에서 확인할 수 있습니다.
 
 ```sh
-go test ./contract/validator -count=1
+go run ./scripts/test test ./contract/validator -count=1
 bash scripts/check-module-boundaries.sh
 ```
 
