@@ -4,15 +4,15 @@
 
 ## 적용 대상
 
-Spine, Spine CLI, Echo, Gorilla, Kafka, RabbitMQ, NATS, validator-playground와 문서 사이트에서 사용합니다. 테크블로그와 예제 프로젝트에는 적용하지 않습니다. 소비 저장소는 이 Action을 전체 커밋 SHA로 고정합니다. 코어 자체는 checkout한 로컬 Action을 사용합니다.
+Spine, Spine CLI, Echo, Gorilla, Kafka, RabbitMQ, NATS와 validator-playground 8개 저장소에서 사용합니다. 문서 사이트, 테크블로그와 예제 프로젝트는 대상에서 제외합니다. 소비 저장소는 이 Action을 전체 커밋 SHA로 고정합니다. 코어 자체는 checkout한 로컬 Action을 사용합니다.
 
-코어, CLI와 플랫폼은 기존 발행 workflow의 태그 생성 성공 직후 호출합니다. `GITHUB_TOKEN`이 만든 tag/release 이벤트에 후속 workflow를 기대하지 않습니다. 문서 사이트는 별도 발행 pipeline이 없어 새 버전 태그의 push 이벤트에서 호출합니다. 태그 생성과 Release 게시, 배포를 자동으로 시작하지 않습니다.
+기존 발행 workflow의 태그 생성 성공 직후 호출합니다. `GITHUB_TOKEN`이 만든 tag/release 이벤트에 후속 workflow를 기대하지 않습니다. 태그 생성과 Release 게시, 배포를 자동으로 시작하지 않습니다.
 
 ## 입력
 
 | 입력 | 기본값 | 동작 |
 | --- | --- | --- |
-| `plan` | 빈 문자열 | 발행 계획 JSON 경로. 지정하면 `version`, `channel`, `repository`, `source_sha`를 사용합니다. 상대 경로는 호출 저장소 workspace 기준입니다. 생략하면 `GITHUB_REF_NAME`, `GITHUB_SHA`, `GITHUB_REPOSITORY`와 `GITHUB_REF_TYPE=tag`가 필요합니다. |
+| `plan` | 필수 입력 | 발행 계획 JSON 경로. `version`, `channel`, `repository`, `source_sha`를 사용합니다. 상대 경로는 호출 저장소 workspace 기준입니다. |
 | `webhook_preview` | 빈 문자열 | `vX.Y.Z-preview.N` 태그의 webhook URL |
 | `webhook_rc` | 빈 문자열 | `vX.Y.Z-rc.N` 태그의 webhook URL |
 | `webhook_release` | 빈 문자열 | `vX.Y.Z` 태그의 webhook URL |

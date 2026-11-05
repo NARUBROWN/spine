@@ -112,7 +112,7 @@ class DiscordNotificationTests(unittest.TestCase):
 
     def test_all_ecosystem_projects_use_their_own_name_and_shared_logo(self):
         projects = ["spine", "spine-cli", "spine-echo-platform", "spine-gorilla-platform", "spine-kafka-platform",
-                    "spine-rabbitmq-platform", "spine-nats-platform", "spine-validator-playground", "spine-site"]
+                    "spine-rabbitmq-platform", "spine-nats-platform", "spine-validator-playground"]
         for project in projects:
             with self.subTest(project=project):
                 plan = dict(PLAN, repository="NARUBROWN/" + project)
@@ -120,21 +120,6 @@ class DiscordNotificationTests(unittest.TestCase):
                 self.assertIn(project, payload["embeds"][0]["title"])
                 self.assertIn("/NARUBROWN/spine/main/", payload["avatar_url"])
                 self.assertIn("/" + project + "/tree/", payload["embeds"][0]["url"])
-
-    def test_site_tag_event_works_without_a_release_plan(self):
-        env = dict(os.environ, GITHUB_REPOSITORY="NARUBROWN/spine-site", GITHUB_ACTOR="NARUBROWN",
-                   GITHUB_RUN_ID="123", GITHUB_REF_TYPE="tag", GITHUB_REF_NAME="v1.0.0-rc.1", GITHUB_SHA="a"*40)
-        env.pop("NOTIFICATION_PLAN", None)
-        result = subprocess.run([sys.executable, str(Path(notify.__file__)), "--dry-run"], env=env,
-                                capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        payload = json.loads(result.stdout)
-        self.assertIn("spine-site v1.0.0-rc.1", payload["embeds"][0]["title"])
-        self.assertEqual(payload["embeds"][0]["color"], 3447003)
-        env["GITHUB_REF_TYPE"] = "branch"
-        result = subprocess.run([sys.executable, str(Path(notify.__file__)), "--dry-run"], env=env,
-                                capture_output=True, text=True)
-        self.assertEqual(result.returncode, 1)
 
     def test_action_reads_the_callers_plan_from_its_workspace(self):
         with tempfile.TemporaryDirectory() as directory:

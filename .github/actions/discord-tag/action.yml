@@ -2,8 +2,8 @@ name: Discord Tag Notification
 description: 버전 태그명으로 Discord 채널을 선택해 태그 생성 알림을 보냅니다.
 inputs:
   plan:
-    description: 발행 계획 JSON 경로. 생략하면 GitHub 태그 이벤트를 사용합니다.
-    required: false
+    description: 호출 저장소 workspace에 있는 발행 계획 JSON 경로
+    required: true
   webhook_preview:
     description: Preview 채널의 Discord webhook URL
     required: false

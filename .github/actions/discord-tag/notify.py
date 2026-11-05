@@ -103,16 +103,10 @@ def send(url, payload):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--plan", default=os.environ.get("NOTIFICATION_PLAN") or None)
+    parser.add_argument("--plan", default=os.environ.get("NOTIFICATION_PLAN") or "release-plan.json")
     parser.add_argument("--dry-run", action="store_true", help="전송 없이 Discord payload만 출력")
     args = parser.parse_args()
-    if args.plan:
-        plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
-    else:
-        if os.environ.get("GITHUB_REF_TYPE") != "tag":
-            raise NotificationError("발행 계획 없이 실행할 때는 태그 이벤트가 필요합니다")
-        plan = {"version": os.environ["GITHUB_REF_NAME"], "source_sha": os.environ["GITHUB_SHA"],
-                "repository": os.environ["GITHUB_REPOSITORY"]}
+    plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
     if plan["repository"] != os.environ["GITHUB_REPOSITORY"]:
         raise NotificationError("발행 계획과 실행 저장소가 일치하지 않습니다")
     run_url = f"https://github.com/{plan['repository']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
