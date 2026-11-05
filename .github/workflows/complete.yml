@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 코어 후보와 다섯 플랫폼의 공개 검증을 완료할 태그
+        description: Tag for completing public verification of the core candidate and five platforms
         type: string
         required: true
 permissions:

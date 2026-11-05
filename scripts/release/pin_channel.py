@@ -44,12 +44,12 @@ def pin(root, channel, apply=False, tidy=False):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='Plan or apply official module versions for channel promotion.')
     parser.add_argument("--root", type=Path, default=Path("."))
     parser.add_argument("--channel", choices=("preview", "rc", "stable"), required=True)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--tidy", action="store_true")
     args = parser.parse_args()
     if args.tidy and not args.apply:
-        parser.error("--tidy는 --apply와 함께 사용하세요")
+        parser.error("--tidy requires --apply")
     pin(args.root.resolve(), args.channel, args.apply, args.tidy)

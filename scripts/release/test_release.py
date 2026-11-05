@@ -313,10 +313,10 @@ class ReleasePolicyTests(unittest.TestCase):
     def test_candidate_observation_uses_artifact_time_and_rejects_future_evidence(self):
         source = self.github.candidate(age=71)
         self.github.release_data[source] = {"published_at": (NOW-dt.timedelta(days=10)).isoformat()}
-        with self.assertRaisesRegex(release.ReleaseError, "관찰 기간 부족"):
+        with self.assertRaisesRegex(release.ReleaseError, "Insufficient observation period"):
             self.plan("rc", self.base+"-rc.1", source)
         self.github.artifacts[source]["created_at"] = (NOW+dt.timedelta(hours=1)).isoformat()
-        with self.assertRaisesRegex(release.ReleaseError, "현재보다 뒤"):
+        with self.assertRaisesRegex(release.ReleaseError, "in the future"):
             self.plan("rc", self.base+"-rc.1", source, "서비스 장애 대응을 위한 긴급 수정으로 관찰 기간을 단축합니다")
 
     def test_replacing_source_artifact_while_approval_is_pending_stops_tag_write(self):
@@ -325,7 +325,7 @@ class ReleasePolicyTests(unittest.TestCase):
         self.github.artifacts[source]["id"] = 11
         with patch.dict(os.environ, {"GITHUB_REF": "refs/heads/rc"}), patch.object(release.dt, "datetime", wraps=dt.datetime) as clock:
             clock.now.return_value = NOW
-            with self.assertRaisesRegex(release.ReleaseError, "승인한 계획"):
+            with self.assertRaisesRegex(release.ReleaseError, "approved plan"):
                 release.publish(self.github, POLICY, plan, RC_SOURCE)
         self.assertEqual(self.github.writes, [])
 
@@ -420,7 +420,7 @@ class CandidateArtifactTests(unittest.TestCase):
     def test_download_failure_is_not_treated_as_candidate_evidence(self):
         failed = subprocess.CompletedProcess([], 1, stderr=b"artifact unavailable")
         with patch.object(self.github, "api", side_effect=self.api), patch.object(release.subprocess, "run", return_value=failed):
-            with self.assertRaisesRegex(release.ReleaseError, "다운로드"):
+            with self.assertRaisesRegex(release.ReleaseError, "download"):
                 self.github.candidate_evidence(self.tag)
 
     def test_artifact_search_reads_later_pages(self):

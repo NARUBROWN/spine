@@ -3,11 +3,11 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 발행할 새 채널 태그
+        description: New channel tag to publish
         type: string
         required: true
       source_sha:
-        description: preview HEAD의 전체 커밋 SHA
+        description: Full commit SHA of preview HEAD
         type: string
         required: true
 permissions:

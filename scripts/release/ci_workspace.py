@@ -29,7 +29,7 @@ def prepare(root, output, published=False):
         members = [root, root / "spine-core"]
     for member in members:
         if not (member / "go.mod").is_file():
-            raise ReleaseError("소스 CI 모듈이 없습니다: " + str(member))
+            raise ReleaseError("Source CI module not found: " + str(member))
     output = output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     text = "go 1.26.0\n\nuse (\n" + "".join("\t" + json.dumps(str(path.resolve())) + "\n" for path in members) + ")\n"
@@ -58,13 +58,13 @@ def check(root):
     for member in members:
         parsed = json.loads(subprocess.check_output(["go", "mod", "edit", "-json"], cwd=member, text=True))
         if parsed.get("Replace"):
-            raise ReleaseError("소스 CI에서도 플랫폼과 코어 본체에 replace를 커밋하지 않습니다")
+            raise ReleaseError("Do not commit replace directives in platform or core modules, including for source CI")
         subprocess.run(["go", "mod", "verify"], cwd=member, check=True)
     subprocess.run(["git", "diff", "--exit-code", "--", "go.mod", "go.sum", ":(glob)**/go.mod", ":(glob)**/go.sum"], cwd=root, check=True)
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='Prepare source CI separately from public component verification.')
     parser.add_argument("command", choices=("refs", "prepare", "check"))
     parser.add_argument("--root", type=Path, default=Path("."))
     parser.add_argument("--output", type=Path)
@@ -74,7 +74,7 @@ def main():
     root = args.root.resolve()
     if args.command == "prepare":
         if args.output is None:
-            parser.error("prepare에는 --output이 필요합니다")
+            parser.error("prepare requires --output")
         prepare(root, args.output, args.published)
     elif args.command == "check":
         check(root)

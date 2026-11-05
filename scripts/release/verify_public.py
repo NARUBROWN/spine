@@ -33,7 +33,7 @@ def go_tests(options, directory, env):
         except ValueError:
             pass
     if result.returncode or any(e.get("Action") == "skip" for e in events) or not any(e.get("Action") == "run" and e.get("Test") for e in events):
-        raise ReleaseError("공개 검증은 실제 테스트 실행이 필요하며 실패나 skip을 허용하지 않습니다")
+        raise ReleaseError("Public verification requires actual test execution with no failures or skips")
 
 
 def modules(directory, env, expected):
@@ -46,13 +46,13 @@ def modules(directory, env, expected):
         # MSA의 공유 이벤트 모듈만 저장소 내부 소스로 연결할 수 있습니다.
         replacement = item.get("Replace")
         if replacement and item["Path"] != "github.com/NARUBROWN/spine-simple-msa":
-            raise ReleaseError(f"공개 검증에 replace가 남아 있습니다: {item['Path']}")
+            raise ReleaseError(f"Public verification still contains replace directives: {item['Path']}")
         if item["Path"] in expected:
             if item.get("Version") != expected[item["Path"]] or replacement:
-                raise ReleaseError(f"검증 대상 버전 불일치: {item['Path']} {item.get('Version')}")
+                raise ReleaseError(f"Verification target version does not match: {item['Path']} {item.get('Version')}")
             found[item["Path"]] = item["Version"]
     if set(expected) - set(found):
-        raise ReleaseError("검증 앱에서 후보 코어를 사용하지 않습니다")
+        raise ReleaseError("The verification app does not use the candidate core")
     return found
 
 
@@ -76,7 +76,7 @@ def checkout_example(work, name, spec):
     run("git", "clone", "--no-checkout", "--filter=blob:none", "https://github.com/"+spec["repository"]+".git", str(destination))
     run("git", "-C", str(destination), "checkout", "--detach", spec["ref"])
     if run("git", "-C", str(destination), "rev-parse", "HEAD") != spec["ref"]:
-        raise ReleaseError("예제 커밋이 manifest와 다릅니다")
+        raise ReleaseError("The example commit does not match the manifest")
     return destination
 
 
@@ -95,25 +95,25 @@ def consumer(work, env, expected, imports):
 
 def verify(plan, source, work, env, query, scope="cohort"):
     if scope not in ("core", "platform", "cohort"):
-        raise ReleaseError("공개 검증 범위를 지정해야 합니다")
+        raise ReleaseError("Specify the public verification scope")
     if scope != "core":
         for key in ("SPINE_TEST_KAFKA_BROKER", "SPINE_TEST_RABBITMQ_URL"):
             if not env.get(key):
-                raise ReleaseError(f"{key} 없이 브로커 E2E를 건너뛸 수 없습니다")
+                raise ReleaseError(f"{key} is required for broker E2E verification")
     module = plan["module"]
     resolved = json.loads(subprocess.check_output(["go", "list", "-m", "-json", module + "@" + query], cwd=work, env=env, text=True))["Version"]
     selected_components = plan["components"]
     if scope == "core":
         if plan["kind"] != "core":
-            raise ReleaseError("코어 후보 검증은 코어에만 적용합니다")
+            raise ReleaseError("Core candidate verification applies only to the core")
         expected = {CORE: resolved}
     elif scope == "platform":
         if plan["kind"] != "platform":
-            raise ReleaseError("플랫폼 검증은 플랫폼에만 적용합니다")
+            raise ReleaseError("Platform verification applies only to platforms")
         expected = {CORE: selected_components["core_version"], module: resolved}
     else:
         if plan["kind"] != "core" or resolved != selected_components["core_version"]:
-            raise ReleaseError("전체 조합의 코어 버전이 계획과 다릅니다")
+            raise ReleaseError("The core version in the component versions does not match the plan")
         expected = {CORE: resolved, **selected_components["modules"]}
     selected = consumer(work, env, expected, list(expected))
     if scope == "platform":
@@ -138,7 +138,7 @@ def verify(plan, source, work, env, query, scope="cohort"):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='Verify public core candidates, platforms or same-channel component versions.')
     parser.add_argument("--plan", required=True)
     parser.add_argument("--scope", choices=["core", "platform", "cohort"], required=True)
     parser.add_argument("--source", required=True)

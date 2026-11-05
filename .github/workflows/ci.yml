@@ -5,7 +5,7 @@ on:
   workflow_call:
     inputs:
       ref:
-        description: 검증할 커밋 SHA
+        description: Commit SHA to verify
         type: string
         required: true
       public_dependencies:
@@ -13,7 +13,7 @@ on:
         default: false
     outputs:
       verified_sha:
-        description: 모든 검사를 통과한 커밋
+        description: Commit that passed all checks
         value: ${{ jobs.verified.outputs.sha }}
   push:
     branches: [preview, rc, main]
@@ -89,6 +89,11 @@ jobs:
             echo "$unformatted"
             exit 1
           fi
+
+      - name: Verify embedded documentation assets and notices
+        run: |
+          python3 scripts/update-openapi-ui.py --check
+          python3 -m unittest discover -s scripts/openapi-ui -p 'test_*.py' -v
 
       - name: Run go vet
         run: |
@@ -366,7 +371,7 @@ jobs:
           import json, os
           jobs = json.loads(os.environ['RESULTS'])
           if any(job['result'] != 'success' for job in jobs.values()):
-              raise SystemExit('필수 CI 작업이 모두 성공해야 합니다')
+              raise SystemExit('All required CI jobs must succeed')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('sha=' + os.environ['SOURCE_SHA'] + '\n')
           PYCODE

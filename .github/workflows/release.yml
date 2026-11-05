@@ -3,11 +3,11 @@ on:
   workflow_dispatch:
     inputs:
       rc_tag:
-        description: 전체 검증을 마친 RC 태그
+        description: RC tag that passed full verification
         type: string
         required: true
       observation_override_reason:
-        description: 관찰 기간 단축 사유, 평소에는 비움
+        description: Observation period override reason; normally left blank
         type: string
         default: ''
 permissions:

@@ -21,6 +21,7 @@ func snapshotConfig(config Config) Config {
 	}
 	config.HTTP = snapshotValue(config.HTTP)
 	if config.HTTP != nil {
+		config.HTTP.OpenAPI.UI = slices.Clone(config.HTTP.OpenAPI.UI)
 		config.HTTP.WebSocket.AllowedOrigins = slices.Clone(config.HTTP.WebSocket.AllowedOrigins)
 		config.HTTP.WebSocket.TrustedProxyCIDRs = slices.Clone(config.HTTP.WebSocket.TrustedProxyCIDRs)
 	}

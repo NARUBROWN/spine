@@ -23,6 +23,7 @@ import (
 	spineRouter "github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/transport"
 	"github.com/NARUBROWN/spine/internal/ws"
+	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 // Prepare는 실행 작업이나 리스너를 시작하지 않고 앱 자원을 준비합니다.
@@ -31,17 +32,19 @@ func Prepare(ctx context.Context, config Config) (*Application, error) {
 		return nil, ErrInvalidContext
 	}
 	config = snapshotConfig(config)
-	if err := Validate(config); err != nil {
+	resources, err := validate(config)
+	if err != nil {
 		return nil, err
 	}
-	return prepare(ctx, config)
+	return prepare(ctx, config, resources)
 }
 
-func prepare(ctx context.Context, config Config) (result *Application, err error) {
+func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResource) (result *Application, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	var openAPIDocument []byte
+	openAPIResources := map[string]boot.OpenAPIResource{}
 	if config.HTTP != nil && config.HTTP.OpenAPI.Enabled {
 		description, describeErr := DescribeHTTP(config)
 		if describeErr != nil {
@@ -50,6 +53,9 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 		openAPIDocument, err = endpoint.OpenAPI(description, config.HTTP.OpenAPI)
 		if err != nil {
 			return nil, err
+		}
+		for _, resource := range resources {
+			openAPIResources[resource.Path] = resource
 		}
 	}
 	application := &Application{config: config, closeDone: make(chan struct{})}
@@ -284,6 +290,15 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 		server, err := config.HTTPAdapterFactory.New(adapter.Config{
 			Options: serverOptions(*config.HTTP),
 			Execute: func(scope adapter.HTTPContext) error {
+				if resource, ok := openAPIResources[scope.Path()]; ok && (scope.Method() == http.MethodGet || scope.Method() == http.MethodHead) {
+					scope.Writer().SetHeader("Content-Type", resource.ContentType)
+					scope.Writer().SetHeader("Cache-Control", "no-cache")
+					scope.Writer().SetHeader("X-Content-Type-Options", "nosniff")
+					if scope.Method() == http.MethodHead {
+						return scope.Writer().WriteStatus(http.StatusOK)
+					}
+					return scope.Writer().WriteString(http.StatusOK, resource.Body)
+				}
 				if len(openAPIDocument) > 0 && scope.Path() == config.HTTP.OpenAPI.DocumentPath() && (scope.Method() == http.MethodGet || scope.Method() == http.MethodHead) {
 					scope.Writer().SetHeader("Cache-Control", "no-cache")
 					if scope.Method() == http.MethodHead {

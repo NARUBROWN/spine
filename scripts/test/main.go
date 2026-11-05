@@ -21,10 +21,10 @@ func main() {
 func run(args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("test", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	root := flags.String("root", ".", "저장소 루트")
-	module := flags.String("module", ".", "저장소 루트 기준 실행할 Go 모듈")
+	root := flags.String("root", ".", "Repository root")
+	module := flags.String("module", ".", "Go module to run, relative to the repository root")
 	flags.Usage = func() {
-		fmt.Fprintln(stderr, "사용법: go run ./scripts/test [-module 경로] {test|vet|list} [Go 인자...]")
+		fmt.Fprintln(stderr, "Usage: go run ./scripts/test [-module path] {test|vet|list} [Go arguments...]")
 		flags.PrintDefaults()
 	}
 	if err := flags.Parse(args); err != nil {
@@ -40,7 +40,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	for _, arg := range command[1:] {
 		if arg == "-overlay" || strings.HasPrefix(arg, "-overlay=") || arg == "-C" || strings.HasPrefix(arg, "-C=") {
-			fmt.Fprintln(stderr, "-overlay와 -C는 실행기가 관리합니다. 모듈은 -module로 선택하세요.")
+			fmt.Fprintln(stderr, "The runner manages -overlay and -C. Select a module with -module.")
 			return 2
 		}
 	}
@@ -97,7 +97,7 @@ func paths(root, module string) (string, string, error) {
 		return "", "", err
 	}
 	if filepath.IsAbs(module) {
-		return "", "", fmt.Errorf("-module에는 저장소 기준 상대 경로를 사용하세요: %s", module)
+		return "", "", fmt.Errorf("-module requires a path relative to the repository root: %s", module)
 	}
 	target, err := filepath.EvalSymlinks(filepath.Join(root, module))
 	if err != nil {
@@ -105,10 +105,10 @@ func paths(root, module string) (string, string, error) {
 	}
 	relative, err := filepath.Rel(root, target)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return "", "", fmt.Errorf("모듈이 저장소 밖을 가리킵니다: %s", module)
+		return "", "", fmt.Errorf("Module path points outside the repository: %s", module)
 	}
 	if _, err := os.Stat(filepath.Join(target, "go.mod")); err != nil {
-		return "", "", fmt.Errorf("Go 모듈을 찾을 수 없습니다: %w", err)
+		return "", "", fmt.Errorf("Go module not found: %w", err)
 	}
 	return root, target, nil
 }
@@ -126,7 +126,7 @@ func testFiles(root string) (map[string]string, error) {
 			return nil
 		}
 		if strings.HasSuffix(entry.Name(), "_test.go") {
-			return fmt.Errorf("테스트 파일을 루트 test/unit 아래로 옮겨주세요: %s", path)
+			return fmt.Errorf("Move test files under test/unit at the repository root: %s", path)
 		}
 		return nil
 	})
@@ -143,7 +143,7 @@ func testFiles(root string) (map[string]string, error) {
 			return nil
 		}
 		if !entry.Type().IsRegular() {
-			return fmt.Errorf("테스트 파일은 일반 파일이어야 합니다: %s", path)
+			return fmt.Errorf("Test files must be regular files: %s", path)
 		}
 		relative, err := filepath.Rel(unit, path)
 		if err != nil {
@@ -151,7 +151,7 @@ func testFiles(root string) (map[string]string, error) {
 		}
 		target := filepath.Join(root, relative)
 		if _, err := os.Stat(filepath.Dir(target)); err != nil {
-			return fmt.Errorf("테스트의 원본 패키지 디렉터리를 찾을 수 없습니다: %w", err)
+			return fmt.Errorf("Source package directory for test not found: %w", err)
 		}
 		replacements[target] = path
 		return nil
@@ -160,7 +160,7 @@ func testFiles(root string) (map[string]string, error) {
 		return nil, err
 	}
 	if len(replacements) == 0 {
-		return nil, fmt.Errorf("test/unit에서 실행할 테스트를 찾을 수 없습니다")
+		return nil, fmt.Errorf("No runnable tests found under test/unit")
 	}
 	return replacements, nil
 }

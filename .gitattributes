@@ -1,0 +1,4 @@
+# 상위 배포본과 해시 입력은 운영체제에 관계없이 원본 바이트를 보존합니다.
+/pkg/openapi/ui/*/assets/* -text -whitespace linguist-vendored
+/pkg/openapi/ui/*/assets/THIRD_PARTY_LICENSES.txt conflict-marker-size=128
+/scripts/openapi-ui/** -text

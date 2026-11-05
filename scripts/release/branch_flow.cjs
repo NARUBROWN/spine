@@ -12,8 +12,8 @@ function evaluate({ head, base, sameRepository }) {
     allowed,
     context: `Branch Flow / ${base}`,
     description: allowed
-      ? `${head} → ${base} 허용`
-      : "작업 → preview → rc → main 방향만 허용합니다",
+      ? `${head} → ${base} is allowed`
+      : "Only work → preview → rc → main transitions are allowed",
   };
 }
 
@@ -31,6 +31,6 @@ if (require.main === module) {
     console.log(result.description);
     if (!result.allowed) process.exitCode = 1;
   } else {
-    console.log("PR 외 CI 이벤트의 검증을 진행합니다");
+    console.log("Validating a non-PR CI event");
   }
 }
