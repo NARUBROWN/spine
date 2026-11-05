@@ -72,6 +72,33 @@ python3 scripts/release/pin_channel.py --channel rc --apply
 
 RC 발행 입력은 새 RC 버전과 완료된 Preview 태그입니다. 정식 발행 입력은 완료된 RC 태그이며 정식 버전은 자동 결정합니다. 코어 후보 발행과 전체 조합 완료의 정식 환경 승인 요청은 각각 사용자가 직접 처리합니다.
 
+## Discord 태그 알림
+
+Publish Preview, Publish Rc, Publish Stable에서 태그 생성에 성공하면 바로 Discord 알림을 보냅니다. 버전 태그로 채널을 선택합니다.
+
+| 태그 형식 | GitHub Actions repository secret |
+| --- | --- |
+| `vX.Y.Z-preview.N` | `DISCORD_WEBHOOK_PREVIEW` |
+| `vX.Y.Z-rc.N` | `DISCORD_WEBHOOK_RC` |
+| `vX.Y.Z` | `DISCORD_WEBHOOK_RELEASE` |
+
+각 Discord 텍스트 채널의 **채널 편집 → 연동 → 웹후크**에서 URL을 복사하고, 저장소의 **Settings → Secrets and variables → Actions**에 해당 이름의 repository secret으로 등록합니다. URL은 코드나 로그에 기록하지 않습니다. 포럼과 미디어 채널은 webhook URL에 대상 `thread_id`가 필요합니다.
+
+이 알림은 태그 생성 사실과 발행 workflow 링크를 표시합니다. 정식 태그 알림도 전체 조합 완료나 GitHub Release 게시를 뜻하지 않습니다. 태그 생성 시점에는 릴리스 노트가 없으므로 태그 페이지로 연결합니다. GitHub Release 이벤트와 수동 태그 push는 별도 알림 대상으로 연결하지 않습니다.
+
+`GITHUB_TOKEN`으로 만든 태그는 다른 workflow를 자동 실행하지 않으므로, 재사용 발행 workflow의 태그 생성 단계 다음에서 직접 전송합니다. 호출 workflow는 위 세 secret만 이름으로 전달합니다. 알림 단계는 webhook을 step output으로 내보내지 않습니다.
+
+전송은 `wait=true`로 메시지 생성 응답을 확인합니다. secret 누락과 HTTP 오류는 해당 단계에 경고를 남기며 태그 이후 공개 검증을 계속합니다. 전송을 자동 재시도하지 않으며, 응답 유실 시 실제 채널을 확인해야 합니다. 이미 생성된 태그를 다시 발행해 알림만 재시도하지 않습니다.
+
+저장한 발행 계획으로 전송할 payload를 확인할 수 있습니다. 아래 실행자와 실행 ID는 실제 발행 값으로 바꿉니다. webhook secret은 필요하지 않습니다.
+
+```sh
+GITHUB_REPOSITORY=NARUBROWN/spine \
+GITHUB_ACTOR=NARUBROWN \
+GITHUB_RUN_ID=123456789 \
+python3 scripts/release/notify_discord.py --plan release-plan.json --dry-run
+```
+
 ## 검증 증거
 
 Preview와 RC는 GitHub 사전 릴리스를 만들지 않습니다. artifact는 90일 보관을 요청합니다. 승격 시 다음을 확인합니다.

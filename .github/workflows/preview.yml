@@ -19,6 +19,10 @@ concurrency:
 jobs:
   publish:
     uses: ./.github/workflows/release-pipeline.yml
+    secrets:
+      DISCORD_WEBHOOK_PREVIEW: ${{ secrets.DISCORD_WEBHOOK_PREVIEW }}
+      DISCORD_WEBHOOK_RC: ${{ secrets.DISCORD_WEBHOOK_RC }}
+      DISCORD_WEBHOOK_RELEASE: ${{ secrets.DISCORD_WEBHOOK_RELEASE }}
     with:
       channel: preview
       source: ${{ inputs.source_sha }}
