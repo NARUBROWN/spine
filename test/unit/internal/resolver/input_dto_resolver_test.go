@@ -68,7 +68,7 @@ type rawQueryHTTPContext struct {
 	available bool
 }
 
-func (c rawQueryHTTPContext) RawQuery() (string, bool) { return c.raw, c.available }
+func (c rawQueryHTTPContext) RawQuery() string { return c.raw }
 
 func TestInputDTOResolverUsesRawQueryBeforeValidation(t *testing.T) {
 	type filters struct {
@@ -99,7 +99,7 @@ func TestInputDTOResolverUsesRawQueryBeforeValidation(t *testing.T) {
 	ctx.available = false
 	ctx.queries = map[string][]string{"tags": {"a,b"}}
 	r.Validator = nil
-	value, err := r.Resolve(ctx, meta)
+	value, err := r.Resolve(ctx.fakeHttpCtx, meta)
 	if err != nil || !reflect.DeepEqual(value.(*filters).Tags, []string{"a,b"}) {
 		t.Fatalf("원시 쿼리가 없으면 디코딩된 쉼표를 구분자로 추측하면 안 됩니다: %+v %v", value, err)
 	}

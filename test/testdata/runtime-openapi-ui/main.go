@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/NARUBROWN/spine"
 	"log"
 	"net"
 	"net/http"
@@ -36,9 +37,13 @@ func main() {
 		log.Fatal(err)
 	}
 	defer prepared.Close(context.Background())
+	handler, err := spine.NetHTTPHandler(prepared)
+	if err != nil {
+		panic(err)
+	}
 	mux := http.NewServeMux()
-	mux.Handle("/service/", http.StripPrefix("/service", prepared.Handler()))
-	mux.Handle("/", prepared.Handler())
+	mux.Handle("/service/", http.StripPrefix("/service", handler))
+	mux.Handle("/", handler)
 	address := os.Getenv("SPINE_DOCS_PROBE_ADDR")
 	if address == "" {
 		address = "127.0.0.1:0"

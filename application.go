@@ -2,8 +2,11 @@ package spine
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"reflect"
 
+	httpcontract "github.com/NARUBROWN/spine/contract/http"
 	"github.com/NARUBROWN/spine/internal/bootstrap"
 	"github.com/NARUBROWN/spine/pkg/boot"
 )
@@ -13,9 +16,9 @@ var ErrInvalidContext = bootstrap.ErrInvalidContext
 
 // PreparedApplication은 리스너 없이 준비한 앱과 획득한 자원의 소유권입니다.
 type PreparedApplication interface {
-	// Handler는 같은 실행 진입점을 반환합니다. HTTP가 비활성화돼 있으면 nil입니다.
-	// Close 시작 뒤에는 새 요청에 503을 반환합니다. 외부 HTTP 서버는 호출자가 종료합니다.
-	Handler() http.Handler
+	// HTTPAdapter는 준비한 동일 어댑터를 반환합니다. HTTP 비활성화 상태는 nil입니다.
+	// 자원 소유권은 PreparedApplication에 있으며 실행과 종료를 중복 호출하지 않습니다.
+	HTTPAdapter() httpcontract.HTTPAdapter
 	// Close는 새 요청을 중단하고 진행 요청, WS와 준비한 자원을 정리합니다.
 	// context는 완료 대기만 제한합니다. 시간 초과 뒤에도 정리는 계속되며 다시 기다릴 수 있습니다.
 	Close(context.Context) error
@@ -32,4 +35,25 @@ func (a *app) Prepare(ctx context.Context, options boot.Options) (PreparedApplic
 		return nil, err
 	}
 	return prepared, nil
+}
+
+// NetHTTPHandler는 준비한 앱에서 선택적인 net/http 진입점을 조회합니다.
+// 외부 서버는 호출자가 종료하며 앱 자원은 PreparedApplication.Close로 정리합니다.
+func NetHTTPHandler(prepared PreparedApplication) (http.Handler, error) {
+	invalid := prepared == nil
+	if !invalid {
+		value := reflect.ValueOf(prepared)
+		switch value.Kind() {
+		case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+			invalid = value.IsNil()
+		}
+	}
+	if invalid {
+		return nil, fmt.Errorf("%w: prepared application is nil", httpcontract.ErrInvalidAdapter)
+	}
+	adapter := prepared.HTTPAdapter()
+	if adapter == nil {
+		return nil, fmt.Errorf("%w: HTTP runtime is disabled", httpcontract.ErrUnsupportedCapability)
+	}
+	return httpcontract.NetHTTPHandler(adapter)
 }

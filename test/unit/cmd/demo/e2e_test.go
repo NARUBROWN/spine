@@ -387,7 +387,7 @@ func TestDemoE2E_PreparedHandlerHTTPWebSocketAndClose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(prepared.Handler())
+	server := httptest.NewServer(mustHTTPHandler(t, prepared))
 	defer server.Close()
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

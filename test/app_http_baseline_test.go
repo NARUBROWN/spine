@@ -100,7 +100,7 @@ func newHTTPBaselineHandler(t *testing.T, app spine.App, options boot.HTTPOption
 			t.Errorf("기준 앱 종료 실패: %v", err)
 		}
 	})
-	return prepared.Handler()
+	return mustHTTPHandler(t, prepared)
 }
 
 func setupHTTPBaselineApp(options ...platform.EchoOption) spine.App {

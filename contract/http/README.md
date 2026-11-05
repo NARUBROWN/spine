@@ -1,51 +1,78 @@
-# HTTP 어댑터 실행 계약
+# HTTP v3 계약
 
-`github.com/NARUBROWN/spine/contract/http`는 Spine 커널과 플랫폼 구현이 공유하는 공개 패키지입니다. Spine 모듈에 포함되며 버전도 Spine과 함께 관리합니다. 별도 계약 모듈이나 저장소는 사용하지 않습니다.
+플랫폼은 원시 요청 입력과 응답 출력을 제공하고, Spine은 DTO 파싱과 실행 규칙을 소유합니다. 필수 계약은 net/http나 fasthttp의 native 요청 및 handler 타입을 요구하지 않습니다.
 
-계약 패키지는 표준 라이브러리만 import합니다. Spine의 내부 파이프라인, 요청 store, 이벤트 버스와 구체 HTTP 프레임워크에 의존하지 않습니다. 외부 플랫폼 모듈은 이 공개 패키지를 import하여 Factory와 HTTPAdapter를 구현할 수 있습니다.
+`github.com/NARUBROWN/spine/contract/http`는 커널과 플랫폼이 공유하는 `spine.http-adapter/v3` 계약입니다. 이 브랜치의 커널은 v3를 사용합니다. 공개된 v2 플랫폼과 함께 사용할 수 없으며, 새 조합은 아직 발행하지 않았습니다. 초기 검증 경로인 `contract/http/v3`와 이전 `adapter`, `adapter/http`는 같은 타입과 오류의 별칭입니다.
 
-Factory는 기능을 선언하고 리스너 없이 새 어댑터를 구성합니다. HTTPContext는 요청 입력과 실제 ResponseWriter를 제공하며, ExecuteFunc는 요청마다 커널을 한 번 동기 실행합니다. Handler는 외부 HTTP 서버에 연결할 수 있고 Serve와 Shutdown은 관리 서버 실행에 사용합니다.
+## 입력과 출력
 
-현재 계약 버전은 `spine.http-adapter/v2`입니다. `ResponseWriter.WriteJSON`은 core에서 직렬화한 `json.RawMessage`만 받습니다. DTO의 동적 타입이 필요한 `HTTPContext.Bind(any)`가 공개 HTTP 계약에 남는 유일한 `any`입니다.
+`HTTPContext`는 `Context`, `Method`, `RawPath`, `RawQuery`, `Header`, `Headers`, `Body`, `Writer`를 제공합니다. 플랫폼의 `Bind`, `MultipartForm`, `Param/Params`, `Query/Queries`는 v3 필수 계약에 없습니다. 컨트롤러에 제공하는 해당 기능은 코어가 구현합니다.
 
-native Echo 설정은 플랫폼의 `WithEcho(func(*echo.Echo))` 옵션이 소유합니다. 공통 Config와 Capabilities에는 native hook을 넣지 않습니다. v1 구현은 버전 검사에서 거부하므로 커널과 플랫폼을 함께 전환해야 합니다.
+| 입력 | 보장 |
+| --- | --- |
+| `RawPath` | 쿼리와 authority를 제외한 디코딩 전 경로입니다. native 엔진의 경로 정리 전 값을 제공합니다. |
+| `RawQuery` | 선행 `?`가 없는 원문입니다. 반복 값, 빈 값과 `%2C`를 파싱한 값으로 대체하지 않습니다. |
+| `Headers` | Host와 포트를 보존하며 맵과 슬라이스 수정이 원본 요청에 영향을 주지 않습니다. native 버퍼 재사용으로 반환 값이 바뀌지 않습니다. |
+| `Body` | nil이 아닌 reader이며 같은 읽기 위치를 유지합니다. getter가 추가 읽기, native 폼 파싱과 재생을 시작하지 않습니다. 원본 스트림은 플랫폼이 정리합니다. |
+| `Context` | 요청 종료 때 취소하는 안전한 표준 context입니다. 풀링된 native 객체를 그대로 노출하지 않습니다. 연결 해제 취소 지원은 별도로 선언합니다. |
 
-scope와 writer는 요청 중에만 사용하며 별도 goroutine에서 동시 접근하거나 보관하지 않습니다. Spine의 요청 store, 라우팅 결과, EventBus와 응답 staging은 커널이 소유합니다. 요청 오류는 RequestError로 상태와 원인을 전달하고 커널이 공개 HTTP 오류로 변환합니다.
+코어가 인증 뒤 본문 파싱을 시작하도록 플랫폼이 선행 DTO/폼 파싱을 하지 않습니다. 서버가 이미 본문을 수신했거나 native HTTP 파서가 요청을 거부하는 상황은 Spine 파싱과 구분합니다. 요청 뷰, reader와 writer는 요청 안에서 동기 사용합니다.
 
-## Host와 JSON 입력 바인딩
+`ResponseWriter`는 기존 메서드를 유지합니다. `WriteJSON`은 직렬화된 `json.RawMessage`를 받고 `WriteBytes`와 함께 반환 뒤 입력 bytes를 재사용할 수 있어야 합니다. `IsCommitted`와 성공 반환은 논리적 응답 확정이며 실제 송신 또는 클라이언트 수신 완료를 뜻하지 않습니다. 관측 가능한 쓰기 오류는 반환합니다.
 
-Bind는 본문만 읽으며 경로 값과 URL 쿼리를 병합하지 않습니다. urlencoded 폼에서도 URL 쿼리를 제외한 본문 값만 사용합니다. 기본 Echo 구현은 이미 파싱한 PostForm을 재사용하고, 본문 바인딩 후 원래 native 요청을 유지합니다. 플랫폼의 사용자 지정 Binder를 등록하면 해당 구현이 출처 분리와 디코딩 규칙을 소유합니다.
+## 실행과 종료
 
-이 작업 브랜치에서는 Header와 Headers의 Host 조회에 Go 요청의 `Request.Host`를 사용합니다. Go가 Host를 헤더 맵과 분리하므로 플랫폼이 별도로 보충해야 합니다. 대소문자가 다른 Host 이름도 같은 값을 읽으며 포트가 있으면 그대로 보존합니다. `X-Forwarded-Host` 같은 전달 헤더로 대체하지 않습니다. Headers는 원래 요청 맵을 변경하지 않는 조회 뷰를 반환합니다.
+| 메서드 | 보장 |
+| --- | --- |
+| `Serve(net.Listener)` | 리스너를 소유하고 모든 반환 경로에서 닫습니다. 한 번만 실행하고 정상 종료를 `ErrServerClosed`로 정규화합니다. 예상하지 못한 nil 반환은 계약 위반입니다. |
+| `StopAccepting()` | 새 실행 진입을 동기 차단하고 반복 호출할 수 있습니다. 기존 요청은 보존하며 차단 뒤 handler에 도착한 요청에는 503을 반환합니다. |
+| `Shutdown(context.Context)` | 차단과 진행 요청의 종료를 기다립니다. 호출 context는 대기만 제한하고 정리는 계속합니다. 새 context로 다시 기다릴 수 있으며 인스턴스를 재실행하지 않습니다. |
 
-기본 JSON 입력 바인딩은 `int`, `bool`, `string`, 일반 구조체와 배열처럼 nil을 표현할 수 없는 타입에 명시한 `null`을 거부합니다. 중첩 필드와 컬렉션 원소에도 같은 규칙을 적용합니다. 필드 누락은 그대로 두며 포인터, map, slice와 interface의 null은 허용합니다. 필수 여부와 값 제약은 등록한 validator가 판단합니다.
+구현체는 가장 바깥 native handler에서 Spine 경로, native middleware, native 경로와 업그레이드 진입을 함께 추적합니다. 관리 서버와 외부 서버는 같은 보호된 handler를 사용합니다. 외부 서버 자체는 호출자가, 장기 WS 연결은 코어 런타임이 종료합니다. graceful 종료 시작만으로 진행 요청을 일괄 취소하지 않습니다.
 
-플랫폼은 공통 `github.com/NARUBROWN/spine/pkg/jsonx.Unmarshal`을 사용해 이 규칙을 적용할 수 있습니다. 이 함수는 JSON 필드 이름, 익명 필드 선택과 사용자 정의 `json.Unmarshaler`를 보존합니다. 사용자 정의 JSON 디코더의 null 처리는 해당 구현이 결정합니다. null 타입 오류는 `RequestError`로 감싼 HTTP 400으로 전달하고 validator나 핸들러를 실행하지 않습니다.
+## 선택 기능과 검사 순서
 
-이 동작은 새 플랫폼 구현과 코어를 함께 적용해야 합니다. 기존에 공개한 Echo 플랫폼 `v0.1.0`에 소급 적용되지 않습니다.
+`Capabilities`는 계약 버전, `NetHTTPHandler`, `NetHTTPUpgrade`, `ClientDisconnectCancellation`, `ServerOptions` 지원을 선언합니다. 기본 HTTP 처리와 본문 읽기 제한은 필수입니다. net/http native 진입점이 없는 엔진도 기본 계약을 구현할 수 있습니다.
 
-## 원시 쿼리 조회
+1. `ValidateFactory`로 버전과 필요한 기능을 검사합니다. 이 함수는 `New`와 native 훅을 호출하지 않습니다.
+2. `Config.Validate`로 Execute, 옵션 값과 명시적으로 요청한 옵션의 지원 여부를 검사합니다.
+3. net/http 업그레이드가 있으면 `ValidateNetHTTPUpgradeRoutes`로 누락 경로와 nil handler를 검사합니다.
+4. 일반 HTTP는 `Factory.New`, 기존 net/http WS는 선택 `NetHTTPUpgradeFactory.NewWithNetHTTPUpgrades`를 호출합니다. 구현체도 native 훅 실행 전에 구성을 검증해야 합니다.
+5. `ValidateAdapter`로 nil 결과와 선언한 native handler를 검사합니다. 실행, 차단과 종료는 시작하지 않습니다.
 
-선택적 `RawQueryContext`는 `RawQuery() (string, bool)`로 URL 디코딩 전의 쿼리를 제공합니다. 값은 `Request.URL.RawQuery`처럼 선행 물음표가 없는 문자열입니다. bool은 제공 여부이며, 빈 쿼리도 제공할 수 있으면 true를 반환합니다. 기본 HTTPContext의 필수 메서드와 계약 버전은 바꾸지 않습니다.
+`NetHTTPHandler(adapter)`는 선택 `NetHTTPHandlerProvider`를 조회합니다. 지원하지 않는 엔진은 `ErrUnsupportedCapability`, nil adapter나 nil native handler는 `ErrInvalidAdapter`를 반환합니다. `PreparedApplication.HTTPAdapter()`는 동일한 준비 어댑터를 반환합니다. 외부 net/http 서버에는 `spine.NetHTTPHandler(prepared)`로 얻은 handler를 연결합니다. HTTP 비활성화는 `ErrUnsupportedCapability`로 알립니다. 실행과 종료 소유권은 Prepared에 남습니다.
 
-코어는 원시 쿼리에서 반복 키와 슬라이스의 쉼표 구분을 처리한 뒤 원소별로 URL 디코딩합니다. 따라서 `tags=a,b`는 두 원소가 되고 `tags=a%2Cb`는 쉼표를 포함한 한 원소가 됩니다. 공백, 빈 원소와 중복 값은 보존합니다. 기존 Query와 Queries의 디코딩된 조회 뷰는 유지합니다.
+`NetHTTPUpgrade`를 선언한 factory는 `NetHTTPUpgradeFactory`를 구현해야 합니다. 선언은 있으나 인터페이스가 없으면 잘못된 구현입니다. 기능을 선언하지 않은 엔진에 기존 net/http WS를 요청하면 미지원 조합입니다. 두 경우 모두 준비 단계에서 거부하며 호환 변환기를 자동 설치하지 않습니다.
 
-원시 쿼리를 제공하지 않는 플랫폼에서는 반복 키 바인딩을 유지합니다. 디코딩된 값에서는 구분자 쉼표와 인코딩된 쉼표를 구별할 수 없으므로 쉼표 분할을 적용하지 않습니다. 새 쉼표 구분 동작을 사용하려면 플랫폼도 이 선택적 계약을 구현해야 합니다.
+## 옵션 값과 지원 범위
 
-ASGI의 앱과 서버 경계 및 수명 정의를 참고하지만 **Python ASGI 호환을 제공하지 않습니다.** Spine v0.6.0과 Echo 플랫폼 v0.1.0에서 이 계약을 사용합니다.
+`ServerOptions.Validate`는 값만 검사하고 `Config.Validate`는 지원 여부까지 검사합니다. 계약 자체는 기본값을 적용하지 않습니다. 커널은 기존 `boot.HTTPOptions.MaxBodyBytes`의 0을 32 MiB로 정규화하고, native timeout과 헤더 옵션의 0은 플랫폼 기본값으로 전달합니다. 지원 선언은 요청한 의미를 구현할 수 있을 때만 켭니다.
 
-```sh
-go run ./scripts/test test ./contract/http -count=1
-```
+| 옵션 | 값과 지원 규칙 |
+| --- | --- |
+| `ReadHeaderTimeout` | 음수를 거부합니다. 명시적인 양수는 요청 헤더 수신 기한을 지원해야 합니다. |
+| `ReadTimeout` | 음수를 거부합니다. 명시적인 양수는 헤더와 본문을 포함한 요청 읽기 기한을 지원해야 합니다. |
+| `WriteTimeout` | 음수를 거부합니다. 명시적인 양수의 쓰기 기한은 요청 헤더 수신 뒤 시작하는 의미를 지원해야 합니다. handler 실행을 강제 중단하는 제한은 아닙니다. |
+| `IdleTimeout` | 음수를 거부합니다. 명시적인 양수는 keepalive의 다음 요청 대기 기한을 지원해야 합니다. |
+| `MaxHeaderBytes` | 음수를 거부합니다. 명시적인 양수는 요청 줄과 헤더 파싱 한도를 지원해야 합니다. |
+| `DisableRecover` | true를 요청하면 native 복구 비활성화를 지원해야 합니다. |
+| `MaxBodyBytes` | 본문 읽기 한도는 필수입니다. 양수는 길이를 모르는 입력에도 적용하고 음수는 해제합니다. 커널은 0을 32 MiB로 정규화합니다. |
 
-이전 `github.com/NARUBROWN/spine/adapter` 경로는 같은 타입과 오류의 호환 별칭을 제공합니다. 기존 Echo 플랫폼을 그대로 연결할 수 있으며 새 구현은 `contract/http`를 사용합니다.
+지원하지 않는 명시적 native 옵션은 `ErrUnsupportedOption`으로 거부합니다. 필드 이름만 맞추거나 지원하지 않는 값을 무시하지 않습니다. 0인 native 옵션은 지원 요구를 만들지 않으며 플랫폼이 기본값을 적용합니다. `boot.HTTPOptions.MultipartMemoryBytes`는 코어 파서의 파일 메모리 예산이며 0은 32 MiB, 음수는 준비 오류입니다. 전체 본문 한도와 전체 요청 메모리 상한은 아닙니다.
 
-## 헤더 개수와 목록 바인딩
+## 오류와 검증 범위
 
-단일값 헤더는 같은 값의 반복도 거부합니다. 지원하는 표준 목록형 헤더는 여러 줄을 순서대로 병합합니다. 문자열 필드는 전체 필드값을 받고 일반 슬라이스 필드는 파싱한 목록을 받습니다. 사용자 정의 헤더는 scalar와 일반 슬라이스의 선언으로 단일값 또는 쉼표 목록을 정합니다.
+| 분류 | 오류 |
+| --- | --- |
+| nil, 버전 불일치, 잘못된 지원 선언과 값 | `ErrInvalidAdapter` |
+| 중복 실행, 종료 후 재실행 등 | `ErrInvalidState` |
+| 선택 기능 미지원 | `ErrUnsupportedCapability` |
+| 명시적인 native 옵션 미지원 | `ErrUnsupportedOption` |
+| 정상 관리 서버 종료 | `ErrServerClosed` |
+| 입력 오류 상태와 원래 원인 | `RequestError`의 `Status`, `Message`, `Cause` |
 
-기본 목록 처리에는 Accept 계열, Allow, Cache-Control, Connection, Content-Encoding, Content-Language, Forwarded, Pragma, TE, Trailer, Transfer-Encoding, Upgrade, Vary, 접근 제어 목록과 WebSocket 프로토콜 목록을 포함합니다. If-Match와 If-None-Match의 opaque entity tag, Via의 주석과 Link의 URI도 별도로 처리합니다. 원소의 프로토콜 표현은 유지하고 구분자 주변의 SP와 HTAB만 정리합니다. [RFC 9110의 필드 결합 규칙](https://www.rfc-editor.org/rfc/rfc9110.html#section-5.3)을 따릅니다.
+본문 한도 초과는 `RequestError` 상태 413으로 표현하고 `Unwrap`으로 원인을 보존합니다. 취소와 일반 I/O 오류를 일괄 400으로 바꾸지 않습니다. 코어는 본문과 파일 오류의 `in: body`, 400/413/415와 원인을 보존합니다. native 프로토콜 거부는 Execute 이전에 일어날 수 있습니다.
 
-Host, Content-Type, Authorization과 날짜 헤더처럼 단일값인 필드에는 일반 슬라이스를 사용할 수 없습니다. Cookie와 인증 challenge 목록도 일반 쉼표 배열로 처리하지 않습니다. Cookie는 여러 줄을 `; `로 병합하고, WWW-Authenticate와 Proxy-Authenticate는 문자열이나 자체 TextUnmarshaler를 사용합니다. 필드 전체의 TextUnmarshaler는 자체 파싱을 위해 전체 값을 받습니다. [HTTP/2 Cookie 결합 규칙](https://www.rfc-editor.org/rfc/rfc9113.html#section-8.2.3)도 보존합니다.
+검증은 계약 검사, 두 엔진의 최소 구현과 실제 Spine 통합으로 나눕니다. 두 엔진 검증의 fasthttp 스트리밍은 EOF 패치를 적용한 로컬 조합입니다. 실제 Spine 통합은 이행한 Echo 소스로 HTTP/WS/OpenAPI, 인증 전 무읽기와 multipart 정리를 검사합니다. 독립 net/http 제품, CLI와 공개 모듈 조합은 후속 범위입니다.
 
-이 타입과 개수 검사는 validator 유무와 관계없이 적용합니다. 태그 없는 본문은 Go JSON 기본 필드명으로 계속 바인딩할 수 있습니다.
+본문의 JSON/XML/form/multipart 해석은 커널이 소유하며 Echo Binder를 호출하지 않습니다. 요청별 파서는 실제 바인딩 때 생성하고, 모든 `AfterCompletion` 뒤 Execute 바깥에서 임시 파일을 정리합니다. 자세한 이행은 [HTTP v3 전환](../../docs/migration/http-v3.md)을 참고하세요.

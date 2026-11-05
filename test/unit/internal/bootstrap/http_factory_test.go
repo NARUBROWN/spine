@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"testing"
+	"time"
 
 	adapter "github.com/NARUBROWN/spine/contract/http"
 	"github.com/NARUBROWN/spine/core"
@@ -17,7 +18,7 @@ import (
 type testHTTPFactory struct{}
 
 func (testHTTPFactory) Capabilities() adapter.Capabilities {
-	return adapter.Capabilities{ContractVersion: adapter.ContractVersion}
+	return adapter.Capabilities{ContractVersion: adapter.ContractVersion, NetHTTPHandler: true}
 }
 
 func (testHTTPFactory) New(adapter.Config) (adapter.HTTPAdapter, error) {
@@ -28,8 +29,15 @@ func (testHTTPFactory) New(adapter.Config) (adapter.HTTPAdapter, error) {
 
 type testHTTPAdapter struct{ server *http.Server }
 
-func (a *testHTTPAdapter) Handler() http.Handler              { return a.server.Handler }
-func (a *testHTTPAdapter) Serve(listener net.Listener) error  { return a.server.Serve(listener) }
+func (a *testHTTPAdapter) StopAccepting()        {}
+func (a *testHTTPAdapter) Handler() http.Handler { return a.server.Handler }
+func (a *testHTTPAdapter) Serve(listener net.Listener) error {
+	err := a.server.Serve(listener)
+	if errors.Is(err, http.ErrServerClosed) {
+		return adapter.ErrServerClosed
+	}
+	return err
+}
 func (a *testHTTPAdapter) Shutdown(ctx context.Context) error { return a.server.Shutdown(ctx) }
 
 type configurableFactory struct {
@@ -44,6 +52,7 @@ func (f *configurableFactory) New(config adapter.Config) (adapter.HTTPAdapter, e
 
 type invalidHandlerAdapter struct{ shutdowns int }
 
+func (*invalidHandlerAdapter) StopAccepting()                   {}
 func (*invalidHandlerAdapter) Handler() http.Handler            { return http.HandlerFunc(nil) }
 func (*invalidHandlerAdapter) Serve(net.Listener) error         { panic("Serve must not run") }
 func (a *invalidHandlerAdapter) Shutdown(context.Context) error { a.shutdowns++; return nil }
@@ -63,12 +72,59 @@ func TestHTTPFactoryPreflightRunsBeforeInitialization(t *testing.T) {
 	}
 }
 
+func TestUnsupportedHTTPOptionFailsBeforeInitialization(t *testing.T) {
+	transport := &testTransport{}
+	factory := &configurableFactory{
+		capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion},
+		newAdapter: func(adapter.Config) (adapter.HTTPAdapter, error) {
+			t.Fatal("미지원 옵션이면 어댑터를 만들면 안 됩니다")
+			return nil, nil
+		},
+	}
+	err := Validate(Config{HTTP: &boot.HTTPOptions{WriteTimeout: time.Second}, HTTPAdapterFactory: factory, CustomTransports: []core.CustomTransport{transport}})
+	if !errors.Is(err, adapter.ErrUnsupportedOption) || transport.initCalls.Load() != 0 {
+		t.Fatalf("명시적인 미지원 native 옵션을 준비 전에 거부해야 합니다: %v", err)
+	}
+}
+
+type engineNeutralAdapter struct{ stopped bool }
+
+func (*engineNeutralAdapter) Serve(net.Listener) error       { panic("Prepare must not Serve") }
+func (a *engineNeutralAdapter) StopAccepting()               { a.stopped = true }
+func (*engineNeutralAdapter) Shutdown(context.Context) error { return nil }
+
+func TestPrepareDoesNotRequireNetHTTPHandler(t *testing.T) {
+	server := &engineNeutralAdapter{}
+	factory := &configurableFactory{
+		capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion},
+		newAdapter: func(c adapter.Config) (adapter.HTTPAdapter, error) {
+			if c.Options.MaxBodyBytes != 32<<20 {
+				t.Fatalf("기존 기본 본문 한도: %d", c.Options.MaxBodyBytes)
+			}
+			return server, nil
+		},
+	}
+	prepared, err := Prepare(context.Background(), Config{HTTP: &boot.HTTPOptions{}, HTTPAdapterFactory: factory})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prepared.HTTPAdapter() != server {
+		t.Fatal("준비한 동일 어댑터를 반환해야 합니다")
+	}
+	if _, err := adapter.NetHTTPHandler(prepared.HTTPAdapter()); !errors.Is(err, adapter.ErrUnsupportedCapability) {
+		t.Fatal(err)
+	}
+	if err := prepared.Close(context.Background()); err != nil || !server.stopped {
+		t.Fatalf("native handler 없이 차단과 종료를 처리해야 합니다: %v", err)
+	}
+}
+
 func TestHTTPFactoryRejectsInvalidInstancesBeforeServing(t *testing.T) {
 	broken := &invalidHandlerAdapter{}
 	var typedNil *invalidHandlerAdapter
 	for _, instance := range []adapter.HTTPAdapter{nil, typedNil, broken} {
 		factory := &configurableFactory{
-			capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion},
+			capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion, NetHTTPHandler: true},
 			newAdapter:   func(adapter.Config) (adapter.HTTPAdapter, error) { return instance, nil },
 		}
 		if err := Run(Config{HTTP: &boot.HTTPOptions{}, HTTPAdapterFactory: factory}); !errors.Is(err, adapter.ErrInvalidAdapter) {

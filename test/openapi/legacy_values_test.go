@@ -91,7 +91,7 @@ func TestDeprecatedValuesWorkOverHTTPAndLeaveDynamicInputsUnresolved(t *testing.
 				}
 			})
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				prepared.Handler().ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), legacyContextKey{}, "request-context")))
+				mustHTTPHandler(t, prepared).ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), legacyContextKey{}, "request-context")))
 			}))
 			t.Cleanup(server.Close)
 			for _, test := range []struct {
@@ -121,7 +121,7 @@ func TestDeprecatedValuesWorkOverHTTPAndLeaveDynamicInputsUnresolved(t *testing.
 			if v.calls.Load() != 0 || v.describes.Load() != 0 {
 				t.Fatal("기존 조회 타입에 DTO 검증이나 스키마 추정을 추가하면 안 됩니다")
 			}
-			resource := serve(prepared.Handler(), "GET", "/openapi.json", "", nil)
+			resource := serve(mustHTTPHandler(t, prepared), "GET", "/openapi.json", "", nil)
 			if !enabled {
 				if resource.Code != 404 {
 					t.Fatalf("명세 비활성화: %d", resource.Code)

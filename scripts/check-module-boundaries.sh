@@ -7,7 +7,7 @@ for contract in contract/description contract/http contract/http/v3 contract/eve
   contract_path="github.com/NARUBROWN/spine/$contract"
   external=$(go run ./scripts/test list -deps -test -f '{{if not .Standard}}{{.ImportPath}}{{end}}' "./$contract")
   unexpected=$(printf '%s\n' "$external" | awk -v contract_path="$contract_path" -v legacy="$contract" '
-    (legacy == "adapter" || legacy == "adapter/http") && $0 == "github.com/NARUBROWN/spine/contract/http" { next }
+    (legacy == "adapter" || legacy == "adapter/http" || legacy == "contract/http/v3") && $0 == "github.com/NARUBROWN/spine/contract/http" { next }
     legacy == "adapter" && $0 == "github.com/NARUBROWN/spine/adapter/http" { next }
     legacy == "adapter/event" && $0 == "github.com/NARUBROWN/spine/contract/event" { next }
     legacy == "adapter/websocket" && $0 == "github.com/NARUBROWN/spine/contract/websocket" { next }

@@ -85,6 +85,10 @@ type HTTPOptions struct {
 	// 0이면 Spine 기본값을 사용하고, 음수면 제한을 비활성화합니다.
 	MaxBodyBytes int64
 
+	// MultipartMemoryBytes는 multipart 파일을 메모리에 보관할 예산입니다.
+	// 0이면 32 MiB를 사용하며, 요청 전체 메모리의 상한은 아닙니다.
+	MultipartMemoryBytes int64
+
 	// WebSocket 런타임 설정입니다.
 	WebSocket WebSocketOptions
 }
@@ -111,6 +115,9 @@ func (o HTTPOptions) ValidateIssues(prefix string) []ConfigIssue {
 	}
 	if o.MaxHeaderBytes < 0 {
 		issues = append(issues, ConfigIssue{Path: configPath(prefix, "MaxHeaderBytes"), Code: "HTTP_MAX_HEADER_BYTES_INVALID", Message: "HTTP maximum header size cannot be negative.", Hint: "Use zero for the secure default or a positive byte limit."})
+	}
+	if o.MultipartMemoryBytes < 0 {
+		issues = append(issues, ConfigIssue{Path: configPath(prefix, "MultipartMemoryBytes"), Code: "HTTP_MULTIPART_MEMORY_INVALID", Message: "Multipart memory budget cannot be negative.", Hint: "Use zero for the default or a positive byte budget."})
 	}
 	issues = append(issues, o.WebSocket.ValidateIssues(configPath(prefix, "WebSocket"))...)
 	return issues

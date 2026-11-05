@@ -45,11 +45,7 @@ func (r *InputDTOResolver) Resolve(ctx core.ExecutionContext, parameter Paramete
 	value := reflect.New(t)
 	var bindingErr error
 	if raw, ok := httpCtx.(httpcontract.RawQueryContext); source == "query" && ok {
-		if query, available := raw.RawQuery(); available {
-			bindingErr = input.BindQuery(value.Elem(), fields, query)
-		} else {
-			bindingErr = input.Bind(value.Elem(), fields, values, source)
-		}
+		bindingErr = input.BindQuery(value.Elem(), fields, raw.RawQuery())
 	} else {
 		bindingErr = input.Bind(value.Elem(), fields, values, source)
 	}

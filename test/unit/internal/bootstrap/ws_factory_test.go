@@ -47,7 +47,7 @@ func wsFactoryConfig(t *testing.T, factory wsadapter.Factory) Config {
 	if err := registry.Register("/ws", (*wsFactoryController).Handle); err != nil {
 		t.Fatal(err)
 	}
-	httpFactory := &configurableFactory{capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion, WebSocketUpgrade: true}, newAdapter: testHTTPFactory{}.New}
+	httpFactory := &upgradeConfigurableFactory{configurableFactory: configurableFactory{capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion, NetHTTPUpgrade: true}, newAdapter: testHTTPFactory{}.New}}
 	return Config{HTTP: &boot.HTTPOptions{}, HTTPAdapterFactory: httpFactory, WebSocketAdapterFactory: factory, WebSocketRegistry: registry, Constructors: []any{func() *wsFactoryController { return &wsFactoryController{} }}}
 }
 
@@ -112,4 +112,10 @@ func TestHTTPOnlyDoesNotRequireOrCreateWSAdapter(t *testing.T) {
 	if factory.newCalls != 0 {
 		t.Fatal("WS 경로가 없는 앱에서 WS 구현을 생성하면 안 됩니다")
 	}
+}
+
+type upgradeConfigurableFactory struct{ configurableFactory }
+
+func (f *upgradeConfigurableFactory) NewWithNetHTTPUpgrades(c adapter.Config, _ []adapter.NetHTTPUpgradeRoute) (adapter.HTTPAdapter, error) {
+	return f.New(c)
 }

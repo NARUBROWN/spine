@@ -93,6 +93,6 @@ GOWORK=off go test -race -count=3 \
 
 ## 아직 확인하지 않은 범위
 
-Spine 코어의 v3 연결, DTO 파싱/validator/staging/완료 훅, multipart 파일 정리, 전체 서버 옵션의 실제 시간/크기 경계, TLS/HTTP2와 모든 잘못된 HTTP 프레이밍, Echo/Prepared 이행과 공개 모듈 설치는 남아 있습니다. 코어의 실제 실행 계약은 v2를 유지합니다.
+이 모듈은 최소 어댑터 검증만 수행합니다. 실제 Spine v3/Echo 연결, DTO/validator/staging/완료 훅과 multipart 정리는 별도의 `scripts/verify-http-v3.py`로 검사합니다. 전체 서버 옵션의 실제 시간/크기 경계, TLS/HTTP2와 모든 잘못된 HTTP 프레이밍, 독립 net/http 제품과 공개 설치 조합은 남아 있습니다.
 
 fasthttp 의존성과 Go 1.26 요구는 이 테스트 모듈에만 둡니다. 코어의 Go 1.25.5 설정과 의존성은 변경하지 않습니다. 사용 버전의 Go 요구는 [fasthttp go.mod](https://github.com/valyala/fasthttp/blob/v1.77.0/go.mod)에서 확인할 수 있습니다.

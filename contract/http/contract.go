@@ -1,89 +1,96 @@
-// Package httpcontract는 Spine 커널과 플랫폼 구현이 공유하는 공개 HTTP 실행 계약입니다.
-// 표준 라이브러리만 사용하며 커널 구현, Echo와 도메인 이벤트 타입을 참조하지 않습니다.
+// Package httpcontract는 엔진 중립 HTTP v3 계약을 정의합니다.
+// 현재 커널의 contract/http v2와 분리한 이행 단계이며 아직 커널에 연결하지 않았습니다.
+// 표준 라이브러리만 사용하고 특정 플랫폼이나 다른 공개 계약을 참조하지 않습니다.
 package httpcontract
 
 import (
 	"context"
 	"encoding/json"
-	"mime/multipart"
+	"io"
 	"net"
-	"net/http"
 )
 
-const ContractVersion = "spine.http-adapter/v2"
+const ContractVersion = "spine.http-adapter/v3"
 
-// HTTPContext는 HTTP 요청 하나의 입력과 실제 응답 writer를 제공합니다.
-// 요청 store, 라우팅 결과와 도메인 이벤트 버스는 커널이 별도 뷰에 추가합니다.
+// HTTPContext는 요청 수명 안에서 동기 사용하는 원시 입력과 출력 뷰입니다.
+// DTO 파싱, 쿼리 해석, 라우팅 결과와 요청 store는 코어가 소유합니다.
+// 반환한 문자열과 헤더 스냅샷은 native 버퍼 재사용으로 바뀌면 안 됩니다.
 type HTTPContext interface {
+	// Context는 nil이 아니며 풀링된 native 요청 객체를 그대로 노출하지 않습니다.
+	// 요청 종료 때 취소하고 native 값의 재사용으로 Value 결과가 오염되지 않게 합니다.
+	// 연결 해제 취소 지원은 Capabilities.ClientDisconnectCancellation으로 구분합니다.
 	Context() context.Context
 	Method() string
-	Path() string
-	Param(string) string
-	Params() map[string]string
-	Query(string) string
-	Queries() map[string][]string
-	// Header와 Headers는 Host를 Request.Host에서 보충한 조회 뷰를 제공합니다.
-	// Host에는 포트를 포함한 요청 값을 그대로 사용하며 전달 헤더로 대체하지 않습니다.
+	// RawPath는 쿼리, scheme과 authority를 제외한 디코딩 전 경로입니다.
+	// native 엔진의 dot 정리나 추가 디코딩을 적용하기 전 값을 제공합니다.
+	RawPath() string
+	// RawQuery는 선행 물음표를 제외한 원문이며 빈 문자열도 유효합니다.
+	// 파싱한 쿼리를 재직렬화한 값으로 대체하지 않습니다.
+	RawQuery() string
+	// Header는 이름의 대소문자를 구분하지 않으며 Host의 포트를 보존합니다.
+	// Host는 실제 요청 authority를 사용하고 전달 헤더로 대체하지 않습니다.
 	Header(string) string
-	// Headers의 반환값을 바꾸어도 원래 요청 헤더가 변경되면 안 됩니다.
+	// Headers는 Header와 같은 값의 독립 맵이며 슬라이스 수정도 원본과 격리합니다.
 	Headers() map[string][]string
-	// Bind는 본문만 읽으며 경로 값이나 URL 쿼리를 병합하지 않습니다.
-	// JSON 바인딩은 일반 값 타입의 명시적 null을 거부합니다.
-	// nil을 표현할 수 있는 타입과 사용자 정의 JSON 디코더는 각자의 규칙을 따릅니다.
-	Bind(any) error
-	MultipartForm() (*multipart.Form, error)
+	// Body는 nil이 아니며 반복 호출해도 같은 읽기 위치를 나타냅니다.
+	// getter는 추가 읽기, native 폼 파싱이나 본문 재생을 시작하지 않습니다.
+	// 코어는 reader를 닫지 않으며 플랫폼이 원본 스트림을 정리합니다.
+	Body() io.Reader
 	Writer() ResponseWriter
 }
 
-// RawQueryContext는 URL 디코딩 전의 쿼리를 제공하는 선택적 입력 계약입니다.
-// bool은 원시 쿼리 제공 여부이며 빈 쿼리도 제공할 수 있으면 true를 반환합니다.
-// 슬라이스 바인딩은 이를 사용해 구분자 쉼표와 값 안의 %2C를 구별합니다.
+// RawQueryContext는 원시 쿼리만 필요한 코어 뷰의 투영입니다.
+// v3 HTTPContext에서는 필수이며 빈 쿼리와 미제공을 bool로 구분하지 않습니다.
 type RawQueryContext interface {
-	RawQuery() (string, bool)
+	RawQuery() string
 }
 
-// ResponseWriter는 실제 HTTP 출력 계약입니다. 응답 staging은 커널이 수행합니다.
+// ResponseWriter는 코어가 확정한 응답을 플랫폼에 전달합니다.
+// 메서드 반환 뒤 전달한 bytes는 재사용할 수 있어야 합니다.
+// 성공 반환과 IsCommitted는 클라이언트 수신이나 실제 소켓 송신 완료를 보장하지 않습니다.
 type ResponseWriter interface {
 	SetHeader(key, value string)
 	AddHeader(key, value string)
 	IsCommitted() bool
 	WriteStatus(int) error
-	// WriteJSON는 커널에서 직렬화한 JSON을 출력합니다. 사용자 DTO를 받지 않습니다.
 	WriteJSON(int, json.RawMessage) error
 	WriteString(int, string) error
 	WriteBytes(int, []byte) error
 }
 
-// ExecuteFunc는 요청 수명 안에서 한 번 동기 호출하는 커널 실행 진입점입니다.
-// 반환된 오류를 native 오류 처리기에 다시 전달해 중복 응답하지 않습니다.
+// ExecuteFunc는 요청 안에서 한 번 동기 실행합니다.
+// 코어가 응답을 처리하므로 반환 오류를 native 오류 처리기로 다시 응답하지 않습니다.
+// 파서 정리는 완료 훅 뒤 Execute가 반환하기 전에 끝내며 원본 스트림은 닫지 않습니다.
 type ExecuteFunc func(HTTPContext) error
 
-// UpgradeRoute는 기존 WS 런타임에 raw HTTP 입출력을 전달할 GET 경로입니다.
-type UpgradeRoute struct {
-	Path    string
-	Handler http.Handler
-}
-
-// Config는 리스너 없이 어댑터 인스턴스를 준비하는 설정입니다.
+// Config는 네트워크와 native 훅을 실행하기 전에 검사하는 구성입니다.
+// native 업그레이드는 선택 factory 확장으로 전달합니다.
 type Config struct {
-	Options  ServerOptions
-	Execute  ExecuteFunc
-	Upgrades []UpgradeRoute
+	Options ServerOptions
+	Execute ExecuteFunc
 }
 
-// Factory는 지원 기능을 선언하고 새 어댑터를 구성합니다.
+// Factory는 리스너와 실행 작업 없이 어댑터를 준비합니다.
+// New는 Config.Validate를 통과한 구성만 수용해야 합니다.
 type Factory interface {
 	Capabilities() Capabilities
 	New(Config) (HTTPAdapter, error)
 }
 
-// HTTPAdapter는 리스너 없는 HTTP 처리와 한 번의 관리 서버 실행을 분리합니다.
+// HTTPAdapter는 특정 엔진의 native handler 없이 실행과 종료를 제공합니다.
+// 관리 서버와 외부 native 서버는 같은 요청 차단 및 추적 범위를 사용해야 합니다.
 type HTTPAdapter interface {
-	Handler() http.Handler
 	// Serve는 nil이 아닌 리스너를 소유하고 모든 반환 경로에서 닫습니다.
-	// 정상 종료는 http.ErrServerClosed이며 같은 인스턴스는 재실행하지 않습니다.
+	// 인스턴스당 한 번 실행하며 정상 종료는 ErrServerClosed로 나타냅니다.
+	// 예상하지 못한 nil 반환은 계약 위반입니다.
 	Serve(net.Listener) error
-	// Shutdown은 새 HTTP 수용을 중단하고 활성 요청을 기다립니다.
-	// timeout 이후에는 새 context로 다시 기다릴 수 있습니다. WS 종료는 커널이 맡습니다.
+	// StopAccepting은 새 실행 진입을 동기적으로 차단하고 반복 호출할 수 있습니다.
+	// 차단 뒤 native handler에 도착한 요청은 503이며 기존 요청은 보존합니다.
+	// native middleware, native 경로와 업그레이드 진입도 같은 바깥 경계로 감쌉니다.
+	StopAccepting()
+	// Shutdown은 새 진입 차단과 관리 서버/진행 요청의 종료를 기다립니다.
+	// context는 대기만 제한하고 정리는 계속되며 새 context로 다시 기다릴 수 있습니다.
+	// 외부 서버 자체와 장기 WS 연결의 종료는 각각 외부 소유자와 코어가 맡습니다.
+	// 종료를 시작한 인스턴스는 재실행하지 않습니다.
 	Shutdown(context.Context) error
 }

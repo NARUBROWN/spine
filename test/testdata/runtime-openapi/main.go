@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/NARUBROWN/spine"
 	"net/http/httptest"
 
 	platform "github.com/NARUBROWN/spine-echo-platform"
@@ -23,8 +24,12 @@ func main() {
 		panic(err)
 	}
 	defer prepared.Close(context.Background())
+	handler, err := spine.NetHTTPHandler(prepared)
+	if err != nil {
+		panic(err)
+	}
 	response := httptest.NewRecorder()
-	prepared.Handler().ServeHTTP(response, httptest.NewRequest("GET", "/openapi.json", nil))
+	handler.ServeHTTP(response, httptest.NewRequest("GET", "/openapi.json", nil))
 	if response.Code != 200 {
 		panic(response.Body.String())
 	}

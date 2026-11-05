@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -108,7 +107,7 @@ func (a *Application) run(ctx context.Context) error {
 			if err == nil {
 				err = fmt.Errorf("%w: Serve returned nil", adapter.ErrInvalidAdapter)
 			}
-			if !errors.Is(err, http.ErrServerClosed) {
+			if !errors.Is(err, adapter.ErrServerClosed) {
 				httpErrors <- err
 			}
 		}()
