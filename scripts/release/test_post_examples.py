@@ -40,7 +40,7 @@ class PostReleaseExamplesTests(unittest.TestCase):
                     patch.object(post_examples, "verify_source_candidate", return_value=({}, manifest)), \
                     patch.object(post_examples, "checkout_example", return_value=chat), \
                     patch.object(post_examples, "execute") as execute:
-                with self.assertRaisesRegex(ReleaseError, "정식 조합으로 갱신"):
+                with self.assertRaisesRegex(ReleaseError, "updating the example go.mod to the stable"):
                     post_examples.verify_examples(policy, "v0.7.0", root,
                         dict(os.environ, GOWORK="off", SPINE_TEST_KAFKA_BROKER="localhost:19092", SPINE_TEST_RABBITMQ_URL="amqp://localhost"), github)
                 self.assertEqual((chat / "go.mod").read_text(), original)

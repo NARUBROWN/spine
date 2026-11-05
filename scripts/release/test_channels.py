@@ -150,7 +150,7 @@ class ChannelPolicyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with patch.object(verify_public, "consumer", return_value={release.CORE: "v0.7.0-preview.1"}), \
                     patch.object(verify_public.subprocess, "check_output", return_value=b'{"Version":"v0.7.0-preview.1"}'), \
-                    patch.object(verify_public, "checkout_example", side_effect=AssertionError("예제는 정식 발행 후 확인합니다")), \
+                    patch.object(verify_public, "checkout_example", side_effect=AssertionError("Examples are verified after the stable release")), \
                     patch.object(verify_public, "run", return_value="go version"):
                 report = verify_public.verify(plan, Path(directory), Path(directory), {}, "v0.7.0-preview.1", "core")
                 self.assertEqual(report["scope"], "core")
