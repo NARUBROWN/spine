@@ -1,5 +1,4 @@
 // Package httpcontract는 엔진 중립 HTTP v3 계약을 정의합니다.
-// 현재 커널의 contract/http v2와 분리한 이행 단계이며 아직 커널에 연결하지 않았습니다.
 // 표준 라이브러리만 사용하고 특정 플랫폼이나 다른 공개 계약을 참조하지 않습니다.
 package httpcontract
 
