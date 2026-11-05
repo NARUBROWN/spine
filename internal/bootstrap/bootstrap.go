@@ -101,7 +101,14 @@ func requiresShutdownSignal(config Config) bool {
 // Validate는 네트워크에 접근하지 않고 사전 검증을 수행하며,
 // 사용자가 조치할 수 있는 모든 설정 문제를 하나의 오류로 반환합니다.
 func Validate(config Config) error {
+	_, err := validate(config)
+	return err
+}
+
+// validate는 사전 검사에 사용한 UI 리소스를 준비 단계에도 전달합니다.
+func validate(config Config) ([]boot.OpenAPIResource, error) {
 	var issues []boot.ConfigIssue
+	var openAPIResources []boot.OpenAPIResource
 	if config.ShutdownTimeout < 0 {
 		issues = append(issues, boot.ConfigIssue{
 			Path:    "ShutdownTimeout",
@@ -145,7 +152,10 @@ func Validate(config Config) error {
 			})
 		}
 		issues = append(issues, config.HTTP.ValidateIssues("HTTP")...)
-		issues = append(issues, openAPICollisionIssues(config)...)
+		resources, resourceIssues := openAPIUIResources(config.HTTP.OpenAPI)
+		openAPIResources = resources
+		issues = append(issues, resourceIssues...)
+		issues = append(issues, openAPICollisionIssues(config, resources)...)
 	}
 	for i, route := range config.Routes {
 		if meta, err := spineRouter.NewHandlerMeta(route.Handler); err == nil {
@@ -176,11 +186,11 @@ func Validate(config Config) error {
 		}
 	}
 	if err := boot.ValidationError(issues...); err != nil {
-		return err
+		return nil, err
 	}
 	if config.ValidatorConfigured || config.Validator != nil {
 		if err := validation.CheckValidator(config.Validator); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	for i, route := range config.Routes {
@@ -188,7 +198,7 @@ func Validate(config Config) error {
 		issues = append(issues, endpoint.ValidationParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", i), config.Validator)...)
 	}
 	if err := boot.ValidationError(issues...); err != nil {
-		return err
+		return nil, err
 	}
 	if config.HTTP != nil {
 		hasWebSocketRoutes := config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0
@@ -201,7 +211,7 @@ func Validate(config Config) error {
 			}
 		}
 	}
-	return errors.Join(adapterErrors...)
+	return openAPIResources, errors.Join(adapterErrors...)
 }
 
 func serverOptions(options boot.HTTPOptions) adapter.ServerOptions {

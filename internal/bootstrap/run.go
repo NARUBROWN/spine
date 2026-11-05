@@ -19,7 +19,8 @@ func Run(config Config) error { return RunContext(context.Background(), config) 
 
 func RunContext(ctx context.Context, config Config) (err error) {
 	config = snapshotConfig(config)
-	if err := Validate(config); err != nil {
+	resources, err := validate(config)
+	if err != nil {
 		return err
 	}
 	if isNilHTTPValue(ctx) {
@@ -41,7 +42,7 @@ func RunContext(ctx context.Context, config Config) (err error) {
 		}()
 	}
 	printBanner()
-	application, err := prepare(runCtx, config)
+	application, err := prepare(runCtx, config, resources)
 	if err != nil {
 		// 관리 실행에서 요청한 취소는 정상 종료입니다. 자원 정리 오류는 보존합니다.
 		if runCtx.Err() != nil && err == runCtx.Err() {

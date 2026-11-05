@@ -1,0 +1,8 @@
+{
+  "@nodable/entities@3.1.0": {
+    "license": "MIT",
+    "file": "licenses/nodable-entities-3.1.0.txt",
+    "source": "https://raw.githubusercontent.com/nodable/val-parsers/ac48e7ea591da372be023a481875c747535812b3/LICENSE",
+    "sha256": "750cb3fb6362804957ef52caaf9b5c824015be44d494637330d7cd8834d31d40"
+  }
+}
