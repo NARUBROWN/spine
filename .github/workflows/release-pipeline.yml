@@ -14,6 +14,13 @@ on:
       observation_override_reason:
         type: string
         default: ''
+    secrets:
+      DISCORD_WEBHOOK_PREVIEW:
+        required: false
+      DISCORD_WEBHOOK_RC:
+        required: false
+      DISCORD_WEBHOOK_RELEASE:
+        required: false
 permissions:
   contents: read
   actions: read
@@ -79,6 +86,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERIFIED_SHA: ${{ needs.core-ci.outputs.verified_sha }}
         run: python3 scripts/release/release.py tag
+      - name: Notify Discord of the new tag
+        uses: ./.github/actions/discord-tag
+        continue-on-error: true
+        timeout-minutes: 1
+        with:
+          plan: release-plan.json
+          webhook_preview: ${{ secrets.DISCORD_WEBHOOK_PREVIEW }}
+          webhook_rc: ${{ secrets.DISCORD_WEBHOOK_RC }}
+          webhook_release: ${{ secrets.DISCORD_WEBHOOK_RELEASE }}
   public:
     needs: [plan, tag]
     uses: ./.github/workflows/release-public-check.yml

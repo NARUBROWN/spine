@@ -1,0 +1,26 @@
+name: Discord Tag Notification
+description: 버전 태그명으로 Discord 채널을 선택해 태그 생성 알림을 보냅니다.
+inputs:
+  plan:
+    description: 호출 저장소 workspace에 있는 발행 계획 JSON 경로
+    required: true
+  webhook_preview:
+    description: Preview 채널의 Discord webhook URL
+    required: false
+  webhook_rc:
+    description: RC 채널의 Discord webhook URL
+    required: false
+  webhook_release:
+    description: 정식 태그 채널의 Discord webhook URL
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: Route tag and send Discord notification
+      shell: bash
+      env:
+        NOTIFICATION_PLAN: ${{ inputs.plan }}
+        DISCORD_WEBHOOK_PREVIEW: ${{ inputs.webhook_preview }}
+        DISCORD_WEBHOOK_RC: ${{ inputs.webhook_rc }}
+        DISCORD_WEBHOOK_RELEASE: ${{ inputs.webhook_release }}
+      run: python3 "$GITHUB_ACTION_PATH/notify.py"
