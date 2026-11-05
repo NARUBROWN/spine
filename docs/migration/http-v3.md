@@ -52,7 +52,7 @@ Echo의 응답 출력 경로와 사용자 JSONSerializer는 유지합니다. wri
 
 서버는 Serve, StopAccepting과 Shutdown을 구현합니다. 가장 바깥 native handler에서 Spine 경로, native 경로와 업그레이드를 함께 추적하고, Shutdown의 대기 시간이 끝나도 정리를 계속해야 합니다. 정상 Serve 종료는 `httpcontract.ErrServerClosed`로 정규화합니다.
 
-초기 `contract/http/v3` 경로와 이전 `adapter`, `adapter/http`는 같은 v3 타입의 별칭입니다. 별칭은 v2 구현의 동작을 자동 변환하지 않습니다. fasthttp는 현재 계약 검증용이며 제품 배포는 이 변경의 범위에 포함하지 않습니다.
+정식 import 경로는 `contract/http`입니다. 이전 `adapter`, `adapter/http`는 같은 v3 타입의 별칭입니다. 별칭은 v2 구현의 동작을 자동 변환하지 않습니다. fasthttp는 현재 계약 검증용이며 제품 배포는 이 변경의 범위에 포함하지 않습니다.
 
 ## 로컬 소스 검증
 

@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"sync"
 
-	contract "github.com/NARUBROWN/spine/contract/http/v3"
+	contract "github.com/NARUBROWN/spine/contract/http"
 )
 
 type lifecycle struct {

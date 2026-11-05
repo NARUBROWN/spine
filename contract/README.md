@@ -5,7 +5,6 @@ Spine과 외부 구현이 공유하는 공개 계약은 `contract/` 아래에서
 | 패키지 | 책임 | 현재 연결 범위 |
 | --- | --- | --- |
 | [`contract/http`](http/README.md) | HTTP 입력·출력, factory와 서버 수명 | Spine HTTP 실행과 연결 |
-| [`contract/http/v3`](http/v3/README.md) | 초기 v3 검증 코드의 import 경로 | 정식 HTTP 계약의 별칭 |
 | [`contract/event`](event/README.md) | 브로커 메시지, 구독, ACK/NACK, reader와 publisher | `WithEventAdapter`와 App 준비·실행·종료에 연결 |
 | [`contract/websocket`](websocket/README.md) | WS 업그레이드·메시지 입출력·ping/close | `WithWebSocketAdapter`와 연결 수명에 연결 |
 | [`contract/validator`](validator/README.md) | DTO 검증 인터페이스와 필드 오류 | 앱 옵션과 HTTP·WebSocket·컨슈머 DTO에 연결 |

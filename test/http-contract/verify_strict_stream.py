@@ -71,7 +71,10 @@ def main():
         raise RuntimeError("고정한 원본 streaming.go 해시와 다릅니다.")
     test_hash = digest(MODULE / "contract_test.go")
     core_inputs = {str(p.relative_to(CORE)): digest(p) for p in [CORE / "go.mod", CORE / "go.sum"] if p.exists()}
-    contract_inputs = {str(p.relative_to(CORE)): digest(p) for p in (CORE / "contract" / "http" / "v3").glob("*.go")}
+    contract_paths = sorted((CORE / "contract" / "http").glob("*.go"))
+    if not contract_paths:
+        raise RuntimeError("정식 HTTP 계약 소스가 없습니다.")
+    contract_inputs = {str(p.relative_to(CORE)): digest(p) for p in contract_paths}
     results = {
         "fasthttp_version": dependency["Version"],
         "go_version": subprocess.check_output(["go", "version"], cwd=MODULE, env=env, text=True).strip(),

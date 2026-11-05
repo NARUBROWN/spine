@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	contract "github.com/NARUBROWN/spine/contract/http/v3"
+	contract "github.com/NARUBROWN/spine/contract/http"
 )
 
 type probeAdapter interface {

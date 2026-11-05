@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"sync/atomic"
 
-	contract "github.com/NARUBROWN/spine/contract/http/v3"
+	contract "github.com/NARUBROWN/spine/contract/http"
 )
 
 type requestIDKey struct{}

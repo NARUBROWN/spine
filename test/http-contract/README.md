@@ -1,6 +1,6 @@
 # HTTP v3 두 엔진 적합성 검증
 
-같은 `contract/http/v3`를 net/http와 fasthttp native 진입점에 연결해 실제 TCP 요청을 비교합니다. 코드는 검증용 최소 구현이며 제품 플랫폼이나 Spine pipeline이 아닙니다. fasthttp를 net/http handler로 변환하는 bridge는 사용하지 않습니다.
+같은 `contract/http`를 net/http와 fasthttp native 진입점에 연결해 실제 TCP 요청을 비교합니다. 코드는 검증용 최소 구현이며 제품 플랫폼이나 Spine pipeline이 아닙니다. fasthttp를 net/http handler로 변환하는 bridge는 사용하지 않습니다.
 
 ## 수정 검증 결과
 

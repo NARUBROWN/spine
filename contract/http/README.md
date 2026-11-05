@@ -2,7 +2,7 @@
 
 플랫폼은 원시 요청 입력과 응답 출력을 제공하고, Spine은 DTO 파싱과 실행 규칙을 소유합니다. 필수 계약은 net/http나 fasthttp의 native 요청 및 handler 타입을 요구하지 않습니다.
 
-`github.com/NARUBROWN/spine/contract/http`는 커널과 플랫폼이 공유하는 `spine.http-adapter/v3` 계약입니다. 이 브랜치의 커널은 v3를 사용합니다. 공개된 v2 플랫폼과 함께 사용할 수 없으며, 새 조합은 아직 발행하지 않았습니다. 초기 검증 경로인 `contract/http/v3`와 이전 `adapter`, `adapter/http`는 같은 타입과 오류의 별칭입니다.
+`github.com/NARUBROWN/spine/contract/http`는 커널과 플랫폼이 공유하는 `spine.http-adapter/v3` 계약입니다. 이 브랜치의 커널은 v3를 사용합니다. 공개된 v2 플랫폼과 함께 사용할 수 없으며, 새 조합은 아직 발행하지 않았습니다. 이전 `adapter`, `adapter/http`는 정식 계약의 타입과 오류를 재노출합니다.
 
 ## 입력과 출력
 

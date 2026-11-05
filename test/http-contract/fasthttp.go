@@ -9,7 +9,7 @@ import (
 	"net"
 	"net/http"
 
-	contract "github.com/NARUBROWN/spine/contract/http/v3"
+	contract "github.com/NARUBROWN/spine/contract/http"
 	"github.com/valyala/fasthttp"
 )
 

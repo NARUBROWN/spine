@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	contract "github.com/NARUBROWN/spine/contract/http/v3"
+	contract "github.com/NARUBROWN/spine/contract/http"
 )
 
 type netFactory struct{ hooks hooks }
