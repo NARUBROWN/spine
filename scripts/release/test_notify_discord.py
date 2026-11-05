@@ -10,10 +10,10 @@ import tempfile
 import threading
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / ".github/actions/discord-tag"))
 
-import notify_discord as notify
-from release import ReleaseError
+import notify
+from notify import NotificationError
 
 
 PLAN = {"version": "v0.7.0-preview.2", "channel": "preview", "source_sha": "a" * 40,
@@ -36,12 +36,12 @@ class DiscordNotificationTests(unittest.TestCase):
                 decoded = json.loads(json.dumps(payload, ensure_ascii=False))
                 embed = decoded["embeds"][0]
                 self.assertEqual(embed["url"], f"https://github.com/NARUBROWN/spine/tree/{plan['version']}")
-                self.assertIn("아직 완료되지 않았습니다", embed["description"])
+                self.assertIn("새 태그가 생성되었습니다", embed["description"])
                 self.assertEqual(decoded["allowed_mentions"], {"parse": []})
 
     def test_invalid_tag_or_inconsistent_plan_is_rejected(self):
         for changes in [{"version": "v0.7.0-custom.1"}, {"channel": "stable"}, {"source_sha": "invalid"}]:
-            with self.subTest(changes=changes), self.assertRaises(ReleaseError):
+            with self.subTest(changes=changes), self.assertRaises(NotificationError):
                 notify.build_payload(dict(PLAN, **changes), "NARUBROWN", RUN_URL)
 
     def test_unicode_truncation_preserves_valid_text_and_limit(self):
@@ -54,9 +54,9 @@ class DiscordNotificationTests(unittest.TestCase):
     def test_wait_confirmation_preserves_thread(self):
         url = notify.webhook_url("https://discord.com/api/webhooks/123/token?thread_id=456&wait=false")
         self.assertEqual(url, "https://discord.com/api/webhooks/123/token?thread_id=456&wait=true")
-        with self.assertRaises(ReleaseError):
+        with self.assertRaises(NotificationError):
             notify.webhook_url("http://discord.com/api/webhooks/123/token")
-        with self.assertRaises(ReleaseError):
+        with self.assertRaises(NotificationError):
             notify.webhook_url("https://example.com/api/webhooks/123/token")
 
     def test_http_delivery_and_failures(self):
@@ -85,9 +85,9 @@ class DiscordNotificationTests(unittest.TestCase):
             url = f"http://127.0.0.1:{server.server_port}/api/webhooks/123/test-token?wait=true"
             notify.send(url, payload)
             for status in (400, 429, 500):
-                with self.subTest(status=status), self.assertRaisesRegex(ReleaseError, f"HTTP {status}"):
+                with self.subTest(status=status), self.assertRaisesRegex(NotificationError, f"HTTP {status}"):
                     notify.send(url, payload)
-            with self.assertRaisesRegex(ReleaseError, "메시지"):
+            with self.assertRaisesRegex(NotificationError, "메시지"):
                 notify.send(url, payload)
             self.assertEqual(len(requests), 5)
             self.assertTrue(all(path.endswith("wait=true") and data == payload for path, data in requests))
@@ -109,6 +109,43 @@ class DiscordNotificationTests(unittest.TestCase):
             result = subprocess.run(command, env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 1)
             self.assertIn("DISCORD_WEBHOOK_PREVIEW", result.stderr)
+
+    def test_all_ecosystem_projects_use_their_own_name_and_shared_logo(self):
+        projects = ["spine", "spine-cli", "spine-echo-platform", "spine-gorilla-platform", "spine-kafka-platform",
+                    "spine-rabbitmq-platform", "spine-nats-platform", "spine-validator-playground", "spine-site"]
+        for project in projects:
+            with self.subTest(project=project):
+                plan = dict(PLAN, repository="NARUBROWN/" + project)
+                _, payload = notify.build_payload(plan, "NARUBROWN", RUN_URL)
+                self.assertIn(project, payload["embeds"][0]["title"])
+                self.assertIn("/NARUBROWN/spine/main/", payload["avatar_url"])
+                self.assertIn("/" + project + "/tree/", payload["embeds"][0]["url"])
+
+    def test_site_tag_event_works_without_a_release_plan(self):
+        env = dict(os.environ, GITHUB_REPOSITORY="NARUBROWN/spine-site", GITHUB_ACTOR="NARUBROWN",
+                   GITHUB_RUN_ID="123", GITHUB_REF_TYPE="tag", GITHUB_REF_NAME="v1.0.0-rc.1", GITHUB_SHA="a"*40)
+        env.pop("NOTIFICATION_PLAN", None)
+        result = subprocess.run([sys.executable, str(Path(notify.__file__)), "--dry-run"], env=env,
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertIn("spine-site v1.0.0-rc.1", payload["embeds"][0]["title"])
+        self.assertEqual(payload["embeds"][0]["color"], 3447003)
+        env["GITHUB_REF_TYPE"] = "branch"
+        result = subprocess.run([sys.executable, str(Path(notify.__file__)), "--dry-run"], env=env,
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+
+    def test_action_reads_the_callers_plan_from_its_workspace(self):
+        with tempfile.TemporaryDirectory() as directory:
+            plan = dict(PLAN, repository="NARUBROWN/spine-cli")
+            (Path(directory) / "release-plan.json").write_text(json.dumps(plan))
+            env = dict(os.environ, GITHUB_REPOSITORY=plan["repository"], GITHUB_ACTOR="NARUBROWN",
+                       GITHUB_RUN_ID="123", NOTIFICATION_PLAN="release-plan.json")
+            result = subprocess.run([sys.executable, str(Path(notify.__file__)), "--dry-run"],
+                                    cwd=directory, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("spine-cli", json.loads(result.stdout)["embeds"][0]["title"])
 
 
 if __name__ == "__main__":

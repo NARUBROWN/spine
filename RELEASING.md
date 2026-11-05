@@ -86,7 +86,7 @@ Publish Preview, Publish Rc, Publish Stable에서 태그 생성에 성공하면 
 
 이 알림은 태그 생성 사실과 발행 workflow 링크를 표시합니다. 정식 태그 알림도 전체 조합 완료나 GitHub Release 게시를 뜻하지 않습니다. 태그 생성 시점에는 릴리스 노트가 없으므로 태그 페이지로 연결합니다. GitHub Release 이벤트와 수동 태그 push는 별도 알림 대상으로 연결하지 않습니다.
 
-`GITHUB_TOKEN`으로 만든 태그는 다른 workflow를 자동 실행하지 않으므로, 재사용 발행 workflow의 태그 생성 단계 다음에서 직접 전송합니다. 호출 workflow는 위 세 secret만 이름으로 전달합니다. 알림 단계는 webhook을 step output으로 내보내지 않습니다.
+`GITHUB_TOKEN`으로 만든 태그는 다른 workflow를 자동 실행하지 않으므로, 재사용 발행 workflow의 태그 생성 단계 다음에서 [공통 Discord Action](.github/actions/discord-tag/README.md)을 직접 호출합니다. 호출 workflow는 위 세 secret만 이름으로 전달합니다. 알림 단계는 webhook을 step output으로 내보내지 않습니다. 알림 제목에는 저장소 이름을 넣어 같은 Discord 채널에서도 프로젝트를 구분합니다.
 
 전송은 `wait=true`로 메시지 생성 응답을 확인합니다. secret 누락과 HTTP 오류는 해당 단계에 경고를 남기며 태그 이후 공개 검증을 계속합니다. 전송을 자동 재시도하지 않으며, 응답 유실 시 실제 채널을 확인해야 합니다. 이미 생성된 태그를 다시 발행해 알림만 재시도하지 않습니다.
 
@@ -96,7 +96,7 @@ Publish Preview, Publish Rc, Publish Stable에서 태그 생성에 성공하면 
 GITHUB_REPOSITORY=NARUBROWN/spine \
 GITHUB_ACTOR=NARUBROWN \
 GITHUB_RUN_ID=123456789 \
-python3 scripts/release/notify_discord.py --plan release-plan.json --dry-run
+python3 .github/actions/discord-tag/notify.py --plan release-plan.json --dry-run
 ```
 
 ## 검증 증거

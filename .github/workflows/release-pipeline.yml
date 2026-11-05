@@ -87,13 +87,14 @@ jobs:
           VERIFIED_SHA: ${{ needs.core-ci.outputs.verified_sha }}
         run: python3 scripts/release/release.py tag
       - name: Notify Discord of the new tag
+        uses: ./.github/actions/discord-tag
         continue-on-error: true
         timeout-minutes: 1
-        env:
-          DISCORD_WEBHOOK_PREVIEW: ${{ secrets.DISCORD_WEBHOOK_PREVIEW }}
-          DISCORD_WEBHOOK_RC: ${{ secrets.DISCORD_WEBHOOK_RC }}
-          DISCORD_WEBHOOK_RELEASE: ${{ secrets.DISCORD_WEBHOOK_RELEASE }}
-        run: python3 scripts/release/notify_discord.py --plan release-plan.json
+        with:
+          plan: release-plan.json
+          webhook_preview: ${{ secrets.DISCORD_WEBHOOK_PREVIEW }}
+          webhook_rc: ${{ secrets.DISCORD_WEBHOOK_RC }}
+          webhook_release: ${{ secrets.DISCORD_WEBHOOK_RELEASE }}
   public:
     needs: [plan, tag]
     uses: ./.github/workflows/release-public-check.yml
