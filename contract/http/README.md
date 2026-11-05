@@ -73,6 +73,6 @@
 
 본문 한도 초과는 `RequestError` 상태 413으로 표현하고 `Unwrap`으로 원인을 보존합니다. 취소와 일반 I/O 오류를 일괄 400으로 바꾸지 않습니다. 코어는 본문과 파일 오류의 `in: body`, 400/413/415와 원인을 보존합니다. native 프로토콜 거부는 Execute 이전에 일어날 수 있습니다.
 
-검증은 계약 검사, 두 엔진의 최소 구현과 실제 Spine 통합으로 나눕니다. 두 엔진 검증의 fasthttp 스트리밍은 EOF 패치를 적용한 로컬 조합입니다. 실제 Spine 통합은 이행한 Echo 소스로 HTTP/WS/OpenAPI, 인증 전 무읽기와 multipart 정리를 검사합니다. 독립 net/http 제품, CLI와 공개 모듈 조합은 후속 범위입니다.
+검증은 계약 검사, 두 엔진의 최소 구현과 실제 Spine 통합으로 나눕니다. 두 엔진 검증의 fasthttp 스트리밍은 EOF 패치를 적용한 로컬 조합입니다. 독립 net/http 플랫폼과 이행한 Echo의 로컬 소스를 연결해 [플랫폼 비교 E2E](../../test/http-platform/README.md)로 HTTP/WS/OpenAPI, 인증 전 무읽기와 multipart 정리를 검사합니다. CLI와 공개 모듈 조합은 후속 범위입니다.
 
 본문의 JSON/XML/form/multipart 해석은 커널이 소유하며 Echo Binder를 호출하지 않습니다. 요청별 파서는 실제 바인딩 때 생성하고, 모든 `AfterCompletion` 뒤 Execute 바깥에서 임시 파일을 정리합니다. 자세한 이행은 [HTTP v3 전환](../../docs/migration/http-v3.md)을 참고하세요.

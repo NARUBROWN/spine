@@ -54,6 +54,8 @@ Echo의 응답 출력 경로와 사용자 JSONSerializer는 유지합니다. wri
 
 정식 import 경로는 `contract/http`입니다. 이전 `adapter`, `adapter/http`는 같은 v3 타입의 별칭입니다. 별칭은 v2 구현의 동작을 자동 변환하지 않습니다. fasthttp는 현재 계약 검증용이며 제품 배포는 이 변경의 범위에 포함하지 않습니다.
 
+독립 `github.com/NARUBROWN/spine-nethttp-platform` 모듈은 로컬 v3 구현입니다. `Option()` 또는 `NewFactory()`로 연결하며 `WithMiddleware`로 표준 `http.Handler` 미들웨어를 추가합니다. 먼저 전달한 미들웨어가 바깥에 배치됩니다. 기본 요청 분기는 `ServeMux`를 거치지 않습니다. `net/http.Server` 자체의 패닉 복구는 끌 수 없어 명시적인 `DisableRecover: true`를 준비 단계에서 거부합니다. CLI 생성과 공개 설치 조합은 아직 제공하지 않습니다.
+
 ## 로컬 소스 검증
 
 코어와 v3 Echo 소스 경로를 지정해 검사합니다. 검증기는 임시 main module 설정을 사용하고 원래 go.mod/go.sum을 변경하지 않습니다. 공개 버전 조합의 검증은 아닙니다.
@@ -65,3 +67,14 @@ python3 scripts/verify-http-v3.py \
 ```
 
 코어 단위 검사, Echo, HTTP/WS 통합과 runtime OpenAPI에 race와 vet를 실행합니다. 결과와 로그는 지정한 디렉터리에 저장합니다. 실브로커가 필요한 테스트는 환경이 없으면 생략합니다.
+
+net/http 플랫폼 자체와 두 플랫폼의 실제 TCP 비교는 별도로 실행합니다.
+
+```sh
+python3 scripts/verify-http-platforms.py \
+  --nethttp-root ../spine-nethttp-platform \
+  --echo-root ../spine-echo-issue-28 \
+  --output-dir /tmp/spine-http-platform-proof
+```
+
+이 검증은 Go 1.25.5에서 동일한 DTO 결과, 오류와 검증 호출, multipart 파일 수명, native 후처리의 종료 대기, WebSocket과 runtime OpenAPI를 검사합니다. JSON 공백과 줄바꿈, TLS, HTTP/2와 성능은 비교하지 않습니다.
