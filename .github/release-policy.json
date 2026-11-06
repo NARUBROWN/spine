@@ -49,12 +49,12 @@
     }
   },
   "ci_sources": {
-    "github.com/NARUBROWN/spine-echo-platform": "34bbcff32815541e04a98f8b02e5b0e2d24154ea",
+    "github.com/NARUBROWN/spine-echo-platform": "62119df2e5c0a92163e4e1efb87ce21c785df69a",
     "github.com/NARUBROWN/spine-validator-playground": "80b1af7d173975f8d7e83cbc3d806434118f777b",
     "github.com/NARUBROWN/spine-gorilla-platform": "bec511323bcd51feea6bc10af1ad94efc5fd6499",
     "github.com/NARUBROWN/spine-kafka-platform": "e41823ae66a720b170c3859104d115f08a4008df",
     "github.com/NARUBROWN/spine-rabbitmq-platform": "2f9799f054f5205ab403413c48b0a6af4cebdc56",
-    "github.com/NARUBROWN/spine-nethttp-platform": "097d9a77f68981996734cc64c73b58e1860ddfc8"
+    "github.com/NARUBROWN/spine-nethttp-platform": "aa6deba6223f2ff210c2a0fcf53be2528f80b118"
   },
   "post_release_examples": {
     "chat": {
