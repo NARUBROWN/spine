@@ -6,11 +6,11 @@
 
 ## 정책과 소스 CI
 
-`.github/release-policy.json`의 `channels`에 각 채널의 코어와 여섯 플랫폼 태그를 고정합니다. Preview 검증 조합은 다음과 같습니다.
+`.github/release-policy.json`의 `channels`에 각 채널의 코어와 여섯 플랫폼 태그를 고정합니다. 현재 Preview 코어 후보와 플랫폼 검증 대상은 다음과 같습니다.
 
 | 모듈 | Preview 버전 |
 | --- | --- |
-| Spine 코어 | `v0.7.0-preview.4` |
+| Spine 코어 | `v0.7.0-preview.5` |
 | Echo | `v0.2.0-preview.3` |
 | Gorilla | `v0.2.0-preview.2` |
 | Kafka | `v0.2.0-preview.2` |
@@ -18,7 +18,7 @@
 | playground validator | `v0.2.0-preview.2` |
 | net/http | `v0.1.0-preview.2` |
 
-여섯 플랫폼 모두 위 코어 태그를 의존성과 검증 기준으로 사용합니다. 버전 표는 검증 대상을 지정하며, 발행과 전체 조합 완료 여부는 해당 태그의 Actions manifest에서 확인합니다. 이미 발행한 태그는 이동하거나 재사용하지 않습니다.
+코어 `v0.7.0-preview.5`는 이번 수정의 후보 버전입니다. 표의 플랫폼 태그는 코어 `v0.7.0-preview.4`로 발행된 기존 버전이며 소스 CI의 검증 기준으로 유지합니다. 새 코어의 전체 조합을 발행하려면 코어 후보 태그 생성 전에 새 플랫폼 후보 버전을 정책에 고정하고, 코어 후보 발행 후 각 플랫폼을 그 코어 태그로 발행해야 합니다. 발행과 전체 조합 완료 여부는 해당 태그의 Actions manifest에서 확인합니다. 이미 발행한 태그는 이동하거나 재사용하지 않습니다.
 
 RC는 코어 `v0.7.0-rc.1`, 기존 다섯 플랫폼 `v0.2.0-rc.1`, net/http `v0.1.0-rc.1`을 대상으로 합니다. 정식 대상은 코어 `v0.7.0`, 기존 다섯 플랫폼 `v0.2.0`, net/http `v0.1.0`입니다.
 

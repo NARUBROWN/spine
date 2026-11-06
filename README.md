@@ -4,7 +4,7 @@
 
 > **릴리스 채널: Preview → RC → Stable.** 이 소스의 대상 버전은 `v0.7.0`입니다. [출시 절차](RELEASING.md)와 [경로 변경 안내](docs/migration/v0.7.0.md)를 확인하고, 공개 버전은 [태그](https://github.com/NARUBROWN/spine/tags)와 [Actions 검증 기록](https://github.com/NARUBROWN/spine/actions)에서 확인하세요.
 
-HTTP v3는 공통 입력 파서와 관리 서버의 TLS 설정을 제공합니다. 이 소스의 Preview 조합은 코어 `v0.7.0-preview.4`, Echo `v0.2.0-preview.3`, net/http `v0.1.0-preview.2`입니다. CLI `v0.4.3-preview.4`는 두 HTTP 플랫폼의 생성과 업데이트를 지원합니다. [HTTP v3 전환](docs/migration/http-v3.md)과 [전체 버전 조합](RELEASING.md#정책과-소스-ci)을 확인하세요.
+HTTP v3는 공통 입력 파서와 관리 서버의 TLS 설정을 제공합니다. 이 소스의 Preview 코어 후보는 `v0.7.0-preview.5`입니다. 소스 CI의 플랫폼 검증 대상은 Echo `v0.2.0-preview.3`, net/http `v0.1.0-preview.2`입니다. CLI `v0.4.3-preview.4`는 두 HTTP 플랫폼의 생성과 업데이트를 지원합니다. [HTTP v3 전환](docs/migration/http-v3.md)과 [전체 버전 조합](RELEASING.md#정책과-소스-ci)을 확인하세요.
 
 > **v0.6.5**는 HTTP, WebSocket, event, validator의 공개 계약과 독립 구현 선택을 하나로 통합합니다. 코어는 표준 라이브러리만 사용합니다. [v0.6.5 전환 안내](docs/migration/v0.6.5.md)를 참고하세요.
 
