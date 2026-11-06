@@ -19,5 +19,7 @@ python3 scripts/verify-http-platforms.py \
 - 폼과 파일의 인자 순서, 완료 훅까지의 파일 수명, 성공과 패닉 및 훅 오류 뒤 정리
 - native 후처리 중 Close 대기 기한, 새 진입 503, 진행 요청 보존과 재대기
 - WebSocket 업그레이드, 메시지와 앱 종료, runtime OpenAPI GET과 HEAD
+- 준비 기본값과 실행 옵션의 HTTPS, TLS 설정 교체와 복사, 두 인증서 선택 콜백, 클라이언트 신뢰 검증 실패
+- TLS의 인증 전 무읽기, chunked multipart 한도, 파일 정리와 native 후처리 drain, 클라이언트 연결 해제 취소, RunContext의 HTTPS OpenAPI
 
-JSON 응답은 파싱 후 비교하므로 serializer의 공백과 줄바꿈은 비교하지 않습니다. TLS, HTTP/2, 브로커, 운영 부하와 공개 모듈 설치는 별도 검증입니다.
+JSON 응답은 파싱 후 비교하므로 serializer의 공백과 줄바꿈은 비교하지 않습니다. TLS 검사는 HTTP/1.1로 실행하며 HTTP/2, 브로커, 운영 부하와 공개 모듈 설치는 별도 검증입니다.

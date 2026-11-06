@@ -25,6 +25,29 @@ server := &http.Server{Handler: handler}
 
 Close는 어댑터의 StopAccepting을 먼저 호출해 새 진입을 차단합니다. 이후 WS 연결을 종료하고 native middleware 후처리까지 포함한 HTTP 요청이 끝나면 나머지 앱 자원을 정리합니다. Close의 context는 대기만 제한하며 정리는 계속됩니다.
 
+## 관리 서버의 TLS
+
+인증서를 읽은 `*tls.Config`를 `boot.HTTPOptions.TLS`에 지정하면 기존 `RunContext`와 `Serve` 경로에서 HTTPS를 실행합니다.
+
+```go
+certificate, err := tls.LoadX509KeyPair("server.crt", "server.key")
+if err != nil {
+    return err
+}
+return app.RunContext(ctx, boot.Options{
+    Address: ":8443",
+    HTTP: &boot.HTTPOptions{
+        TLS: &tls.Config{Certificates: []tls.Certificate{certificate}},
+    },
+})
+```
+
+TLS가 nil이면 기존 평문 HTTP를 사용합니다. 주소 생략 시 TLS는 `:https`, 평문은 `:http`이며 OpenAPI 로그도 해당 scheme을 사용합니다. Prepare는 TLS 지원 여부와 정적 인증서 구성을 native 초기화 전에 검사하고 설정을 복사합니다. `GetCertificate`와 `GetConfigForClient`는 준비 단계에서 호출하지 않습니다. 개인 키 객체와 콜백의 안전한 동시 사용은 호출자 책임입니다.
+
+준비한 어댑터의 `Serve(listener)`는 같은 기본값을 사용합니다. 실행 시 교체하려면 `Serve(listener, httpcontract.WithTLS(config))`로 전달합니다. 마지막 TLS 옵션이 우선하며 `WithTLS(nil)`과 nil 옵션은 오류입니다. `ServeTLS`는 추가하지 않습니다. 외부 `http.Server`에 handler만 연결하는 경우 TLS 설정과 실행은 외부 서버가 담당합니다.
+
+이 변경은 HTTP 버전 선택과 ALPN 정책을 추가하지 않습니다. HTTP 스펙 개선은 별도 이슈에서 다룹니다.
+
 ## 본문과 파일 처리
 
 Spine은 JSON, XML, urlencoded form과 multipart를 같은 파서로 처리합니다. URL 쿼리와 경로 값을 본문에 합치지 않습니다. 전역과 라우트 인증 인터셉터는 본문 파싱 전에 실행하며, DTO 하나의 바인딩이 성공한 직후 해당 DTO를 검증합니다.
@@ -52,6 +75,8 @@ Echo의 응답 출력 경로와 사용자 JSONSerializer는 유지합니다. wri
 
 서버는 Serve, StopAccepting과 Shutdown을 구현합니다. 가장 바깥 native handler에서 Spine 경로, native 경로와 업그레이드를 함께 추적하고, Shutdown의 대기 시간이 끝나도 정리를 계속해야 합니다. 정상 Serve 종료는 `httpcontract.ErrServerClosed`로 정규화합니다.
 
+`Serve`의 구현 시그니처는 `Serve(net.Listener, ...httpcontract.ServeOption) error`로 바뀝니다. 기존 `Serve(listener)` 호출은 유지되지만 이전 시그니처의 구현체는 수정해야 합니다. TLS를 지원하면 `Capabilities.TLS`를 선언하고 `Config.Serve`를 복사해 보관합니다. `ServeOptions.Resolve`로 준비한 기본값과 실행 옵션을 검증한 뒤 native 서버에 적용합니다. TLS 옵션 오류에서도 전달받은 리스너를 닫아야 합니다.
+
 정식 import 경로는 `contract/http`입니다. 이전 `adapter`, `adapter/http`는 같은 v3 타입의 별칭입니다. 별칭은 v2 구현의 동작을 자동 변환하지 않습니다. fasthttp는 현재 계약 검증용이며 제품 배포는 이 변경의 범위에 포함하지 않습니다.
 
 독립 `github.com/NARUBROWN/spine-nethttp-platform` 모듈은 로컬 v3 구현입니다. `Option()` 또는 `NewFactory()`로 연결하며 `WithMiddleware`로 표준 `http.Handler` 미들웨어를 추가합니다. 먼저 전달한 미들웨어가 바깥에 배치됩니다. 기본 요청 분기는 `ServeMux`를 거치지 않습니다. `net/http.Server` 자체의 패닉 복구는 끌 수 없어 명시적인 `DisableRecover: true`를 준비 단계에서 거부합니다. CLI 생성과 공개 설치 조합은 아직 제공하지 않습니다.
@@ -77,4 +102,4 @@ python3 scripts/verify-http-platforms.py \
   --output-dir /tmp/spine-http-platform-proof
 ```
 
-이 검증은 Go 1.25.5에서 동일한 DTO 결과, 오류와 검증 호출, multipart 파일 수명, native 후처리의 종료 대기, WebSocket과 runtime OpenAPI를 검사합니다. JSON 공백과 줄바꿈, TLS, HTTP/2와 성능은 비교하지 않습니다.
+이 검증은 Go 1.25.5에서 동일한 DTO 결과, 오류와 검증 호출, multipart 파일 수명, native 후처리의 종료 대기, WebSocket과 runtime OpenAPI를 검사합니다. TLS는 실제 HTTPS 요청, 인증서 선택, 신뢰 검증 실패와 연결 해제 취소를 확인합니다. JSON 공백과 줄바꿈, HTTP/2와 성능은 비교하지 않습니다.

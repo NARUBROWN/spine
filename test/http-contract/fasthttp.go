@@ -3,6 +3,8 @@ package contractprobe
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -19,13 +21,14 @@ type fastFactory struct {
 }
 
 func (fastFactory) Capabilities() contract.Capabilities {
-	return contract.Capabilities{ContractVersion: contract.ContractVersion, ServerOptions: contract.ServerOptionSupport{ReadTimeout: true, IdleTimeout: true}}
+	return contract.Capabilities{ContractVersion: contract.ContractVersion, TLS: true, ServerOptions: contract.ServerOptionSupport{ReadTimeout: true, IdleTimeout: true}}
 }
 
 func (f fastFactory) New(cfg contract.Config) (contract.HTTPAdapter, error) {
 	if err := cfg.Validate(f.Capabilities()); err != nil {
 		return nil, err
 	}
+	cfg.Serve = cfg.Serve.Clone()
 	a := &fastAdapter{lifecycle: newLifecycle(), cfg: cfg, hooks: f.hooks}
 	// 초기 버퍼를 작게 두어 실제 스트림과 읽기 한도를 함께 검증합니다.
 	threshold := 1
@@ -83,12 +86,22 @@ func (a *fastAdapter) handle(native *fasthttp.RequestCtx) {
 	}
 }
 
-func (a *fastAdapter) Serve(listener net.Listener) error {
+func (a *fastAdapter) Serve(listener net.Listener, options ...contract.ServeOption) error {
+	resolved, err := a.cfg.Serve.Resolve((fastFactory{}).Capabilities(), options...)
+	if err != nil {
+		if !isNil(listener) {
+			err = errors.Join(err, listener.Close())
+		}
+		return err
+	}
 	if err := a.claim(listener); err != nil {
 		return err
 	}
 	defer listener.Close()
-	err := a.server.Serve(listener)
+	if resolved.TLS != nil {
+		listener = tls.NewListener(listener, resolved.TLS)
+	}
+	err = a.server.Serve(listener)
 	if err == nil {
 		if a.isStopping() {
 			return contract.ErrServerClosed

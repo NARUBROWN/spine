@@ -43,7 +43,7 @@ func (a *preparationAdapter) StopAccepting() {
 		a.gate.stop()
 	}
 }
-func (a *preparationAdapter) Serve(net.Listener) error {
+func (a *preparationAdapter) Serve(net.Listener, ...adapter.ServeOption) error {
 	a.serveCalls.Add(1)
 	return errors.New("unexpected Serve")
 }

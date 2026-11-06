@@ -66,6 +66,8 @@ type ExecuteFunc func(HTTPContext) error
 // native 업그레이드는 선택 factory 확장으로 전달합니다.
 type Config struct {
 	Options ServerOptions
+	// Serve는 선택 인자를 생략한 실행의 기본값입니다.
+	Serve   ServeOptions
 	Execute ExecuteFunc
 }
 
@@ -82,7 +84,8 @@ type HTTPAdapter interface {
 	// Serve는 nil이 아닌 리스너를 소유하고 모든 반환 경로에서 닫습니다.
 	// 인스턴스당 한 번 실행하며 정상 종료는 ErrServerClosed로 나타냅니다.
 	// 예상하지 못한 nil 반환은 계약 위반입니다.
-	Serve(net.Listener) error
+	// options가 있으면 준비한 기본값에 적용하고 실행 전에 다시 검사합니다.
+	Serve(net.Listener, ...ServeOption) error
 	// StopAccepting은 새 실행 진입을 동기적으로 차단하고 반복 호출할 수 있습니다.
 	// 차단 뒤 native handler에 도착한 요청은 503이며 기존 요청은 보존합니다.
 	// native middleware, native 경로와 업그레이드 진입도 같은 바깥 경계로 감쌉니다.

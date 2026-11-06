@@ -24,6 +24,10 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def test_inputs(root):
+    return {p.name: digest(p) for p in sorted(root.glob("*_test.go"))}
+
+
 def test_summary(output):
     rows = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
     tests = [r for r in rows if r.get("Test") and r.get("Action") in ("pass", "fail", "skip")]
@@ -69,7 +73,7 @@ def main():
     original_hash = digest(original)
     if original_hash != EXPECTED_STREAMING_SHA256:
         raise RuntimeError("고정한 원본 streaming.go 해시와 다릅니다.")
-    test_hash = digest(MODULE / "contract_test.go")
+    tests = test_inputs(MODULE)
     core_inputs = {str(p.relative_to(CORE)): digest(p) for p in [CORE / "go.mod", CORE / "go.sum"] if p.exists()}
     contract_paths = sorted((CORE / "contract" / "http").glob("*.go"))
     if not contract_paths:
@@ -80,7 +84,7 @@ def main():
         "go_version": subprocess.check_output(["go", "version"], cwd=MODULE, env=env, text=True).strip(),
         "patch_sha256": digest(patch),
         "original_streaming_sha256": original_hash,
-        "test_sha256": test_hash,
+        "test_sha256": tests,
     }
 
     with tempfile.TemporaryDirectory(prefix="spine-strict-stream-") as temporary:
@@ -115,7 +119,7 @@ def main():
                  "-replace=github.com/valyala/fasthttp=" + str(engine)],
                 cwd=fixture, env=env, check=True,
             )
-            if digest(fixture / "contract_test.go") != test_hash:
+            if test_inputs(fixture) != tests:
                 raise RuntimeError("패치 전후의 테스트가 달라졌습니다.")
 
             patched = run(
@@ -134,12 +138,12 @@ def main():
                 engine, env, output, "upstream_stream_tests", results,
             )
             results["success"] = all(r.returncode == 0 for r in [patched, repeated, vetted, upstream])
-            results["same_tests_before_after"] = digest(fixture / "contract_test.go") == test_hash
+            results["same_tests_before_after"] = test_inputs(fixture) == tests
         finally:
             results["module_cache_unchanged"] = digest(original) == original_hash
             results["contract_unchanged"] = all(digest(CORE / name) == value for name, value in contract_inputs.items())
             results["core_module_inputs_unchanged"] = all(digest(CORE / name) == value for name, value in core_inputs.items())
-            results["fixture_tests_unchanged"] = digest(MODULE / "contract_test.go") == test_hash
+            results["fixture_tests_unchanged"] = test_inputs(MODULE) == tests
             (output / "summary.json").write_text(json.dumps(results, ensure_ascii=False, indent=2) + "\n")
         intact = all(results[k] for k in ["module_cache_unchanged", "contract_unchanged", "core_module_inputs_unchanged", "fixture_tests_unchanged"])
         print(json.dumps({"success": results.get("success", False), "inputs_intact": intact}), flush=True)

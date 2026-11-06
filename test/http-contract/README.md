@@ -4,12 +4,12 @@
 
 ## 수정 검증 결과
 
-2026-11-05 KST, Go 1.26.0 darwin/arm64에서 fasthttp v1.77.0의 EOF 처리를 분리 복사본에 패치해 검사했습니다. 같은 테스트 파일로 수정 전 54개 통과/2개 실패, 수정 후 56개 모두 통과했으며 생략은 없습니다. 기존 53개에 정상 chunked EOF와 연결 재사용 검사 3개를 추가했습니다.
+2026-11-06 KST, Go 1.26.0 darwin/arm64에서 fasthttp v1.77.0의 EOF 처리를 분리 복사본에 패치해 검사했습니다. 같은 테스트 파일들로 수정 전 60개 통과/2개 실패, 수정 후 62개 모두 통과했으며 생략은 없습니다. 기존 56개에 net/http, fasthttp 스트리밍과 버퍼링의 기본값 및 명시 옵션 TLS 검사 6개를 추가했습니다.
 
 | 검사 | 결과 |
 | --- | --- |
-| 순정 fasthttp를 사용하는 전체 race | 54개 통과, 기존 종료 오류 2개 실패 |
-| EOF 패치를 적용한 전체 race | 56개 통과 |
+| 순정 fasthttp를 사용하는 전체 race | 60개 통과, 기존 종료 오류 2개 실패 |
+| EOF 패치를 적용한 전체 race | 62개 통과 |
 | 기존 실패 2개를 각각 20회 반복 | 40개 통과 |
 | 패치한 fasthttp의 stream/chunk/trailer 관련 race | 394개 통과 |
 | 패치 조합 vet | 통과 |
@@ -28,7 +28,7 @@ cd test/http-contract
 python3 verify_strict_stream.py --output-dir /tmp/spine-http-eof-proof
 ```
 
-검증기는 순정 버전의 두 실패를 확인한 뒤, 임시 디렉터리에 의존성과 probe를 복사하고 패치를 적용합니다. 해당 복사본의 `replace`만 바꿔 같은 테스트를 실행하며 원래 모듈 캐시, 코어 계약과 go.mod를 해시로 대조합니다. 로그와 `summary.json`은 지정한 출력 경로에 저장하고 임시 복사본은 정리합니다.
+검증기는 순정 버전의 두 실패를 확인한 뒤, 임시 디렉터리에 의존성과 probe를 복사하고 패치를 적용합니다. 해당 복사본의 `replace`만 바꿔 같은 테스트를 실행하며 모든 `*_test.go`, 원래 모듈 캐시, 코어 계약과 go.mod를 해시로 대조합니다. 로그와 `summary.json`은 지정한 출력 경로에 저장하고 임시 복사본은 정리합니다.
 
 이 결과는 로컬 패치 조합의 검증입니다. 배포된 순정 v1.77.0은 아래 실패를 계속 재현합니다. 제품 플랫폼에 사용하려면 수정된 의존성의 제공 방식과 버전을 별도로 정해야 합니다.
 
@@ -90,9 +90,10 @@ GOWORK=off go test -race -count=3 \
 - net/http 연결 해제 취소와 fasthttp의 해당 기능 미지원 선언.
 - net/http raw 101 업그레이드 진입 추적과 fasthttp/기존 net/http WS 조합 거부. 전체 WebSocket 프로토콜은 검사하지 않습니다.
 - 32개 동시 요청의 값과 본문 격리, 명시적 미지원 native WriteTimeout 거부.
+- 준비 기본값 및 `WithTLS`의 HTTPS 실행, 신뢰한 인증서와 응답 본문, 정상 TLS 서버 종료. 세 실행 방식에서 각각 검사합니다.
 
 ## 아직 확인하지 않은 범위
 
-이 모듈은 최소 어댑터 검증만 수행합니다. 실제 Spine v3/Echo 연결, DTO/validator/staging/완료 훅과 multipart 정리는 별도의 `scripts/verify-http-v3.py`로 검사합니다. 전체 서버 옵션의 실제 시간/크기 경계, TLS/HTTP2와 모든 잘못된 HTTP 프레이밍, 독립 net/http 제품과 공개 설치 조합은 남아 있습니다.
+이 모듈은 최소 어댑터 검증만 수행합니다. 실제 Spine v3/Echo 연결, DTO/validator/staging/완료 훅과 multipart 정리는 별도의 `scripts/verify-http-v3.py`로 검사합니다. 독립 net/http 제품과 Echo의 HTTPS 통합은 `scripts/verify-http-platforms.py`로 검사합니다. 전체 서버 옵션의 실제 시간/크기 경계, HTTP/2와 모든 잘못된 HTTP 프레이밍, 공개 설치 조합은 남아 있습니다.
 
 fasthttp 의존성과 Go 1.26 요구는 이 테스트 모듈에만 둡니다. 코어의 Go 1.25.5 설정과 의존성은 변경하지 않습니다. 사용 버전의 Go 요구는 [fasthttp go.mod](https://github.com/valyala/fasthttp/blob/v1.77.0/go.mod)에서 확인할 수 있습니다.

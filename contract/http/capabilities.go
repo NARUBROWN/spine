@@ -9,6 +9,7 @@ import (
 // ClientDisconnectCancellation은 요청 종료 시의 공통 취소와 별개입니다.
 type Capabilities struct {
 	ContractVersion              string
+	TLS                          bool
 	NetHTTPHandler               bool
 	NetHTTPUpgrade               bool
 	ClientDisconnectCancellation bool
@@ -18,6 +19,7 @@ type Capabilities struct {
 // Requirements는 선택한 실행 방식에 필요한 기능입니다.
 // 기존 net/http WS v1을 사용하는 앱은 NetHTTPUpgrade를 요구합니다.
 type Requirements struct {
+	TLS                          bool
 	NetHTTPHandler               bool
 	NetHTTPUpgrade               bool
 	ClientDisconnectCancellation bool
@@ -42,6 +44,7 @@ func ValidateFactory(factory Factory, required Requirements) error {
 		name                string
 		required, supported bool
 	}{
+		{"TLS", required.TLS, caps.TLS},
 		{"NetHTTPHandler", required.NetHTTPHandler, caps.NetHTTPHandler},
 		{"NetHTTPUpgrade", required.NetHTTPUpgrade, caps.NetHTTPUpgrade},
 		{"ClientDisconnectCancellation", required.ClientDisconnectCancellation, caps.ClientDisconnectCancellation},

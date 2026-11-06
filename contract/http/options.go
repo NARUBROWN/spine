@@ -60,6 +60,9 @@ func (c Config) Validate(caps Capabilities) error {
 	if err := c.Options.Validate(); err != nil {
 		return err
 	}
+	if err := c.Serve.Validate(caps); err != nil {
+		return err
+	}
 	o, support := c.Options, caps.ServerOptions
 	for _, option := range []struct {
 		name                 string

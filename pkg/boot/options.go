@@ -1,11 +1,14 @@
 package boot
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/url"
 	"strings"
 	"time"
+
+	httpcontract "github.com/NARUBROWN/spine/contract/http"
 )
 
 // InterceptorScope는 전역 인터셉터를 실행할 기본 전송 방식을 선택합니다.
@@ -51,6 +54,9 @@ HTTP 런타임 설정입니다.
 HTTP 요청 실행 흐름에만 영향을 줍니다.
 */
 type HTTPOptions struct {
+	// TLS는 관리 서버의 인증서와 TLS 설정입니다. nil이면 평문 HTTP를 사용합니다.
+	// 인증서 파일은 tls.LoadX509KeyPair로 미리 읽어 Certificates에 넣을 수 있습니다.
+	TLS *tls.Config
 	// OpenAPI는 Enabled가 true일 때 별도 CLI나 주석 없이 제공하는 표준 HTTP 명세의 설정입니다.
 	OpenAPI OpenAPIOptions
 
@@ -99,6 +105,9 @@ func (o HTTPOptions) ValidateIssues(prefix string) []ConfigIssue {
 		prefix = "HTTP"
 	}
 	issues := o.OpenAPI.ValidateIssues(configPath(prefix, "OpenAPI"))
+	if err := (httpcontract.ServeOptions{TLS: o.TLS}).Validate(httpcontract.Capabilities{ContractVersion: httpcontract.ContractVersion, TLS: true}); err != nil {
+		issues = append(issues, ConfigIssue{Path: configPath(prefix, "TLS"), Code: "HTTP_TLS_INVALID", Message: err.Error(), Hint: "Provide a matching certificate and private key or a certificate provider."})
+	}
 	for _, field := range []struct {
 		name  string
 		value time.Duration

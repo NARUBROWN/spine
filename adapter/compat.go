@@ -20,6 +20,8 @@ type (
 	Requirements           = httpadapter.Requirements
 	RequestError           = httpadapter.RequestError
 	ServerOptions          = httpadapter.ServerOptions
+	ServeOptions           = httpadapter.ServeOptions
+	ServeOption            = httpadapter.ServeOption
 	ServerOptionSupport    = httpadapter.ServerOptionSupport
 	NetHTTPHandlerProvider = httpadapter.NetHTTPHandlerProvider
 	NetHTTPUpgradeFactory  = httpadapter.NetHTTPUpgradeFactory
@@ -27,6 +29,7 @@ type (
 )
 
 var (
+	WithTLS                      = httpadapter.WithTLS
 	ErrUnsupportedOption         = httpadapter.ErrUnsupportedOption
 	ErrServerClosed              = httpadapter.ErrServerClosed
 	ValidateAdapter              = httpadapter.ValidateAdapter

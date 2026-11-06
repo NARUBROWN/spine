@@ -2,6 +2,7 @@ package contractprobe
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"net"
 	"net/http"
@@ -14,7 +15,7 @@ type netFactory struct{ hooks hooks }
 
 func (netFactory) Capabilities() contract.Capabilities {
 	return contract.Capabilities{
-		ContractVersion: contract.ContractVersion, NetHTTPHandler: true, NetHTTPUpgrade: true,
+		ContractVersion: contract.ContractVersion, TLS: true, NetHTTPHandler: true, NetHTTPUpgrade: true,
 		ClientDisconnectCancellation: true,
 		ServerOptions:                contract.ServerOptionSupport{ReadHeaderTimeout: true, ReadTimeout: true, WriteTimeout: true, IdleTimeout: true, MaxHeaderBytes: true},
 	}
@@ -31,6 +32,7 @@ func (f netFactory) NewWithNetHTTPUpgrades(cfg contract.Config, upgrades []contr
 	if err := contract.ValidateNetHTTPUpgradeRoutes(upgrades); err != nil {
 		return nil, err
 	}
+	cfg.Serve = cfg.Serve.Clone()
 	a := &netAdapter{lifecycle: newLifecycle(), cfg: cfg, hooks: f.hooks, upgrades: make(map[string]http.Handler)}
 	for _, route := range upgrades {
 		a.upgrades[route.Path] = route.Handler
@@ -86,12 +88,22 @@ func (a *netAdapter) handle(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (a *netAdapter) Serve(listener net.Listener) error {
+func (a *netAdapter) Serve(listener net.Listener, options ...contract.ServeOption) error {
+	resolved, err := a.cfg.Serve.Resolve((netFactory{}).Capabilities(), options...)
+	if err != nil {
+		if !isNil(listener) {
+			err = errors.Join(err, listener.Close())
+		}
+		return err
+	}
 	if err := a.claim(listener); err != nil {
 		return err
 	}
 	defer listener.Close()
-	err := a.server.Serve(listener)
+	if resolved.TLS != nil {
+		listener = tls.NewListener(listener, resolved.TLS)
+	}
+	err = a.server.Serve(listener)
 	if errors.Is(err, http.ErrServerClosed) && a.isStopping() {
 		return contract.ErrServerClosed
 	}

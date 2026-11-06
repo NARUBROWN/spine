@@ -31,8 +31,10 @@ func (*upgradeFactory) NewWithNetHTTPUpgrades(httpcontract.Config, []httpcontrac
 // neutralAdapter는 net/http handler 없이 필수 계약을 구현합니다.
 type neutralAdapter struct{}
 
-func (*neutralAdapter) Serve(net.Listener) error { panic("validation must not start a server") }
-func (*neutralAdapter) StopAccepting()           { panic("validation must not stop requests") }
+func (*neutralAdapter) Serve(net.Listener, ...httpcontract.ServeOption) error {
+	panic("validation must not start a server")
+}
+func (*neutralAdapter) StopAccepting() { panic("validation must not stop requests") }
 func (*neutralAdapter) Shutdown(context.Context) error {
 	panic("validation must not shut down a server")
 }

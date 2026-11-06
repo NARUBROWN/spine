@@ -24,15 +24,36 @@
 
 | 메서드 | 보장 |
 | --- | --- |
-| `Serve(net.Listener)` | 리스너를 소유하고 모든 반환 경로에서 닫습니다. 한 번만 실행하고 정상 종료를 `ErrServerClosed`로 정규화합니다. 예상하지 못한 nil 반환은 계약 위반입니다. |
+| `Serve(net.Listener, ...ServeOption)` | 리스너를 소유하고 모든 반환 경로에서 닫습니다. 한 번만 실행하고 정상 종료를 `ErrServerClosed`로 정규화합니다. 예상하지 못한 nil 반환은 계약 위반입니다. |
 | `StopAccepting()` | 새 실행 진입을 동기 차단하고 반복 호출할 수 있습니다. 기존 요청은 보존하며 차단 뒤 handler에 도착한 요청에는 503을 반환합니다. |
 | `Shutdown(context.Context)` | 차단과 진행 요청의 종료를 기다립니다. 호출 context는 대기만 제한하고 정리는 계속합니다. 새 context로 다시 기다릴 수 있으며 인스턴스를 재실행하지 않습니다. |
 
 구현체는 가장 바깥 native handler에서 Spine 경로, native middleware, native 경로와 업그레이드 진입을 함께 추적합니다. 관리 서버와 외부 서버는 같은 보호된 handler를 사용합니다. 외부 서버 자체는 호출자가, 장기 WS 연결은 코어 런타임이 종료합니다. graceful 종료 시작만으로 진행 요청을 일괄 취소하지 않습니다.
 
+## TLS 실행
+
+`Config.Serve.TLS`는 관리 서버의 `*tls.Config` 기본값입니다. nil이면 평문 HTTP를 사용합니다. Spine 앱에서는 `boot.HTTPOptions.TLS`로 전달하며, 인증서 파일은 `tls.LoadX509KeyPair`로 먼저 읽습니다. 주소를 생략하면 TLS 설정이 있을 때 `:https`, 없을 때 `:http`를 사용합니다.
+
+```go
+certificate, err := tls.LoadX509KeyPair("server.crt", "server.key")
+if err != nil {
+    return err
+}
+config := &tls.Config{Certificates: []tls.Certificate{certificate}}
+err = prepared.HTTPAdapter().Serve(listener, httpcontract.WithTLS(config))
+```
+
+옵션 없이 `Serve(listener)`를 호출하면 준비한 기본값을 사용합니다. TLS 설정을 적용할 때는 `net.Listen`으로 만든 평문 TCP 리스너를 전달합니다. `ServeOptions.Resolve`는 기본값에 옵션을 순서대로 적용하고 설정을 복사한 뒤 검증합니다. 마지막 `WithTLS`가 우선합니다. `WithTLS(nil)`과 nil 옵션은 오류이며 평문 전환을 뜻하지 않습니다. 공개 진입점은 `Serve` 하나입니다.
+
+`ServeOptions.Validate`와 `Config.Validate`는 TLS 지원 선언, 명시한 버전 범위, 정적 인증서 체인과 개인 키의 일치를 검사합니다. 인증서나 `GetCertificate` 또는 `GetConfigForClient` 중 하나는 필요합니다. 이 사전 검사는 native 훅보다 먼저 수행하며 인증서 선택 콜백을 호출하지 않습니다. 동적 인증서의 가용성, 클라이언트의 신뢰 체인, 호스트명과 유효 기간 검증은 실제 연결에서 수행합니다.
+
+`ServeOptions.Clone`은 수정 가능한 TLS 슬라이스, 인증서 바이트와 CA 풀을 복사합니다. 개인 키 객체, 콜백과 I/O 제공자는 공유하므로 호출자가 안전한 동시 사용을 보장해야 합니다. `Serve`는 명시한 옵션을 실행 전에 다시 검사합니다. 옵션 오류도 리스너를 닫지만 실행 가능 상태는 소비하지 않습니다.
+
+Echo와 net/http 구현은 선택한 설정의 TLS 리스너를 native 서버에 전달합니다. 외부 서버에 `NetHTTPHandler`만 연결하면 인증서와 TLS 실행은 외부 서버 소유입니다. 이 계약은 HTTP 버전 선택이나 ALPN 정책을 추가하지 않습니다. HTTP 스펙 개선은 별도 범위입니다.
+
 ## 선택 기능과 검사 순서
 
-`Capabilities`는 계약 버전, `NetHTTPHandler`, `NetHTTPUpgrade`, `ClientDisconnectCancellation`, `ServerOptions` 지원을 선언합니다. 기본 HTTP 처리와 본문 읽기 제한은 필수입니다. net/http native 진입점이 없는 엔진도 기본 계약을 구현할 수 있습니다.
+`Capabilities`는 계약 버전, `TLS`, `NetHTTPHandler`, `NetHTTPUpgrade`, `ClientDisconnectCancellation`, `ServerOptions` 지원을 선언합니다. 기본 HTTP 처리와 본문 읽기 제한은 필수입니다. net/http native 진입점이 없는 엔진도 기본 계약을 구현할 수 있습니다.
 
 1. `ValidateFactory`로 버전과 필요한 기능을 검사합니다. 이 함수는 `New`와 native 훅을 호출하지 않습니다.
 2. `Config.Validate`로 Execute, 옵션 값과 명시적으로 요청한 옵션의 지원 여부를 검사합니다.

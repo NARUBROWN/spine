@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"net"
 	"net/http"
@@ -31,7 +32,7 @@ type testHTTPAdapter struct{ server *http.Server }
 
 func (a *testHTTPAdapter) StopAccepting()        {}
 func (a *testHTTPAdapter) Handler() http.Handler { return a.server.Handler }
-func (a *testHTTPAdapter) Serve(listener net.Listener) error {
+func (a *testHTTPAdapter) Serve(listener net.Listener, _ ...adapter.ServeOption) error {
 	err := a.server.Serve(listener)
 	if errors.Is(err, http.ErrServerClosed) {
 		return adapter.ErrServerClosed
@@ -52,9 +53,11 @@ func (f *configurableFactory) New(config adapter.Config) (adapter.HTTPAdapter, e
 
 type invalidHandlerAdapter struct{ shutdowns int }
 
-func (*invalidHandlerAdapter) StopAccepting()                   {}
-func (*invalidHandlerAdapter) Handler() http.Handler            { return http.HandlerFunc(nil) }
-func (*invalidHandlerAdapter) Serve(net.Listener) error         { panic("Serve must not run") }
+func (*invalidHandlerAdapter) StopAccepting()        {}
+func (*invalidHandlerAdapter) Handler() http.Handler { return http.HandlerFunc(nil) }
+func (*invalidHandlerAdapter) Serve(net.Listener, ...adapter.ServeOption) error {
+	panic("Serve must not run")
+}
 func (a *invalidHandlerAdapter) Shutdown(context.Context) error { a.shutdowns++; return nil }
 
 func TestHTTPFactoryPreflightRunsBeforeInitialization(t *testing.T) {
@@ -87,9 +90,52 @@ func TestUnsupportedHTTPOptionFailsBeforeInitialization(t *testing.T) {
 	}
 }
 
+func TestTLSPreflightRunsBeforeFactoriesAndTransports(t *testing.T) {
+	for _, supported := range []bool{false, true} {
+		t.Run(map[bool]string{false: "unsupported", true: "invalid"}[supported], func(t *testing.T) {
+			transport := &testTransport{}
+			factoryCalls, providerCalls := 0, 0
+			config := &tls.Config{GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) { providerCalls++; return nil, nil }}
+			if supported {
+				config = &tls.Config{}
+			}
+			factory := &configurableFactory{capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion, TLS: supported}, newAdapter: func(adapter.Config) (adapter.HTTPAdapter, error) { factoryCalls++; return &engineNeutralAdapter{}, nil }}
+			_, err := Prepare(context.Background(), Config{HTTP: &boot.HTTPOptions{TLS: config}, HTTPAdapterFactory: factory, CustomTransports: []core.CustomTransport{transport}})
+			if err == nil || factoryCalls != 0 || providerCalls != 0 || transport.initCalls.Load() != 0 {
+				t.Fatalf("TLS 사전 검사: %v factory=%d provider=%d init=%d", err, factoryCalls, providerCalls, transport.initCalls.Load())
+			}
+			if !supported && !errors.Is(err, adapter.ErrUnsupportedCapability) {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestPreparedTLSConfigurationIsAnIndependentSnapshot(t *testing.T) {
+	calls := 0
+	original := &tls.Config{MinVersion: tls.VersionTLS12, NextProtos: []string{"http/1.1"}, GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) { calls++; return nil, nil }}
+	var received *tls.Config
+	factory := &configurableFactory{capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion, TLS: true}, newAdapter: func(config adapter.Config) (adapter.HTTPAdapter, error) {
+		received = config.Serve.TLS
+		return &engineNeutralAdapter{}, nil
+	}}
+	p, err := Prepare(context.Background(), Config{HTTP: &boot.HTTPOptions{TLS: original}, HTTPAdapterFactory: factory})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close(context.Background())
+	original.NextProtos[0] = "changed"
+	original.MinVersion = tls.VersionTLS13
+	if received == original || received.NextProtos[0] != "http/1.1" || received.MinVersion != tls.VersionTLS12 || calls != 0 {
+		t.Fatal("준비한 TLS 설정의 격리와 콜백 무실행을 보장해야 합니다")
+	}
+}
+
 type engineNeutralAdapter struct{ stopped bool }
 
-func (*engineNeutralAdapter) Serve(net.Listener) error       { panic("Prepare must not Serve") }
+func (*engineNeutralAdapter) Serve(net.Listener, ...adapter.ServeOption) error {
+	panic("Prepare must not Serve")
+}
 func (a *engineNeutralAdapter) StopAccepting()               { a.stopped = true }
 func (*engineNeutralAdapter) Shutdown(context.Context) error { return nil }
 

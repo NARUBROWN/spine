@@ -289,6 +289,7 @@ func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResourc
 
 		httpConfig := adapter.Config{
 			Options: serverOptions(*config.HTTP),
+			Serve:   adapter.ServeOptions{TLS: config.HTTP.TLS},
 			Execute: func(scope adapter.HTTPContext) (executionErr error) {
 				request := transport.NewHTTPContext(scope, config.HTTP.MultipartMemoryBytes)
 				defer func() { executionErr = errors.Join(executionErr, request.Cleanup()) }()
