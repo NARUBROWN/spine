@@ -21,7 +21,8 @@
         "github.com/NARUBROWN/spine-validator-playground": "v0.2.0-preview.1",
         "github.com/NARUBROWN/spine-gorilla-platform": "v0.2.0-preview.1",
         "github.com/NARUBROWN/spine-kafka-platform": "v0.2.0-preview.1",
-        "github.com/NARUBROWN/spine-rabbitmq-platform": "v0.2.0-preview.1"
+        "github.com/NARUBROWN/spine-rabbitmq-platform": "v0.2.0-preview.1",
+        "github.com/NARUBROWN/spine-nethttp-platform": "v0.1.0-preview.1"
       }
     },
     "rc": {
@@ -31,7 +32,8 @@
         "github.com/NARUBROWN/spine-validator-playground": "v0.2.0-rc.1",
         "github.com/NARUBROWN/spine-gorilla-platform": "v0.2.0-rc.1",
         "github.com/NARUBROWN/spine-kafka-platform": "v0.2.0-rc.1",
-        "github.com/NARUBROWN/spine-rabbitmq-platform": "v0.2.0-rc.1"
+        "github.com/NARUBROWN/spine-rabbitmq-platform": "v0.2.0-rc.1",
+        "github.com/NARUBROWN/spine-nethttp-platform": "v0.1.0-rc.1"
       }
     },
     "stable": {
@@ -41,7 +43,8 @@
         "github.com/NARUBROWN/spine-validator-playground": "v0.2.0",
         "github.com/NARUBROWN/spine-gorilla-platform": "v0.2.0",
         "github.com/NARUBROWN/spine-kafka-platform": "v0.2.0",
-        "github.com/NARUBROWN/spine-rabbitmq-platform": "v0.2.0"
+        "github.com/NARUBROWN/spine-rabbitmq-platform": "v0.2.0",
+        "github.com/NARUBROWN/spine-nethttp-platform": "v0.1.0"
       }
     }
   },
@@ -50,7 +53,8 @@
     "github.com/NARUBROWN/spine-validator-playground": "80b1af7d173975f8d7e83cbc3d806434118f777b",
     "github.com/NARUBROWN/spine-gorilla-platform": "bec511323bcd51feea6bc10af1ad94efc5fd6499",
     "github.com/NARUBROWN/spine-kafka-platform": "e41823ae66a720b170c3859104d115f08a4008df",
-    "github.com/NARUBROWN/spine-rabbitmq-platform": "2f9799f054f5205ab403413c48b0a6af4cebdc56"
+    "github.com/NARUBROWN/spine-rabbitmq-platform": "2f9799f054f5205ab403413c48b0a6af4cebdc56",
+    "github.com/NARUBROWN/spine-nethttp-platform": "097d9a77f68981996734cc64c73b58e1860ddfc8"
   },
   "post_release_examples": {
     "chat": {

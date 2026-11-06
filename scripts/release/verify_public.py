@@ -126,7 +126,7 @@ def verify(plan, source, work, env, query, scope="cohort"):
         execute(["go", "vet", "-mod=readonly", "./..."], tests, env)
         modules(tests, env, {CORE: selected_components["core_version"]})
     elif scope == "cohort":
-        for name in ("platform-e2e", "openapi"):
+        for name in ("platform-e2e", "openapi", "http-platform"):
             tests = work / name
             shutil.copytree(source / "test" / name, tests)
             selected.update(pin(tests, env, expected))

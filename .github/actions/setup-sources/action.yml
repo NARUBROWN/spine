@@ -28,6 +28,12 @@ runs:
         persist-credentials: false
     - uses: actions/checkout@v4
       with:
+        repository: NARUBROWN/spine-nethttp-platform
+        ref: ${{ steps.refs.outputs.nethttp }}
+        path: spine-nethttp-platform
+        persist-credentials: false
+    - uses: actions/checkout@v4
+      with:
         repository: NARUBROWN/spine-gorilla-platform
         ref: ${{ steps.refs.outputs.gorilla }}
         path: spine-gorilla-platform

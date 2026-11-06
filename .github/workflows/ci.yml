@@ -318,6 +318,32 @@ jobs:
       - name: OpenAPI schemas and actual HTTP behavior
         run: go -C test/openapi test -race -v ./... -count=1 -timeout=3m
 
+  http-platforms:
+    needs: branch-direction
+    name: HTTP and TLS Platform E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: spine
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: ./spine/.github/actions/setup-sources
+        with:
+          published: ${{ inputs.public_dependencies && 'true' || 'false' }}
+          ref: ${{ github.base_ref || github.ref_name }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.0'
+          cache-dependency-path: "**/go.sum"
+      - name: Verify net/http and shared HTTP and TLS behavior
+        run: |
+          go -C ../spine-nethttp-platform vet ./...
+          go -C ../spine-nethttp-platform test -race ./... -count=1 -timeout=2m
+          go -C test/http-platform vet ./...
+          go -C test/http-platform test -race ./... -count=1 -timeout=2m
+
   release-policy:
     needs: branch-direction
     name: Release Policy and Workflows
@@ -356,7 +382,7 @@ jobs:
     name: ${{ github.event_name == 'pull_request' && format('Verified Source / {0}', github.base_ref) || 'Verified Source' }}
     runs-on: ubuntu-latest
     if: ${{ always() }}
-    needs: [branch-direction, quality, unit, integration, e2e, race, event-platform-e2e, release-policy]
+    needs: [branch-direction, quality, unit, integration, e2e, race, event-platform-e2e, http-platforms, release-policy]
     outputs:
       sha: ${{ steps.source.outputs.sha }}
     steps:

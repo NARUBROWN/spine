@@ -79,7 +79,7 @@ Echo의 응답 출력 경로와 사용자 JSONSerializer는 유지합니다. wri
 
 정식 import 경로는 `contract/http`입니다. 이전 `adapter`, `adapter/http`는 같은 v3 타입의 별칭입니다. 별칭은 v2 구현의 동작을 자동 변환하지 않습니다. fasthttp는 현재 계약 검증용이며 제품 배포는 이 변경의 범위에 포함하지 않습니다.
 
-독립 `github.com/NARUBROWN/spine-nethttp-platform` 모듈은 로컬 v3 구현입니다. `Option()` 또는 `NewFactory()`로 연결하며 `WithMiddleware`로 표준 `http.Handler` 미들웨어를 추가합니다. 먼저 전달한 미들웨어가 바깥에 배치됩니다. 기본 요청 분기는 `ServeMux`를 거치지 않습니다. `net/http.Server` 자체의 패닉 복구는 끌 수 없어 명시적인 `DisableRecover: true`를 준비 단계에서 거부합니다. CLI 생성과 공개 설치 조합은 아직 제공하지 않습니다.
+독립 `github.com/NARUBROWN/spine-nethttp-platform` 모듈은 독립 v3 구현입니다. `Option()` 또는 `NewFactory()`로 연결하며 `WithMiddleware`로 표준 `http.Handler` 미들웨어를 추가합니다. 먼저 전달한 미들웨어가 바깥에 배치됩니다. 기본 요청 분기는 `ServeMux`를 거치지 않습니다. `net/http.Server` 자체의 패닉 복구는 끌 수 없어 명시적인 `DisableRecover: true`를 준비 단계에서 거부합니다. CLI 생성과 공개 설치 조합은 아직 제공하지 않습니다.
 
 ## 로컬 소스 검증
 

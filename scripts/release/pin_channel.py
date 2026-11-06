@@ -19,7 +19,7 @@ def pin(root, channel, apply=False, tidy=False):
     expected = {CORE: selected["core_version"], **selected["modules"]}
     directories = [root]
     if policy["kind"] == "core":
-        directories += [root / path for path in ("test", "test/openapi", "test/platform-e2e", "cmd/demo", "cmd/reference", "examples/security-config")]
+        directories += [root / path for path in ("test", "test/openapi", "test/platform-e2e", "test/http-platform", "cmd/demo", "cmd/reference", "examples/security-config")]
     env = dict(os.environ, GOWORK="off")
     for directory in directories:
         path = directory / "go.mod"
