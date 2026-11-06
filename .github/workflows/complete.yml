@@ -1,9 +1,9 @@
-name: Complete Core Release Cohort
+name: Complete Core Release Combination
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: Tag for completing public verification of the core candidate and five platforms
+        description: Tag for completing public verification of the core candidate and six platforms
         type: string
         required: true
 permissions:

@@ -15,14 +15,14 @@
   },
   "channels": {
     "preview": {
-      "core_version": "v0.7.0-preview.3",
+      "core_version": "v0.7.0-preview.4",
       "modules": {
-        "github.com/NARUBROWN/spine-echo-platform": "v0.2.0-preview.2",
-        "github.com/NARUBROWN/spine-validator-playground": "v0.2.0-preview.1",
-        "github.com/NARUBROWN/spine-gorilla-platform": "v0.2.0-preview.1",
-        "github.com/NARUBROWN/spine-kafka-platform": "v0.2.0-preview.1",
-        "github.com/NARUBROWN/spine-rabbitmq-platform": "v0.2.0-preview.1",
-        "github.com/NARUBROWN/spine-nethttp-platform": "v0.1.0-preview.1"
+        "github.com/NARUBROWN/spine-echo-platform": "v0.2.0-preview.3",
+        "github.com/NARUBROWN/spine-validator-playground": "v0.2.0-preview.2",
+        "github.com/NARUBROWN/spine-gorilla-platform": "v0.2.0-preview.2",
+        "github.com/NARUBROWN/spine-kafka-platform": "v0.2.0-preview.2",
+        "github.com/NARUBROWN/spine-rabbitmq-platform": "v0.2.0-preview.2",
+        "github.com/NARUBROWN/spine-nethttp-platform": "v0.1.0-preview.2"
       }
     },
     "rc": {
@@ -49,12 +49,12 @@
     }
   },
   "ci_sources": {
-    "github.com/NARUBROWN/spine-echo-platform": "62119df2e5c0a92163e4e1efb87ce21c785df69a",
-    "github.com/NARUBROWN/spine-validator-playground": "80b1af7d173975f8d7e83cbc3d806434118f777b",
-    "github.com/NARUBROWN/spine-gorilla-platform": "bec511323bcd51feea6bc10af1ad94efc5fd6499",
-    "github.com/NARUBROWN/spine-kafka-platform": "e41823ae66a720b170c3859104d115f08a4008df",
-    "github.com/NARUBROWN/spine-rabbitmq-platform": "2f9799f054f5205ab403413c48b0a6af4cebdc56",
-    "github.com/NARUBROWN/spine-nethttp-platform": "aa6deba6223f2ff210c2a0fcf53be2528f80b118"
+    "github.com/NARUBROWN/spine-echo-platform": "5fad6a286b1cf8e286eb17ca9d6415926670179a",
+    "github.com/NARUBROWN/spine-validator-playground": "7f98d49e27394a297df756af9073337cdfdea3c0",
+    "github.com/NARUBROWN/spine-gorilla-platform": "c501e2f47603dde30e2b518cce15685274d25ed7",
+    "github.com/NARUBROWN/spine-kafka-platform": "3016808daef7f0ffc71a619294a599640f5502ed",
+    "github.com/NARUBROWN/spine-rabbitmq-platform": "91bd4b24b8410e18a2058fd048d12bd34b1ce6d4",
+    "github.com/NARUBROWN/spine-nethttp-platform": "3184eae63fd7e400b2ff34ad8c01e845f5d55462"
   },
   "post_release_examples": {
     "chat": {

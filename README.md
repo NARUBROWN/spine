@@ -2,15 +2,15 @@
   한국어 | <a href="README.en.md">English</a> | <a href="README.ja.md">日本語</a> | <a href="README.zh-Hans.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a>
 </p>
 
-> **릴리스 채널: Preview → RC → Stable.** 이 소스의 대상 버전은 `v0.7.0`입니다. [출시 절차](RELEASING.md)와 [경로 변경 안내](docs/migration/v0.7.0.md)를 확인하고, 공개된 버전은 [Releases](https://github.com/NARUBROWN/spine/releases)에서 확인하세요.
+> **릴리스 채널: Preview → RC → Stable.** 이 소스의 대상 버전은 `v0.7.0`입니다. [출시 절차](RELEASING.md)와 [경로 변경 안내](docs/migration/v0.7.0.md)를 확인하고, 공개 버전은 [태그](https://github.com/NARUBROWN/spine/tags)와 [Actions 검증 기록](https://github.com/NARUBROWN/spine/actions)에서 확인하세요.
 
-로컬 `v0.7.0-preview.3` 후보는 HTTP v3 계약, 공통 입력 파서와 관리 서버의 TLS 설정을 제공합니다. 같은 계약의 Echo `v0.2.0-preview.2`, net/http `v0.1.0-preview.1` 후보와 연결하며, 이 조합의 태그와 CLI 생성 지원은 아직 없습니다. [HTTP v3 전환](docs/migration/http-v3.md)을 확인하세요.
+HTTP v3는 공통 입력 파서와 관리 서버의 TLS 설정을 제공합니다. 이 소스의 Preview 조합은 코어 `v0.7.0-preview.4`, Echo `v0.2.0-preview.3`, net/http `v0.1.0-preview.2`입니다. CLI `v0.4.3-preview.4`는 두 HTTP 플랫폼의 생성과 업데이트를 지원합니다. [HTTP v3 전환](docs/migration/http-v3.md)과 [전체 버전 조합](RELEASING.md#정책과-소스-ci)을 확인하세요.
 
-> **v0.6.5**는 HTTP·WebSocket·event·validator의 공개 계약과 독립 구현 선택을 하나로 통합합니다. 코어는 표준 라이브러리만 사용합니다. [v0.6.5 전환 안내](docs/migration/v0.6.5.md)를 참고하세요.
+> **v0.6.5**는 HTTP, WebSocket, event, validator의 공개 계약과 독립 구현 선택을 하나로 통합합니다. 코어는 표준 라이브러리만 사용합니다. [v0.6.5 전환 안내](docs/migration/v0.6.5.md)를 참고하세요.
 
 > Spine `v0.6.0`부터 새 프로젝트는 [Spine CLI의 `new`](https://github.com/NARUBROWN/spine-cli#빠른-시작)로 시작합니다. Echo 플랫폼과 필요한 의존성은 CLI가 구성합니다. 기존 앱은 [전환 안내](docs/migration/http-adapter-modules.md)를 참고하세요.
 >
-> 개발 소스의 이벤트 연동은 `spine.WithEventAdapter`와 Kafka·RabbitMQ 플랫폼을 사용합니다. 기존 boot 옵션은 [이벤트 플랫폼 전환 안내](docs/migration/event-platforms.md)를 따라 옮기세요.
+> 개발 소스의 이벤트 연동은 `spine.WithEventAdapter`와 Kafka, RabbitMQ 플랫폼을 사용합니다. 기존 boot 옵션은 [이벤트 플랫폼 전환 안내](docs/migration/event-platforms.md)를 따라 옮기세요.
 
 > 개발 소스의 WebSocket은 `contract/websocket`과 [Gorilla 플랫폼](https://github.com/NARUBROWN/spine-gorilla-platform)으로 분리했습니다. WS 앱은 `spine.New(echoPlatform.Option(), gorillaPlatform.Option())`로 두 구현을 선택합니다. [WS 전환 안내](docs/migration/websocket-platforms.md)를 참고하세요.
 
@@ -111,7 +111,7 @@ spine g resource order --root . --if-match <base_hash> --json
 
 CLI는 HTTP, DI, 인터셉터, 메시지 소비자와 WebSocket 등록을 분석하고 계약 스냅샷 비교와 OpenAPI/AsyncAPI 내보내기를 지원합니다. 수동 플랫폼 연결과 App API는 [전환 안내](docs/migration/http-adapter-modules.md), 전체 명령과 분석 범위는 [CLI 문서](https://github.com/NARUBROWN/spine-cli#readme)를 참고하세요.
 
-개발 브랜치에서는 쿼리와 헤더를 각각 일반 구조체 포인터로 받도록 전환합니다. 기존 `query.Values`, `header.Values`와 조회 API, `query.Pagination`은 Deprecated로 유지합니다. 같은 핸들러에서 Deprecated 입력과 새 Path, Query, Header DTO는 함께 사용할 수 없습니다. [구조체 입력 전환 안내](docs/migration/structured-inputs.md)를 참고하세요. 정식 전환 버전과 기존 API 제거 버전은 아직 정해지지 않았습니다.
+개발 브랜치에서는 쿼리와 헤더를 각각 일반 구조체 포인터로 받도록 전환합니다. 기존 `query.Values`, `header.Values`와 조회 API, `query.Pagination`은 Deprecated로 유지합니다. 같은 핸들러에서 Deprecated 입력과 새 Path, Query, Header DTO는 함께 사용할 수 없습니다. [구조체 입력 전환 안내](docs/migration/structured-inputs.md)를 참고하세요. 정식 대상은 `v0.7.0`이며 기존 API 제거 버전은 아직 정하지 않았습니다.
 
 ## 문서와 예제
 
