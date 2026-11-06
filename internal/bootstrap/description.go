@@ -14,6 +14,12 @@ import (
 // DescribeHTTP는 준비 과정과 달리 factory, 생성자와 외부 자원을 초기화하지 않습니다.
 func DescribeHTTP(config Config) (description.HTTP, error) {
 	config = snapshotConfig(config)
+	if err := boot.ValidationError(controllerProviderIssues(config)...); err != nil {
+		return description.HTTP{}, err
+	}
+	if config.HTTP != nil && !config.RoutesCollected && len(controllerTypes(config.Constructors)) > 0 {
+		return description.HTTP{}, ErrRoutesNotCollected
+	}
 	if config.ValidatorConfigured || config.Validator != nil {
 		if err := validation.CheckValidator(config.Validator); err != nil {
 			return description.HTTP{}, err

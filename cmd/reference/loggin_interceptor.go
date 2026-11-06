@@ -17,7 +17,7 @@ func (i *LoggingInterceptor) PreHandle(
 		ctx.Method(),
 		ctx.Path(),
 		meta.ControllerType.Name(),
-		meta.Method.Name,
+		meta.HandlerName(),
 	)
 	ctx.Set("test", "test")
 

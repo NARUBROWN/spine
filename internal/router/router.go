@@ -12,10 +12,11 @@ import (
 type RouteOption func(*RouteSpec)
 
 type RouteSpec struct {
-	Method       string
-	Path         string
-	Handler      any
-	Interceptors []core.Interceptor
+	Method         string
+	Path           string
+	Handler        any
+	ControllerType reflect.Type
+	Interceptors   []core.Interceptor
 }
 
 type Router interface {

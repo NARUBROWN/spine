@@ -44,6 +44,7 @@ type Config struct {
 	WebSocketRegistry       *ws.Registry
 	Validator               validation.Validator
 	ValidatorConfigured     bool
+	RoutesCollected         bool
 }
 
 // EventAdapterBinding은 구현과 공통 실행 정책을 연결하는 준비 설정입니다.
@@ -107,7 +108,7 @@ func Validate(config Config) error {
 
 // validate는 사전 검사에 사용한 UI 리소스를 준비 단계에도 전달합니다.
 func validate(config Config) ([]boot.OpenAPIResource, error) {
-	var issues []boot.ConfigIssue
+	issues := controllerProviderIssues(config)
 	var openAPIResources []boot.OpenAPIResource
 	if config.ShutdownTimeout < 0 {
 		issues = append(issues, boot.ConfigIssue{
@@ -160,10 +161,10 @@ func validate(config Config) ([]boot.OpenAPIResource, error) {
 		issues = append(issues, openAPICollisionIssues(config, resources)...)
 	}
 	for i, route := range config.Routes {
-		if meta, err := spineRouter.NewHandlerMeta(route.Handler); err == nil {
-			issues = append(issues, endpoint.DTOParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", i), route.Path)...)
+		if meta, err := spineRouter.Meta(route); err == nil {
+			issues = append(issues, endpoint.HandlerDTOParameterIssues(meta, fmt.Sprintf("Routes[%d]", i), route.Path)...)
 		}
-		if _, err := spineRouter.NewHandlerMeta(route.Handler); err != nil {
+		if _, err := spineRouter.Meta(route); err != nil {
 			issues = append(issues, boot.ConfigIssue{
 				Path:    fmt.Sprintf("Routes[%d].Handler", i),
 				Code:    "HTTP_ROUTE_HANDLER_INVALID",
@@ -196,8 +197,8 @@ func validate(config Config) ([]boot.OpenAPIResource, error) {
 		}
 	}
 	for i, route := range config.Routes {
-		meta, _ := spineRouter.NewHandlerMeta(route.Handler)
-		issues = append(issues, endpoint.ValidationParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", i), config.Validator)...)
+		meta, _ := spineRouter.Meta(route)
+		issues = append(issues, endpoint.HandlerValidationParameterIssues(meta, fmt.Sprintf("Routes[%d]", i), config.Validator)...)
 	}
 	if err := boot.ValidationError(issues...); err != nil {
 		return nil, err

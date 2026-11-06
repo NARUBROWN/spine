@@ -146,3 +146,31 @@ FOSS for All 标志的版权归 FOSS for All 所有（© FOSS for All），不�
 ## 许可证
 
 MIT
+
+## 在控制器中声明路由
+
+当前 `v0.7.0-preview.5` 源码候选版本提供 `api.Controller.RegisterRoutes` 和 `input.Path[T]`、`input.Query[T]`、`input.Body[T]`。将具体控制器的构造函数注册到 `app.Constructor` 后，框架会收集控制器中的路由，无需单独的路由表。这不表示公开标签或 CLI 已经发布。请参阅[代码示例和规范查询条件](docs/migration/controller-routes.md)。
+
+```go
+package controller
+
+import (
+    "github.com/NARUBROWN/spine/pkg/api"
+    "github.com/NARUBROWN/spine/pkg/httpx"
+    "github.com/NARUBROWN/spine/pkg/input"
+)
+
+type UserController struct{}
+type CreateUser struct { Name string `json:"name"` }
+type User struct { Name string `json:"name"` }
+
+func NewUserController() *UserController { return &UserController{} }
+
+var _ api.Controller = (*UserController)(nil)
+
+func (c *UserController) RegisterRoutes(r *api.Registry) {
+    r.POST("/users", func(a input.Body[CreateUser]) httpx.Response[User] {
+        return httpx.Response[User]{Body: User{Name: a.Name}}
+    })
+}
+```

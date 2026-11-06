@@ -2,8 +2,11 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/NARUBROWN/spine/contract/description"
+	"github.com/NARUBROWN/spine/internal/endpoint"
 	"log"
 	"sync"
 	"time"
@@ -28,16 +31,19 @@ type publisherCloser struct {
 
 // Application은 준비가 성공한 자원만 보관하고 공통 정리 순서를 관리합니다.
 type Application struct {
-	config     Config
-	server     adapter.HTTPAdapter
-	listener   *managedHTTPListener
-	wsRuntime  *ws.Runtime
-	consumers  []consumerRuntime
-	transports []core.CustomTransport
-	publishers []publisherCloser
-	closeOnce  sync.Once
-	closeDone  chan struct{}
-	closeErr   error
+	config          Config
+	description     description.HTTP
+	descriptionOnce sync.Once
+	descriptionErr  error
+	server          adapter.HTTPAdapter
+	listener        *managedHTTPListener
+	wsRuntime       *ws.Runtime
+	consumers       []consumerRuntime
+	transports      []core.CustomTransport
+	publishers      []publisherCloser
+	closeOnce       sync.Once
+	closeDone       chan struct{}
+	closeErr        error
 }
 
 func (a *Application) HTTPAdapter() adapter.HTTPAdapter { return a.server }
@@ -124,4 +130,21 @@ func closeResource(name string, close func() error) (err error) {
 		return fmt.Errorf("%s cleanup failed: %w", name, err)
 	}
 	return nil
+}
+
+// DescribeHTTP는 준비 시 고정한 등록에서 명세를 한 번 만들고 독립 복사본을 반환합니다.
+func (a *Application) DescribeHTTP() (description.HTTP, error) {
+	a.descriptionOnce.Do(func() {
+		a.description, a.descriptionErr = endpoint.Describe(a.config.Routes, a.config.HTTP, a.config.Validator)
+	})
+	if a.descriptionErr != nil {
+		return description.HTTP{}, a.descriptionErr
+	}
+	data, err := json.Marshal(a.description)
+	if err != nil {
+		return description.HTTP{}, err
+	}
+	var result description.HTTP
+	err = json.Unmarshal(data, &result)
+	return result, err
 }

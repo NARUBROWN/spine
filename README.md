@@ -144,3 +144,31 @@ FOSS for All 로고의 저작권은 FOSS for All에 있습니다(© FOSS for All
 ## 라이선스
 
 MIT
+
+## 컨트롤러에 경로와 콜백 선언하기
+
+현재 소스의 `v0.7.0-preview.5` 후보는 `api.Controller.RegisterRoutes`와 `input.Path[T]`, `input.Query[T]`, `input.Body[T]`를 제공합니다. 생성자를 `app.Constructor`에 등록하면 컨트롤러 내부에서 경로를 수집합니다. 이 문구는 공개 태그나 CLI 배포 완료를 뜻하지 않습니다. [작성 예제와 명세 조회 경계](docs/migration/controller-routes.md)를 확인하세요.
+
+```go
+package controller
+
+import (
+    "github.com/NARUBROWN/spine/pkg/api"
+    "github.com/NARUBROWN/spine/pkg/httpx"
+    "github.com/NARUBROWN/spine/pkg/input"
+)
+
+type UserController struct{}
+type CreateUser struct { Name string `json:"name"` }
+type User struct { Name string `json:"name"` }
+
+func NewUserController() *UserController { return &UserController{} }
+
+var _ api.Controller = (*UserController)(nil)
+
+func (c *UserController) RegisterRoutes(r *api.Registry) {
+    r.POST("/users", func(a input.Body[CreateUser]) httpx.Response[User] {
+        return httpx.Response[User]{Body: User{Name: a.Name}}
+    })
+}
+```

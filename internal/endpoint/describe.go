@@ -37,24 +37,24 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 	seen := map[string]bool{}
 	var inputIssues []boot.ConfigIssue
 	for index, spec := range routes {
-		meta, err := router.NewHandlerMeta(spec.Handler)
+		meta, err := router.Meta(spec)
 		if err != nil {
 			return result, err
 		}
-		inputIssues = append(inputIssues, DTOParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", index), spec.Path)...)
+		inputIssues = append(inputIssues, HandlerDTOParameterIssues(meta, fmt.Sprintf("Routes[%d]", index), spec.Path)...)
 	}
 	if err := boot.ValidationError(inputIssues...); err != nil {
 		return result, err
 	}
 	for index, spec := range routes {
-		meta, _ := router.NewHandlerMeta(spec.Handler)
-		inputIssues = append(inputIssues, ValidationParameterIssues(meta.Method, fmt.Sprintf("Routes[%d]", index), validator)...)
+		meta, _ := router.Meta(spec)
+		inputIssues = append(inputIssues, HandlerValidationParameterIssues(meta, fmt.Sprintf("Routes[%d]", index), validator)...)
 	}
 	if err := boot.ValidationError(inputIssues...); err != nil {
 		return result, err
 	}
 	for _, spec := range routes {
-		meta, err := router.NewHandlerMeta(spec.Handler)
+		meta, err := router.Meta(spec)
 		if err != nil {
 			return result, err
 		}
@@ -73,7 +73,7 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 			return result, fmt.Errorf("duplicate HTTP route: %s", key)
 		}
 		seen[key] = true
-		route := description.Route{Method: spec.Method, Path: fullPath, Handler: meta.ControllerType.String() + "." + meta.Method.Name, Inputs: []description.Input{}, Returns: []description.Return{}}
+		route := description.Route{Method: spec.Method, Path: fullPath, Handler: meta.HandlerName(), Inputs: []description.Input{}, Returns: []description.Return{}}
 		if result.PathsOnly {
 			result.Routes = append(result.Routes, route)
 			continue
@@ -84,7 +84,7 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 				pathKeys = append(pathKeys, segment[1:])
 			}
 		}
-		for _, parameter := range resolver.Parameters(meta.Method, pathKeys) {
+		for _, parameter := range resolver.HandlerParameters(meta, pathKeys) {
 			input := description.Input{Index: parameter.Index, Type: parameter.Type.String()}
 			matched := false
 			for _, candidate := range Resolvers(nil) {
@@ -94,15 +94,16 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 				matched = true
 				switch candidate.(type) {
 				case *resolver.InputDTOResolver:
-					payload, source, _ := inputbinding.DTO(parameter.Type)
-					if _, err := inputbinding.Fields(payload, source); err != nil {
+					plan, _, planErr := inputbinding.Inspect(parameter.Type)
+					payload, source := plan.Payload, plan.Source
+					if err := planErr; err != nil {
 						return result, err
 					}
 					if !c.inputSchemaAvailable(payload) {
 						input.Binding, input.Validation = source, validator != nil
 						break
 					}
-					structure := c.structure(payload, "request/"+source).(map[string]any)
+					structure := c.structure(payload, "request/"+source, plan.Fields).(map[string]any)
 					required := map[string]bool{}
 					if names, ok := structure["required"].([]string); ok {
 						for _, name := range names {
@@ -195,8 +196,8 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 				c.diagnostic("PATH_TYPE_UNRESOLVED", route.Handler, "A registered path key has no typed path argument.")
 			}
 		}
-		for i := 0; i < meta.Method.Type.NumOut(); i++ {
-			t := meta.Method.Type.Out(i)
+		for i := 0; i < meta.FunctionType().NumOut(); i++ {
+			t := meta.FunctionType().Out(i)
 			output := description.Return{Type: t.String(), Kind: "unresolved"}
 			for _, candidate := range Returns() {
 				if !candidate.Supports(t) {

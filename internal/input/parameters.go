@@ -22,6 +22,12 @@ type Field struct {
 // DTO는 일반 구조체의 path, query 또는 header 태그에서 입력 출처를 식별합니다.
 // 타입 이름과 제네릭 래퍼에 의존하지 않습니다. 혼합 출처는 Fields에서 거부합니다.
 func DTO(t reflect.Type) (reflect.Type, string, bool) {
+	if source, wrapped := Wrapper(t); wrapped {
+		if source != "body" && t.Kind() == reflect.Pointer && t.Elem().Kind() == reflect.Struct {
+			return t.Elem(), source, true
+		}
+		return nil, "", false
+	}
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
@@ -66,7 +72,7 @@ func DTO(t reflect.Type) (reflect.Type, string, bool) {
 }
 
 // Fields는 명시한 출처의 태그만 선택합니다. 중복 이름과 지원하지 않는 타입은 거부합니다.
-func Fields(t reflect.Type, source string) ([]Field, error) {
+func Fields(t reflect.Type, source string, defaults ...bool) ([]Field, error) {
 	if t.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("%s DTO must contain a struct", source)
 	}
@@ -110,6 +116,9 @@ func Fields(t reflect.Type, source string) ([]Field, error) {
 			}
 			if name == "-" {
 				continue
+			}
+			if name == "" && len(defaults) > 0 && defaults[0] {
+				name = LowerCamel(f.Name)
 			}
 			if name == "" {
 				return fmt.Errorf("%s DTO field %s has no %s tag; bind it explicitly or exclude it with '-'", source, f.Name, source)

@@ -20,8 +20,8 @@ func (*InputDTOResolver) Supports(parameter ParameterMeta) bool {
 }
 
 func (r *InputDTOResolver) Resolve(ctx core.ExecutionContext, parameter ParameterMeta) (any, error) {
-	t, source, _ := input.DTO(parameter.Type)
-	fields, err := input.Fields(t, source)
+	plan, _, err := input.Inspect(parameter.Type)
+	t, source, fields := plan.Payload, plan.Source, plan.Fields
 	if err != nil {
 		return nil, err
 	}
@@ -52,8 +52,12 @@ func (r *InputDTOResolver) Resolve(ctx core.ExecutionContext, parameter Paramete
 	if bindingErr != nil {
 		return nil, &httperr.InputError{Source: source, Cause: httperr.BadRequest(bindingErr.Error())}
 	}
-	if err := ValidateHTTPDTO(ctx.Context(), r.Validator, value.Interface(), source, source); err != nil {
+	validationContext := ctx.Context()
+	if plan.Wrapped {
+		validationContext = validation.WithFieldNameMapper(validationContext, plan.FieldName)
+	}
+	if err := ValidateHTTPDTO(validationContext, r.Validator, value.Interface(), source, source); err != nil {
 		return nil, err
 	}
-	return value.Interface(), nil
+	return value.Convert(parameter.Type).Interface(), nil
 }

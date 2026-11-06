@@ -148,3 +148,31 @@ FOSS for Allロゴの著作権はFOSS for Allに帰属します（© FOSS for Al
 ## ライセンス
 
 MIT
+
+## コントローラー内でルートを宣言する
+
+現在の `v0.7.0-preview.5` ソース候補では、`api.Controller.RegisterRoutes` と `input.Path[T]`、`input.Query[T]`、`input.Body[T]` を使用できます。具象コントローラーのコンストラクターを `app.Constructor` に登録すると、内部のルートを収集します。別のルート表は不要です。公開タグや CLI のリリース完了を示すものではありません。[コード例と仕様取得の条件](docs/migration/controller-routes.md)を参照してください。
+
+```go
+package controller
+
+import (
+    "github.com/NARUBROWN/spine/pkg/api"
+    "github.com/NARUBROWN/spine/pkg/httpx"
+    "github.com/NARUBROWN/spine/pkg/input"
+)
+
+type UserController struct{}
+type CreateUser struct { Name string `json:"name"` }
+type User struct { Name string `json:"name"` }
+
+func NewUserController() *UserController { return &UserController{} }
+
+var _ api.Controller = (*UserController)(nil)
+
+func (c *UserController) RegisterRoutes(r *api.Registry) {
+    r.POST("/users", func(a input.Body[CreateUser]) httpx.Response[User] {
+        return httpx.Response[User]{Body: User{Name: a.Name}}
+    })
+}
+```

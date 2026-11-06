@@ -210,11 +210,14 @@ func customCodec(t reflect.Type) bool {
 	return false
 }
 
-func (c *catalog) structure(t reflect.Type, mode string) any {
+func (c *catalog) structure(t reflect.Type, mode string, planned ...[]input.Field) any {
 	fields := wireFields(t, strings.HasSuffix(mode, "/form"))
 	for _, source := range []string{"path", "query", "header"} {
 		if strings.HasSuffix(mode, "/"+source) {
 			selected, err := input.Fields(t, source)
+			if len(planned) > 0 {
+				selected, err = planned[0], nil
+			}
 			if err != nil {
 				c.diagnostic("INPUT_FIELDS_UNRESOLVED", t.String(), err.Error())
 			}
