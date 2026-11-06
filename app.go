@@ -99,6 +99,16 @@ func WithEventSettlementTimeout(timeout time.Duration) EventAdapterOption {
 	return func(options *boot.EventOptions) { options.SettlementTimeout = timeout }
 }
 
+// WithEventPublisherErrorHistory는 발행기 정리 실패의 보관 건수와 기간을 설정합니다.
+func WithEventPublisherErrorHistory(policy boot.CleanupErrorHistoryOptions) EventAdapterOption {
+	return func(options *boot.EventOptions) { options.PublisherErrorHistory = policy }
+}
+
+// WithEventConsumerErrorHistory는 Reader 정리 실패의 보관 건수와 기간을 설정합니다.
+func WithEventConsumerErrorHistory(policy boot.CleanupErrorHistoryOptions) EventAdapterOption {
+	return func(options *boot.EventOptions) { options.ConsumerErrorHistory = policy }
+}
+
 // WithValidator는 모든 기본 DTO 리졸버가 사용할 검증기를 등록합니다.
 // 생략하면 검증하지 않으며, 명시적으로 등록한 nil은 앱 사전 검사에서 거부합니다.
 func WithValidator(validator validation.Validator) Option {

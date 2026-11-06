@@ -32,7 +32,11 @@ def go_tests(options, directory, env):
             events.append(json.loads(line))
         except ValueError:
             pass
-    if result.returncode or any(e.get("Action") == "skip" for e in events) or not any(e.get("Action") == "run" and e.get("Test") for e in events):
+    skipped = any(e.get("Action") == "skip" and e.get("Test") for e in events)
+    ran = any(e.get("Action") == "run" and e.get("Test") for e in events)
+    passed = any(e.get("Action") == "pass" and e.get("Test") for e in events)
+    failed = any(e.get("Action") == "fail" for e in events)
+    if result.returncode or skipped or failed or not ran or not passed:
         raise ReleaseError("Public verification requires actual test execution with no failures or skips")
 
 

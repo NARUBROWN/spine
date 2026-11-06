@@ -2,7 +2,7 @@
 
 HTTP v3에서는 Spine이 본문, 경로와 쿼리를 해석합니다. 플랫폼은 원시 요청, 응답 writer와 서버 수명을 제공합니다. 일반 DTO, 컨트롤러와 인터셉터 순서는 유지합니다.
 
-HTTP v3는 코어 `v0.7.0-preview.3`, Echo `v0.2.0-preview.2`, net/http `v0.1.0-preview.1`부터 공개됐습니다. 이 소스의 전체 Preview 검증 조합은 코어 `v0.7.0-preview.4`, Echo `v0.2.0-preview.3`, net/http `v0.1.0-preview.2`와 [릴리스 운영](../../RELEASING.md#정책과-소스-ci)에 나열한 나머지 네 플랫폼입니다. 각 플랫폼은 같은 코어 태그로 검증합니다. HTTP v2 구현은 v3 코어에 그대로 연결할 수 없습니다.
+HTTP v3는 코어 `v0.7.0-preview.3`, Echo `v0.2.0-preview.2`, net/http `v0.1.0-preview.1`부터 공개됐습니다. 이 소스의 Preview 코어 후보는 `v0.7.0-preview.5`입니다. 소스 CI는 Echo `v0.2.0-preview.3`, net/http `v0.1.0-preview.2`와 [릴리스 운영](../../RELEASING.md#정책과-소스-ci)에 나열한 나머지 네 플랫폼을 검증 대상으로 고정합니다. 새 코어의 공개 발행과 전체 조합 검증은 릴리스 절차에 따라 별도로 완료해야 합니다. HTTP v2 구현은 v3 코어에 그대로 연결할 수 없습니다.
 
 ## CLI로 생성하고 업데이트하기
 
@@ -119,3 +119,7 @@ python3 scripts/verify-http-platforms.py \
 ```
 
 이 검증은 Go 1.25.5에서 동일한 DTO 결과, 오류와 검증 호출, multipart 파일 수명, native 후처리의 종료 대기, WebSocket과 runtime OpenAPI를 검사합니다. TLS는 실제 HTTPS 요청, 인증서 선택, 신뢰 검증 실패와 연결 해제 취소를 확인합니다. JSON 공백과 줄바꿈, HTTP/2와 성능은 비교하지 않습니다.
+
+## 경로 값의 인코딩된 슬래시
+
+HTTP 라우터는 원시 경로의 `/`로 세그먼트를 나눈 뒤 각 값을 한 번 디코딩합니다. `/files/:name`에서 `/files/a%2Fb`는 `name="a/b"`, `/files/a%252Fb`는 `name="a%2Fb"`로 전달됩니다. 실제 `/files/a/b`는 여전히 세그먼트가 세 개이므로 이 경로와 매칭되지 않습니다. Path DTO와 기존 path 인자는 같은 값을 사용하며 잘못된 percent 인코딩은 400으로 거부합니다.

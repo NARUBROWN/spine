@@ -148,6 +148,8 @@ func TestEventPreflightHasNoConstructionSideEffects(t *testing.T) {
 		{{Name: "", Factory: factory}},
 		{{Name: "same", Factory: factory}, {Name: "same", Factory: factory}},
 		{{Name: "events", Factory: factory, Options: boot.EventOptions{SettlementTimeout: -time.Second}}},
+		{{Name: "events", Factory: factory, Options: boot.EventOptions{PublisherErrorHistory: boot.CleanupErrorHistoryOptions{MaxEntries: -1}}}},
+		{{Name: "events", Factory: factory, Options: boot.EventOptions{ConsumerErrorHistory: boot.CleanupErrorHistoryOptions{MaxAge: -time.Second}}}},
 		{{Name: "events", Factory: factory, Options: boot.EventOptions{ConsumerRetry: boot.ConsumerRetryOptions{MaxAttempts: -1}}}},
 	} {
 		if err := Validate(Config{EventAdapters: bindings}); err == nil {

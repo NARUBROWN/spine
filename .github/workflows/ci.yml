@@ -94,6 +94,8 @@ jobs:
         run: |
           python3 scripts/update-openapi-ui.py --check
           python3 -m unittest discover -s scripts/openapi-ui -p 'test_*.py' -v
+          node --test scripts/openapi-ui/test_bundle.cjs
+          python3 -m unittest discover -s scripts -p 'test_verifiers.py' -v
 
       - name: Run go vet
         run: |

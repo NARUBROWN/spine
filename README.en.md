@@ -82,6 +82,8 @@ From Spine `v0.6.0`, `spine new` is the official way to create a project. Follow
 
 Create a project and start its development server.
 
+The example below installs the stable CLI with `@latest`; its recipe may target a different core version from this Preview checkout. For HTTP v3 Preview, replace the install command with `go install github.com/NARUBROWN/spine-cli/cmd/spine@preview` and follow the [HTTP v3 migration guide](docs/migration/http-v3.md). `@preview` follows a moving branch. Pin a published CLI tag for reproducible installs, and check `spine version` and the generated `go.mod`.
+
 ```sh
 go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
 spine version

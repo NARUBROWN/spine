@@ -31,6 +31,60 @@ type rejectingHandshakeInterceptor struct {
 	lastHost   string
 }
 
+type shutdownGateConnection struct {
+	closeOnlyConnection
+	entered chan<- struct{}
+	release <-chan struct{}
+}
+
+func (c *shutdownGateConnection) WriteClose(_ int, _ string, deadline time.Time) error {
+	c.entered <- struct{}{}
+	timer := time.NewTimer(time.Until(deadline))
+	defer timer.Stop()
+	select {
+	case <-c.release:
+		return nil
+	case <-timer.C:
+		return context.DeadlineExceeded
+	}
+}
+
+func TestRuntimeStopClosesConnectionsConcurrently(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	entered, release := make(chan struct{}, 3), make(chan struct{})
+	runtime := &Runtime{ctx: ctx, cancel: cancel, options: normalizedWebSocketOptions{WriteTimeout: 5 * time.Second}, conns: make(map[string]*trackedConn)}
+	var connections []*shutdownGateConnection
+	for _, id := range []string{"first", "second", "third"} {
+		conn := &shutdownGateConnection{entered: entered, release: release}
+		connections = append(connections, conn)
+		runtime.conns[id] = &trackedConn{conn: conn}
+	}
+	done := make(chan struct{})
+	go func() { runtime.Stop(); close(done) }()
+	defer func() {
+		close(release)
+		<-done
+		for _, conn := range connections {
+			if conn.closes != 1 {
+				t.Errorf("connection Close count = %d", conn.closes)
+			}
+		}
+	}()
+	for range connections {
+		select {
+		case <-entered:
+		case <-time.After(time.Second):
+			t.Fatal("one stalled close must not prevent the other connections from closing")
+		}
+	}
+	select {
+	case <-done:
+		t.Fatal("Stop returned before connection cleanup completed")
+	default:
+	}
+}
+
 func (i *rejectingHandshakeInterceptor) PreHandshake(ctx core.WebSocketHandshakeContext, _ core.HandlerMeta) error {
 	i.calls.Add(1)
 	i.lastHeader = ctx.Header("Authorization")

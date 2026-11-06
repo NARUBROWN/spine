@@ -251,6 +251,38 @@ func TestMatchPathMismatch(t *testing.T) {
 	}
 }
 
+func TestRouterMapsCapturedValuesToMatchedRouteKeys(t *testing.T) {
+	for _, reverse := range []bool{false, true} {
+		routes := []string{"/users/:id", "/users/:userID/posts/:postID", "/users/:owner/settings/:section"}
+		if reverse {
+			routes[0], routes[2] = routes[2], routes[0]
+		}
+		r := NewRouter()
+		for _, path := range routes {
+			r.Register("GET", path, testHandlerMeta("List"))
+		}
+		for _, tc := range []struct {
+			path string
+			want map[string]string
+		}{
+			{"/users/7", map[string]string{"id": "7"}},
+			{"/users/7/posts/9", map[string]string{"userID": "7", "postID": "9"}},
+			{"/users/7/settings/profile", map[string]string{"owner": "7", "section": "profile"}},
+		} {
+			ctx := newTestExecutionContext("GET", tc.path)
+			meta, err := r.Route(ctx)
+			if err != nil || !reflect.DeepEqual(ctx.Params(), tc.want) {
+				t.Fatalf("reverse=%v path=%s params=%v want=%v err=%v", reverse, tc.path, ctx.Params(), tc.want, err)
+			}
+			for _, key := range meta.PathKeys {
+				if _, ok := ctx.Params()[key]; !ok {
+					t.Fatalf("missing matched route key %q", key)
+				}
+			}
+		}
+	}
+}
+
 func (c *testExecutionContext) SetRoute(params map[string]string, pathKeys []string) {
 	c.params = params
 	c.pathKeys = pathKeys

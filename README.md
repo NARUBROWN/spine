@@ -4,7 +4,7 @@
 
 > **릴리스 채널: Preview → RC → Stable.** 이 소스의 대상 버전은 `v0.7.0`입니다. [출시 절차](RELEASING.md)와 [경로 변경 안내](docs/migration/v0.7.0.md)를 확인하고, 공개 버전은 [태그](https://github.com/NARUBROWN/spine/tags)와 [Actions 검증 기록](https://github.com/NARUBROWN/spine/actions)에서 확인하세요.
 
-HTTP v3는 공통 입력 파서와 관리 서버의 TLS 설정을 제공합니다. 이 소스의 Preview 조합은 코어 `v0.7.0-preview.4`, Echo `v0.2.0-preview.3`, net/http `v0.1.0-preview.2`입니다. CLI `v0.4.3-preview.4`는 두 HTTP 플랫폼의 생성과 업데이트를 지원합니다. [HTTP v3 전환](docs/migration/http-v3.md)과 [전체 버전 조합](RELEASING.md#정책과-소스-ci)을 확인하세요.
+HTTP v3는 공통 입력 파서와 관리 서버의 TLS 설정을 제공합니다. 이 소스의 Preview 코어 후보는 `v0.7.0-preview.5`입니다. 소스 CI의 플랫폼 검증 대상은 Echo `v0.2.0-preview.3`, net/http `v0.1.0-preview.2`입니다. CLI `v0.4.3-preview.4`는 두 HTTP 플랫폼의 생성과 업데이트를 지원합니다. [HTTP v3 전환](docs/migration/http-v3.md)과 [전체 버전 조합](RELEASING.md#정책과-소스-ci)을 확인하세요.
 
 > **v0.6.5**는 HTTP, WebSocket, event, validator의 공개 계약과 독립 구현 선택을 하나로 통합합니다. 코어는 표준 라이브러리만 사용합니다. [v0.6.5 전환 안내](docs/migration/v0.6.5.md)를 참고하세요.
 
@@ -73,6 +73,8 @@ Spine `v0.6.0`부터 공식 프로젝트 생성 경로는 `spine new`입니다. 
 `new`는 설치한 CLI에 포함된 검증 레시피를 따라 Spine, Echo 플랫폼과 Echo의 호환 버전 조합을 구성합니다. 선택된 버전은 생성된 `go.mod`에서 확인합니다.
 
 프로젝트를 생성하고 개발 서버를 실행합니다.
+
+아래 예시는 `@latest`로 정식 CLI를 설치합니다. 이 CLI의 레시피가 현재 체크아웃의 Preview 코어를 생성한다고 보장하지는 않습니다. HTTP v3 Preview를 사용할 때는 설치 명령을 `go install github.com/NARUBROWN/spine-cli/cmd/spine@preview`로 바꾸고 [HTTP v3 전환 안내](docs/migration/http-v3.md)를 따르세요. `@preview`는 이동하는 브랜치이므로 재현 가능한 설치에는 공개된 CLI 태그를 지정하고, `spine version`과 생성된 `go.mod`를 확인하세요.
 
 ```sh
 go install github.com/NARUBROWN/spine-cli/cmd/spine@latest

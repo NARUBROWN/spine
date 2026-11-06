@@ -478,6 +478,38 @@ func TestManagedShutdownAndListenerOwnership(t *testing.T) {
 	}
 }
 
+func TestFastShutdownBeforeNativeServeClosesOwnedListener(t *testing.T) {
+	for _, e := range engines[1:] {
+		t.Run(e.name, func(t *testing.T) {
+			claimed, resume := make(chan struct{}), make(chan struct{})
+			a := newAdapter(t, e, func(s contract.HTTPContext) error { return s.Writer().WriteString(200, "ok") }, hooks{beforeServe: func() { close(claimed); <-resume }}, -1)
+			listener, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer listener.Close()
+			var once sync.Once
+			defer once.Do(func() { close(resume) })
+			done := make(chan error, 1)
+			go func() { done <- a.Serve(listener) }()
+			receive(t, claimed)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			if err := a.Shutdown(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if conn, err := net.DialTimeout("tcp", listener.Addr().String(), 100*time.Millisecond); err == nil {
+				_ = conn.Close()
+				t.Fatal("listener accepts connections after Shutdown completed")
+			}
+			once.Do(func() { close(resume) })
+			if err := receive(t, done); !errors.Is(err, contract.ErrServerClosed) {
+				t.Fatalf("Serve after concurrent shutdown = %v", err)
+			}
+		})
+	}
+}
+
 func TestClientDisconnectMatchesDeclaredCapability(t *testing.T) {
 	for _, e := range engines {
 		t.Run(e.name, func(t *testing.T) {

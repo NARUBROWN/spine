@@ -57,7 +57,7 @@ def run(args, cwd, env, output, name, results, timeout=180):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
     env = os.environ.copy()
     env["GOWORK"] = "off"
@@ -89,7 +89,7 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix="spine-strict-stream-") as temporary:
         root = Path(temporary)
-        output = args.output_dir.resolve() if args.output_dir else root / "results"
+        output = args.output_dir.resolve()
         output.mkdir(parents=True, exist_ok=True)
         try:
             baseline = run(

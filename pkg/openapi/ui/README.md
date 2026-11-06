@@ -80,6 +80,7 @@ python3 scripts/update-openapi-ui.py --check-upstream
 python3 scripts/update-openapi-ui.py --update
 python3 scripts/update-openapi-ui.py --check
 python3 -m unittest discover -s scripts/openapi-ui -p 'test_*.py' -v
+node --test scripts/openapi-ui/test_bundle.cjs
 go run ./scripts/test test ./... -count=1
 go -C test test . -run '^TestOpenAPI' -count=1
 ```
@@ -87,5 +88,7 @@ go -C test test . -run '^TestOpenAPI' -count=1
 Go 통합 테스트의 플랫폼 의존성 구성은 [테스트 안내](../../../test/README.md)를 따릅니다. 업데이트 후에는 실제 브라우저에서도 외부 요청을 차단하고 두 화면의 렌더링과 Swagger API 호출을 확인하세요.
 
 업데이트 스크립트는 npm의 설치 스크립트를 실행하지 않습니다. 공식 npm registry의 SHA-512 무결성을 확인한 뒤, 고정 버전과 파일 SHA-256을 manifest에 기록합니다. 고정 배포본을 다시 가져오려면 `--refresh`를 사용하세요. CI의 `--check`는 네트워크 없이 자산, 고지와 입력 파일의 변경을 검사합니다.
+
+Swagger UI 5.34.1에는 base64url 예제, 지수 표기의 multipleOf 표시와 contains 예제 생성을 고치는 로컬 패치가 있습니다. `scripts/openapi-ui/swagger-ui-fixes.json`의 패치를 `--refresh`에서 다시 적용하며 원본 배포본의 무결성과 라이선스 고지는 보존합니다. 다른 버전으로 업데이트할 때는 패치의 필요성과 적용 위치를 재검토해야 합니다. 버전이나 패치 대상이 달라지면 업데이트를 중단합니다.
 
 자동 업데이트 범위는 Swagger UI 5.x와 ReDoc 2.x의 안정 버전입니다. 라이선스 변경이나 미검토 라이선스는 업데이트를 중단합니다. 새 메이저는 `--check-upstream` 결과에 별도로 표시합니다. 현재 ReDoc 래퍼는 2.x의 `Redoc.init` API를 사용하므로 3.x 전환에는 별도 통합과 브라우저 검증이 필요합니다.

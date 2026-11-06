@@ -54,6 +54,8 @@ func checkConsumer(factory eventcontract.Factory) error {
 
 커널은 발행 전에 도메인 객체를 직렬화합니다. 어댑터는 받은 바이트를 해석하거나 다시 직렬화하지 않습니다. JSON은 사용할 수 있는 본문 형식 중 하나이며 계약 자체는 특정 형식을 강제하지 않습니다. 브로커별 본문 크기나 메타데이터 제약에 맞지 않는 입력은 전송 전에 오류로 반환해야 합니다.
 
+raw `[]byte` 핸들러에는 nil 본문을 그대로 전달해 tombstone과 빈 본문을 구분합니다. 본문이 필요한 DTO 핸들러는 nil 본문을 거부할 수 있습니다. [본문 처리와 정리 실패 이력 옵션](../../docs/migration/event-platforms.md)을 참고하세요.
+
 `Payload`와 `Metadata`는 참조 데이터입니다. 수신 메시지의 참조는 해당 전달의 `Ack`/`Nack`이 끝나거나 `Reader.Close`가 시작되기 전까지 유효합니다. 커널은 이 데이터를 변경하지 않으며 더 오래 보관하려면 복사합니다. `Delivery.Message()`는 그 수명 안에서 같은 메시지 뷰를 반환합니다.
 
 ## 생성과 readiness

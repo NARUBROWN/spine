@@ -104,8 +104,11 @@ func TestPayloadResolver(t *testing.T) {
 		t.Fatalf("payload가 잘못되었습니다: %s", string(val.([]byte)))
 	}
 
-	if _, err := r.Resolve(newTestConsumerContext("order.created", nil), pm); err == nil {
-		t.Fatal("nil payload는 에러여야 합니다")
+	for _, payload := range [][]byte{nil, {}} {
+		value, err := r.Resolve(newTestConsumerContext("order.created", payload), pm)
+		if err != nil || !reflect.DeepEqual(value, payload) {
+			t.Fatalf("raw payload must preserve nil versus empty: %v %v", value, err)
+		}
 	}
 	if _, err := r.Resolve(&nonConsumerContext{}, pm); err == nil {
 		t.Fatal("ConsumerRequestContext가 아니면 에러여야 합니다")
@@ -123,6 +126,10 @@ func TestPayloadResolver_ConvertsNamedByteSlice(t *testing.T) {
 	}
 	if got, ok := val.(payload); !ok || string(got) != "hello" {
 		t.Fatalf("요청한 named []byte 타입으로 반환되어야 합니다: %T %v", val, val)
+	}
+	val, err = r.Resolve(newTestConsumerContext("order.created", nil), pm)
+	if got, ok := val.(payload); err != nil || !ok || got != nil {
+		t.Fatalf("named tombstone must retain its type and nil value: %T %v %v", val, val, err)
 	}
 }
 

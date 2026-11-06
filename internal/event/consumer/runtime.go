@@ -10,7 +10,9 @@ import (
 	"time"
 
 	eventadapter "github.com/NARUBROWN/spine/contract/event"
+	"github.com/NARUBROWN/spine/internal/event/cleanup"
 	"github.com/NARUBROWN/spine/internal/pipeline"
+	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 type runnerFactory interface {
@@ -22,24 +24,25 @@ type contextRunnerFactory interface {
 }
 
 type Runtime struct {
-	registry    *Registry
-	factory     runnerFactory
-	pipeline    *pipeline.Pipeline
-	lifecycleMu sync.Mutex
-	prepared    map[string]Reader
-	cleanupMu   sync.Mutex
-	cleanupOnce sync.Once
-	cleanupErr  error
-	workers     sync.WaitGroup
-	started     bool
-	stopped     bool
-	stopOnce    sync.Once
-	doneOnce    sync.Once
-	cancel      context.CancelFunc
-	errChan     chan error
-	done        chan struct{}
-	waitRetry   func(context.Context, time.Duration) bool
-	jitterDelay func(time.Duration, float64) time.Duration
+	registry       *Registry
+	factory        runnerFactory
+	pipeline       *pipeline.Pipeline
+	lifecycleMu    sync.Mutex
+	prepared       map[string]Reader
+	cleanupMu      sync.Mutex
+	cleanupOnce    sync.Once
+	cleanupErr     error
+	cleanupHistory cleanup.History
+	workers        sync.WaitGroup
+	started        bool
+	stopped        bool
+	stopOnce       sync.Once
+	doneOnce       sync.Once
+	cancel         context.CancelFunc
+	errChan        chan error
+	done           chan struct{}
+	waitRetry      func(context.Context, time.Duration) bool
+	jitterDelay    func(time.Duration, float64) time.Duration
 }
 
 const (
@@ -88,7 +91,7 @@ func NewTransportRetryPolicy(initialDelay, maxDelay time.Duration, multiplier, j
 	return policy
 }
 
-func NewRuntime(registry *Registry, factory runnerFactory, pipeline *pipeline.Pipeline) *Runtime {
+func NewRuntime(registry *Registry, factory runnerFactory, pipeline *pipeline.Pipeline, history ...boot.CleanupErrorHistoryOptions) *Runtime {
 	if registry == nil {
 		panic("consumer: registry cannot be nil")
 	}
@@ -100,13 +103,14 @@ func NewRuntime(registry *Registry, factory runnerFactory, pipeline *pipeline.Pi
 	}
 
 	return &Runtime{
-		registry:    registry,
-		factory:     factory,
-		pipeline:    pipeline,
-		errChan:     make(chan error, max(1, len(registry.Registrations()))),
-		done:        make(chan struct{}),
-		waitRetry:   waitForRetry,
-		jitterDelay: jitteredDelay,
+		registry:       registry,
+		factory:        factory,
+		pipeline:       pipeline,
+		errChan:        make(chan error, max(1, len(registry.Registrations()))),
+		done:           make(chan struct{}),
+		waitRetry:      waitForRetry,
+		jitterDelay:    jitteredDelay,
+		cleanupHistory: cleanup.NewHistory(history...),
 	}
 }
 
@@ -445,6 +449,9 @@ func (r *Runtime) Stop() error {
 		for _, reader := range prepared {
 			_ = r.closeReader(reader)
 		}
+		r.cleanupMu.Lock()
+		r.cleanupErr = r.cleanupHistory.Take()
+		r.cleanupMu.Unlock()
 		r.finish()
 	})
 	r.cleanupMu.Lock()
@@ -467,8 +474,9 @@ func (r *Runtime) closeReader(reader Reader) (err error) {
 		}
 		if err != nil {
 			r.cleanupMu.Lock()
-			r.cleanupErr = errors.Join(r.cleanupErr, err)
+			r.cleanupHistory.Add(err)
 			r.cleanupMu.Unlock()
+			log.Printf("[Event Consumer] Reader cleanup failed: %v", err)
 		}
 	}()
 	return reader.Close()

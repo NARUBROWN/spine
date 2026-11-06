@@ -2,26 +2,29 @@ package publish
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"log"
 	"sync"
 
 	eventadapter "github.com/NARUBROWN/spine/contract/event"
+	"github.com/NARUBROWN/spine/internal/event/cleanup"
+	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 // PlatformPublisher는 실패한 발행기를 분리하고 다음 호출에서 새 자원을 준비합니다.
 // 실패한 메시지를 자동 재발행하지 않으며 정상 발행의 병렬성은 유지합니다.
 type PlatformPublisher struct {
-	mu           sync.Mutex
-	factory      eventadapter.Factory
-	current      *publisherInstance
-	instances    []*publisherInstance
-	creating     chan struct{}
-	cancelCreate context.CancelFunc
-	closing      bool
-	closeOnce    sync.Once
-	closeDone    chan struct{}
-	closeErr     error
+	mu             sync.Mutex
+	factory        eventadapter.Factory
+	current        *publisherInstance
+	instances      []*publisherInstance
+	creating       chan struct{}
+	cancelCreate   context.CancelFunc
+	closing        bool
+	closeOnce      sync.Once
+	closeDone      chan struct{}
+	closeErr       error
+	cleanupHistory cleanup.History
 }
 
 type publisherInstance struct {
@@ -33,8 +36,8 @@ type publisherInstance struct {
 	done      chan struct{}
 }
 
-func NewPlatformPublisher(factory eventadapter.Factory, native eventadapter.Publisher) *PlatformPublisher {
-	p := &PlatformPublisher{factory: factory, closeDone: make(chan struct{})}
+func NewPlatformPublisher(factory eventadapter.Factory, native eventadapter.Publisher, history ...boot.CleanupErrorHistoryOptions) *PlatformPublisher {
+	p := &PlatformPublisher{factory: factory, closeDone: make(chan struct{}), cleanupHistory: cleanup.NewHistory(history...)}
 	instance := &publisherInstance{owner: p, native: native, done: make(chan struct{})}
 	p.current = instance
 	p.instances = []*publisherInstance{instance}
@@ -167,7 +170,8 @@ func (i *publisherInstance) startClose() {
 			p := i.owner
 			p.mu.Lock()
 			if err != nil {
-				p.closeErr = errors.Join(p.closeErr, err)
+				p.cleanupHistory.Add(err)
+				log.Printf("[Event Publisher] Cleanup failed: %v", err)
 			}
 			// 닫은 native 인스턴스를 장시간 실행하는 App에 계속 보관하지 않습니다.
 			for index, instance := range p.instances {
@@ -211,6 +215,9 @@ func (p *PlatformPublisher) Close(ctx context.Context) error {
 			for _, instance := range instances {
 				<-instance.done
 			}
+			p.mu.Lock()
+			p.closeErr = p.cleanupHistory.Take()
+			p.mu.Unlock()
 		}()
 	})
 	select {

@@ -16,6 +16,23 @@ spec.loader.exec_module(updater)
 
 
 class UpdaterTests(unittest.TestCase):
+    def test_local_swagger_fixes_reproduce_the_embedded_bundle(self):
+        manifest = json.loads(updater.MANIFEST.read_text())
+        entry = manifest["distributions"]["swagger-ui-dist"]
+        patches = json.loads((updater.TOOLS / "swagger-ui-fixes.json").read_text())
+        shipped = (updater.ROOT / "pkg/openapi/ui/swaggerui/assets/swagger-ui-bundle.js").read_bytes()
+        self.assertTrue(shipped.startswith(patches["notice"].encode()))
+        original = shipped[len(patches["notice"].encode()):]
+        for patch in reversed(patches["replacements"]):
+            self.assertEqual(original.count(patch["after"].encode()), 1)
+            original = original.replace(patch["after"].encode(), patch["before"].encode())
+        self.assertEqual(hashlib.sha256(original).hexdigest(), patches["upstream_sha256"])
+        self.assertEqual(updater.patch_swagger_bundle(original, entry["version"]), shipped)
+        with self.assertRaisesRegex(ValueError, "version"):
+            updater.patch_swagger_bundle(original, "5.34.2")
+        with self.assertRaisesRegex(ValueError, "reviewed upstream bundle"):
+            updater.patch_swagger_bundle(shipped, entry["version"])
+
     def test_license_expressions_require_a_complete_permitted_choice(self):
         for expression in ["MIT", "(MPL-2.0 OR Apache-2.0)", "(MIT OR GPL-3.0) AND BSD-3-Clause"]:
             self.assertTrue(updater.permitted(expression), expression)

@@ -126,6 +126,8 @@ func validate(config Config) ([]boot.OpenAPIResource, error) {
 		}
 		names[binding.Name] = true
 		issues = append(issues, binding.Options.ConsumerRetry.ValidateIssues(path+".ConsumerRetry")...)
+		issues = append(issues, binding.Options.PublisherErrorHistory.ValidateIssues(path+".PublisherErrorHistory")...)
+		issues = append(issues, binding.Options.ConsumerErrorHistory.ValidateIssues(path+".ConsumerErrorHistory")...)
 		if binding.Options.SettlementTimeout < 0 {
 			issues = append(issues, boot.ConfigIssue{Path: path + ".SettlementTimeout", Code: "EVENT_SETTLEMENT_TIMEOUT_INVALID", Message: "Settlement timeout cannot be negative.", Hint: "Use zero for the default or a positive duration."})
 		}

@@ -28,3 +28,13 @@ func TestConfigErrorFormatting(t *testing.T) {
 		t.Fatalf("구조화 오류 형식이 다릅니다:\n%s", err)
 	}
 }
+
+func TestCleanupErrorHistoryOptionsRejectNegativeBounds(t *testing.T) {
+	if issues := (CleanupErrorHistoryOptions{}).ValidateIssues("History"); len(issues) != 0 {
+		t.Fatal(issues)
+	}
+	issues := (CleanupErrorHistoryOptions{MaxEntries: -1, MaxAge: -time.Second}).ValidateIssues("History")
+	if len(issues) != 2 || issues[0].Path != "History.MaxEntries" || issues[1].Path != "History.MaxAge" {
+		t.Fatal(issues)
+	}
+}

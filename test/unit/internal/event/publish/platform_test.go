@@ -8,6 +8,7 @@ import (
 	"time"
 
 	eventadapter "github.com/NARUBROWN/spine/contract/event"
+	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 type platformFactoryStub struct {
@@ -121,5 +122,25 @@ func TestPlatformPublisherFactoryPanicDoesNotBlockClose(t *testing.T) {
 	defer cancel()
 	if err := p.Close(ctx); err != nil {
 		t.Fatalf("실패한 생성이 Close를 막았습니다: %v", err)
+	}
+}
+
+func TestPlatformPublisherCleanupHistoryUsesConfiguredBounds(t *testing.T) {
+	first, last := errors.New("old cleanup"), errors.New("recent cleanup")
+	old := &nativePublisherStub{closeErr: first, send: func(eventadapter.Message) error { return errors.New("send failed") }}
+	next := &nativePublisherStub{closeErr: last, send: func(eventadapter.Message) error { return nil }}
+	p := NewPlatformPublisher(platformFactoryStub{create: func(context.Context) (eventadapter.Publisher, error) { return next, nil }}, old, boot.CleanupErrorHistoryOptions{MaxEntries: 1})
+	retired := p.current
+	_ = p.Publish(context.Background(), eventadapter.Message{})
+	<-retired.done
+	if err := p.Publish(context.Background(), eventadapter.Message{}); err != nil {
+		t.Fatal(err)
+	}
+	got := p.Close(context.Background())
+	if errors.Is(got, first) || !errors.Is(got, last) {
+		t.Fatal(got)
+	}
+	if p.Close(context.Background()) != got {
+		t.Fatal("Close result changed")
 	}
 }
