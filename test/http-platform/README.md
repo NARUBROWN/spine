@@ -9,7 +9,7 @@ python3 scripts/verify-http-platforms.py \
   --output-dir /tmp/spine-http-platform-proof
 ```
 
-명령은 코어 저장소 루트에서 실행합니다. 로컬 net/http 모듈의 `v0.0.0`은 테스트 의존성 자리표시자이며 공개 태그를 뜻하지 않습니다. 스크립트는 임시 modfile의 replace로 세 작업트리를 연결하고 Go 1.25.5에서 race와 vet을 실행합니다. 제품 및 테스트 모듈의 원래 manifest는 변경하지 않습니다.
+명령은 코어 저장소 루트에서 실행합니다. 로컬 후보 조합은 코어 `v0.7.0-preview.3`, Echo `v0.2.0-preview.2`, net/http `v0.1.0-preview.1`이며 아직 발행하지 않았습니다. 스크립트는 임시 modfile의 replace로 세 작업트리를 연결하고 Go 1.25.5에서 race와 vet을 실행합니다. 제품 및 테스트 모듈의 원래 manifest는 변경하지 않습니다.
 
 검사 범위는 다음과 같습니다.
 

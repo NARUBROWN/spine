@@ -6,7 +6,9 @@
 
 ## 정책과 소스 CI
 
-`.github/release-policy.json`의 `channels`에 각 채널의 코어와 다섯 플랫폼 태그를 고정합니다. 현재 계획은 코어 `v0.7.0-preview.1`, `v0.7.0-rc.1`, `v0.7.0`과 플랫폼 `v0.2.0-preview.1`, `v0.2.0-rc.1`, `v0.2.0`입니다. 다음 후보를 만들 때는 태그를 재사용하지 않고 해당 조합의 번호를 갱신합니다.
+`.github/release-policy.json`의 `channels`에 각 채널의 코어와 다섯 플랫폼 태그를 고정합니다. 현재 로컬 Preview 후보는 코어 `v0.7.0-preview.3`, Echo `v0.2.0-preview.2`이며 나머지 네 플랫폼은 `v0.2.0-preview.1`입니다. RC는 코어 `v0.7.0-rc.1`과 플랫폼 `v0.2.0-rc.1`, 정식은 코어 `v0.7.0`과 플랫폼 `v0.2.0`을 대상으로 합니다. 후보 지정은 태그 발행이나 공개 설치 성공을 뜻하지 않습니다. 다음 후보는 이미 발행한 번호보다 커야 합니다.
+
+HTTP v3로 이행한 독립 net/http 플랫폼은 `v0.1.0-preview.1` 로컬 후보입니다. 현재 다섯 플랫폼의 발행 정책에는 포함하지 않았습니다. 이 모듈의 공개 저장소, 발행 정책과 전체 조합 편입은 별도로 준비해야 합니다.
 
 새 코어 태그가 아직 없을 때 소스 CI는 `ci_sources`의 전체 커밋 SHA와 현재 코어를 임시 go.work로 연결합니다. 버전별 임시 replace는 미발행 태그의 메타데이터 조회도 로컬 소스로 연결하며 저장소의 go.mod에는 넣지 않습니다. 이 결과를 공개 설치 성공으로 기록하지 않습니다. 플랫폼 소스 CI도 `ci_core`의 전체 커밋 SHA를 사용합니다.
 
@@ -59,7 +61,7 @@ Preview 전체 조합 완료 후 72시간이 지나야 RC를 발행할 수 있�
 채널별 의존 버전 변경은 전용 승격 브랜치에서 준비합니다. RC 예시는 다음과 같습니다.
 
 ```sh
-git switch -c promote/rc/v0.7.0-rc.1 v0.7.0-preview.1
+git switch -c promote/rc/v0.7.0-rc.1 v0.7.0-preview.3
 python3 scripts/release/pin_channel.py --channel rc
 python3 scripts/release/pin_channel.py --channel rc --apply
 ```
