@@ -253,7 +253,7 @@ func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResourc
 		log.Println("[Bootstrap] Mounting HTTP adapter")
 
 		// WebSocket 런타임은 업그레이드 이후의 연결과 메시지를 계속 소유합니다.
-		var upgrades []adapter.UpgradeRoute
+		var upgrades []adapter.NetHTTPUpgradeRoute
 		if config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0 {
 			wsRegistrations := config.WebSocketRegistry.Registrations()
 			log.Println("[Bootstrap] Configuring WebSocket runtime")
@@ -278,7 +278,7 @@ func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResourc
 
 			for _, reg := range wsRegistrations {
 				log.Printf("[Bootstrap] Registered WebSocket route: %s", reg.Path)
-				upgrades = append(upgrades, adapter.UpgradeRoute{
+				upgrades = append(upgrades, adapter.NetHTTPUpgradeRoute{
 					Path: reg.Path,
 					Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 						application.wsRuntime.HandleConn(w, r, reg)
@@ -287,10 +287,13 @@ func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResourc
 			}
 		}
 
-		server, err := config.HTTPAdapterFactory.New(adapter.Config{
+		httpConfig := adapter.Config{
 			Options: serverOptions(*config.HTTP),
-			Execute: func(scope adapter.HTTPContext) error {
-				if resource, ok := openAPIResources[scope.Path()]; ok && (scope.Method() == http.MethodGet || scope.Method() == http.MethodHead) {
+			Serve:   adapter.ServeOptions{TLS: config.HTTP.TLS},
+			Execute: func(scope adapter.HTTPContext) (executionErr error) {
+				request := transport.NewHTTPContext(scope, config.HTTP.MultipartMemoryBytes)
+				defer func() { executionErr = errors.Join(executionErr, request.Cleanup()) }()
+				if resource, ok := openAPIResources[request.Path()]; ok && (scope.Method() == http.MethodGet || scope.Method() == http.MethodHead) {
 					scope.Writer().SetHeader("Content-Type", resource.ContentType)
 					scope.Writer().SetHeader("Cache-Control", "no-cache")
 					scope.Writer().SetHeader("X-Content-Type-Options", "nosniff")
@@ -299,7 +302,7 @@ func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResourc
 					}
 					return scope.Writer().WriteString(http.StatusOK, resource.Body)
 				}
-				if len(openAPIDocument) > 0 && scope.Path() == config.HTTP.OpenAPI.DocumentPath() && (scope.Method() == http.MethodGet || scope.Method() == http.MethodHead) {
+				if len(openAPIDocument) > 0 && request.Path() == config.HTTP.OpenAPI.DocumentPath() && (scope.Method() == http.MethodGet || scope.Method() == http.MethodHead) {
 					scope.Writer().SetHeader("Cache-Control", "no-cache")
 					if scope.Method() == http.MethodHead {
 						scope.Writer().SetHeader("Content-Type", "application/json")
@@ -307,24 +310,24 @@ func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResourc
 					}
 					return scope.Writer().WriteJSON(http.StatusOK, append([]byte(nil), openAPIDocument...))
 				}
-				return httpPipeline.Execute(transport.NewHTTPContext(scope))
+				return httpPipeline.Execute(request)
 			},
-			Upgrades: upgrades,
-		})
+		}
+		var server adapter.HTTPAdapter
+		if len(upgrades) > 0 {
+			server, err = config.HTTPAdapterFactory.(adapter.NetHTTPUpgradeFactory).NewWithNetHTTPUpgrades(httpConfig, upgrades)
+		} else {
+			server, err = config.HTTPAdapterFactory.New(httpConfig)
+		}
 		if !isNilHTTPValue(server) {
 			application.server = server
 		}
 		if err != nil {
 			return nil, fmt.Errorf("[Bootstrap] failed to configure HTTP adapter: %w", err)
 		}
-		if application.server == nil {
-			return nil, fmt.Errorf("%w: factory returned a nil adapter", adapter.ErrInvalidAdapter)
+		if err := adapter.ValidateAdapter(server, config.HTTPAdapterFactory.Capabilities()); err != nil {
+			return nil, err
 		}
-		nativeHandler := server.Handler()
-		if isNilHTTPValue(nativeHandler) {
-			return nil, fmt.Errorf("%w: factory returned a nil handler", adapter.ErrInvalidAdapter)
-		}
-		application.handler = newPreparedHandler(nativeHandler)
 	}
 
 	if err := ctx.Err(); err != nil {

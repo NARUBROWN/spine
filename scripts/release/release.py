@@ -20,7 +20,7 @@ SHA = re.compile(r"[0-9a-f]{40}\Z")
 WORKFLOWS = {"preview": "preview.yml", "rc": "rc.yml", "stable": "release.yml"}
 CORE = "github.com/NARUBROWN/spine"
 PLATFORMS = {CORE + suffix for suffix in (
-    "-echo-platform", "-gorilla-platform", "-kafka-platform", "-rabbitmq-platform", "-validator-playground")}
+    "-echo-platform", "-nethttp-platform", "-gorilla-platform", "-kafka-platform", "-rabbitmq-platform", "-validator-playground")}
 MANAGED = {CORE, *PLATFORMS}
 
 
@@ -81,7 +81,7 @@ def validate_policy(policy):
         core_base = base
         modules = selected.get("modules", {})
         if kind == "core" and (base != policy["next_version"] or set(modules) != PLATFORMS):
-            raise ReleaseError("The core must pin all five platform versions for each channel")
+            raise ReleaseError("The core must pin all official platform versions for each channel")
         if kind == "platform" and modules:
             raise ReleaseError("Platform releases specify only the core dependency")
         for module, version in modules.items():
@@ -95,7 +95,7 @@ def validate_policy(policy):
         if module not in PLATFORMS or not SHA.fullmatch(sha):
             raise ReleaseError("Source CI requires full commit SHAs for official platforms")
     if kind == "core" and set(policy.get("ci_sources", {})) != PLATFORMS:
-        raise ReleaseError("Core source CI requires commits for all five platforms")
+        raise ReleaseError("Core source CI requires commits for all official platforms")
     if kind == "platform" and not SHA.fullmatch(policy.get("ci_core", "")):
         raise ReleaseError("Platform source CI requires the full core commit SHA")
 
@@ -176,7 +176,7 @@ def check_module(policy, channel, root):
         raise ReleaseError("The core module must not depend on platform modules")
     if policy["kind"] == "core":
         expected = {CORE: components(policy, channel)["core_version"], **components(policy, channel)["modules"]}
-        for name in ("test", "test/openapi", "test/platform-e2e", "cmd/demo", "cmd/reference", "examples/security-config"):
+        for name in ("test", "test/openapi", "test/platform-e2e", "test/http-platform", "cmd/demo", "cmd/reference", "examples/security-config"):
             child = json.loads(run("go", "mod", "edit", "-json", cwd=root / name, env=dict(os.environ, GOWORK="off")))
             for item in (child.get("Require") or []):
                 if item["Path"] in MANAGED and item["Version"] != expected[item["Path"]]:

@@ -8,164 +8,250 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
-	adapter "github.com/NARUBROWN/spine/contract/http"
+	httpcontract "github.com/NARUBROWN/spine/contract/http"
 )
 
-// 외부 패키지에서 공개 계약만으로 구현할 수 있는지 컴파일 시 확인합니다.
-var (
-	_ adapter.Factory     = (*testFactory)(nil)
-	_ adapter.HTTPAdapter = (*testHTTPAdapter)(nil)
-)
-
-type testFactory struct {
-	capabilities      adapter.Capabilities
-	capabilitiesCalls int
-	newCalls          int
+type factory struct {
+	caps httpcontract.Capabilities
 }
 
-func (f *testFactory) Capabilities() adapter.Capabilities {
-	f.capabilitiesCalls++
-	return f.capabilities
+func (f *factory) Capabilities() httpcontract.Capabilities { return f.caps }
+func (*factory) New(httpcontract.Config) (httpcontract.HTTPAdapter, error) {
+	panic("validation must not construct an adapter")
 }
 
-func (f *testFactory) New(adapter.Config) (adapter.HTTPAdapter, error) {
-	f.newCalls++
-	return nil, errors.New("validation must not call Factory.New")
+type upgradeFactory struct{ factory }
+
+func (*upgradeFactory) NewWithNetHTTPUpgrades(httpcontract.Config, []httpcontract.NetHTTPUpgradeRoute) (httpcontract.HTTPAdapter, error) {
+	panic("validation must not construct an upgrade adapter")
 }
 
-// testHTTPAdapter는 실제 서버가 아니라 외부 구현의 메서드 시그니처를 확인하는 fixture입니다.
-type testHTTPAdapter struct {
-	handler  http.Handler
-	serve    func(net.Listener) error
-	shutdown func(context.Context) error
+// neutralAdapter는 net/http handler 없이 필수 계약을 구현합니다.
+type neutralAdapter struct{}
+
+func (*neutralAdapter) Serve(net.Listener, ...httpcontract.ServeOption) error {
+	panic("validation must not start a server")
+}
+func (*neutralAdapter) StopAccepting() { panic("validation must not stop requests") }
+func (*neutralAdapter) Shutdown(context.Context) error {
+	panic("validation must not shut down a server")
 }
 
-func (a *testHTTPAdapter) Handler() http.Handler              { return a.handler }
-func (a *testHTTPAdapter) Serve(l net.Listener) error         { return a.serve(l) }
-func (a *testHTTPAdapter) Shutdown(ctx context.Context) error { return a.shutdown(ctx) }
-
-func TestValidateFactory(t *testing.T) {
-	tests := []struct {
-		name         string
-		capabilities adapter.Capabilities
-		required     adapter.Requirements
-		wantErr      error
-		wantDetails  []string
-	}{
-		{name: "HTTP_only", capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion}},
-		{name: "WebSocket_supported", capabilities: fullCapabilities(), required: adapter.Requirements{WebSocketUpgrade: true}},
-		{name: "extra_capabilities_allowed", capabilities: fullCapabilities()},
-		{name: "missing_version", wantErr: adapter.ErrInvalidAdapter, wantDetails: []string{adapter.ContractVersion}},
-		{name: "different_version", capabilities: adapter.Capabilities{ContractVersion: "spine.http-adapter/v1"}, wantErr: adapter.ErrInvalidAdapter, wantDetails: []string{"spine.http-adapter/v1", adapter.ContractVersion}},
-		{name: "version_checked_before_features", capabilities: adapter.Capabilities{ContractVersion: "spine.http-adapter/v1"}, required: adapter.Requirements{WebSocketUpgrade: true}, wantErr: adapter.ErrInvalidAdapter},
-		{name: "WebSocket_unsupported", capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion}, required: adapter.Requirements{WebSocketUpgrade: true}, wantErr: adapter.ErrUnsupportedCapability, wantDetails: []string{"WebSocketUpgrade"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			factory := &testFactory{capabilities: tt.capabilities}
-			err := adapter.ValidateFactory(factory, tt.required)
-			if tt.wantErr == nil {
-				if err != nil {
-					t.Fatalf("지원되는 구성은 검사를 통과해야 합니다: %v", err)
-				}
-			} else {
-				if !errors.Is(err, tt.wantErr) {
-					t.Fatalf("오류 종류 = %v, 기대값 = %v", err, tt.wantErr)
-				}
-				wrapped := fmt.Errorf("HTTP setup: %w", err)
-				if !errors.Is(wrapped, tt.wantErr) {
-					t.Fatalf("상위 오류로 감싸도 원래 종류를 확인할 수 있어야 합니다: %v", wrapped)
-				}
-				for _, detail := range tt.wantDetails {
-					if !strings.Contains(err.Error(), detail) {
-						t.Fatalf("오류에 진단 정보 %q가 없습니다: %v", detail, err)
-					}
-				}
-			}
-			if factory.capabilitiesCalls != 1 || factory.newCalls != 0 {
-				t.Fatalf("기능 선언만 한 번 조회해야 합니다: Capabilities=%d, New=%d", factory.capabilitiesCalls, factory.newCalls)
-			}
-		})
-	}
+type nativeAdapter struct {
+	neutralAdapter
+	handler http.Handler
 }
 
-func TestValidateFactoryRejectsNilFactories(t *testing.T) {
-	tests := []struct {
+func (a *nativeAdapter) Handler() http.Handler { return a.handler }
+
+type nilHandler struct{}
+
+func (*nilHandler) ServeHTTP(http.ResponseWriter, *http.Request) {
+	panic("validation must not serve a request")
+}
+
+func capabilities() httpcontract.Capabilities {
+	return httpcontract.Capabilities{ContractVersion: httpcontract.ContractVersion}
+}
+
+func config() httpcontract.Config {
+	return httpcontract.Config{Execute: func(httpcontract.HTTPContext) error {
+		panic("validation must not execute a request")
+	}}
+}
+
+func TestFactoryRejectsInvalidAssemblyBeforeConstruction(t *testing.T) {
+	var nilFactory *factory
+	cases := []struct {
 		name    string
-		factory adapter.Factory
+		factory httpcontract.Factory
+		want    error
 	}{
-		{name: "interface"},
-		{name: "pointer", factory: (*testFactory)(nil)},
-		{name: "function", factory: functionFactory(nil)},
-		{name: "map", factory: mapFactory(nil)},
-		{name: "slice", factory: sliceFactory(nil)},
-		{name: "channel", factory: channelFactory(nil)},
+		{"nil", nil, httpcontract.ErrInvalidAdapter},
+		{"typed nil", nilFactory, httpcontract.ErrInvalidAdapter},
+		{"v2", &factory{caps: httpcontract.Capabilities{ContractVersion: "spine.http-adapter/v2"}}, httpcontract.ErrInvalidAdapter},
+		{"unknown version", &factory{caps: httpcontract.Capabilities{ContractVersion: "spine.http-adapter/v99"}}, httpcontract.ErrInvalidAdapter},
+		{"upgrade declaration without extension", &factory{caps: httpcontract.Capabilities{ContractVersion: httpcontract.ContractVersion, NetHTTPUpgrade: true}}, httpcontract.ErrInvalidAdapter},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := adapter.ValidateFactory(tt.factory, adapter.Requirements{})
-			if !errors.Is(err, adapter.ErrInvalidAdapter) || !strings.Contains(err.Error(), "nil") {
-				t.Fatalf("타입이 있는 nil도 factory 메서드 호출 전에 거부해야 합니다: %v", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := httpcontract.ValidateFactory(tc.factory, httpcontract.Requirements{}); !errors.Is(err, tc.want) {
+				t.Fatalf("ValidateFactory = %v, want %v", err, tc.want)
 			}
 		})
 	}
 }
 
-func TestValidateFactoryAcceptsNonNilFactoryKinds(t *testing.T) {
-	tests := []struct {
+func TestFactoryRequiresOnlySelectedOptionalFeatures(t *testing.T) {
+	f := &factory{caps: capabilities()}
+	if err := httpcontract.ValidateFactory(f, httpcontract.Requirements{}); err != nil {
+		t.Fatalf("engine without native net/http features: %v", err)
+	}
+	for _, required := range []httpcontract.Requirements{
+		{NetHTTPHandler: true},
+		{NetHTTPUpgrade: true},
+		{ClientDisconnectCancellation: true},
+	} {
+		if err := httpcontract.ValidateFactory(f, required); !errors.Is(err, httpcontract.ErrUnsupportedCapability) {
+			t.Fatalf("requirements %+v = %v", required, err)
+		}
+	}
+	caps := capabilities()
+	caps.NetHTTPHandler, caps.NetHTTPUpgrade, caps.ClientDisconnectCancellation = true, true, true
+	u := &upgradeFactory{factory{caps: caps}}
+	if err := httpcontract.ValidateFactory(u, httpcontract.Requirements{NetHTTPHandler: true, NetHTTPUpgrade: true, ClientDisconnectCancellation: true}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAdapterValidationKeepsNativeHandlerOptional(t *testing.T) {
+	if err := httpcontract.ValidateAdapter(&neutralAdapter{}, capabilities()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := httpcontract.NetHTTPHandler(&neutralAdapter{}); !errors.Is(err, httpcontract.ErrUnsupportedCapability) {
+		t.Fatalf("native helper = %v", err)
+	}
+	var nilAdapter *neutralAdapter
+	for _, adapter := range []httpcontract.HTTPAdapter{nil, nilAdapter} {
+		if err := httpcontract.ValidateAdapter(adapter, capabilities()); !errors.Is(err, httpcontract.ErrInvalidAdapter) {
+			t.Fatalf("nil adapter = %v", err)
+		}
+		if _, err := httpcontract.NetHTTPHandler(adapter); !errors.Is(err, httpcontract.ErrInvalidAdapter) {
+			t.Fatalf("nil native helper = %v", err)
+		}
+	}
+	caps := capabilities()
+	caps.NetHTTPHandler = true
+	if err := httpcontract.ValidateAdapter(&neutralAdapter{}, caps); !errors.Is(err, httpcontract.ErrInvalidAdapter) {
+		t.Fatalf("declared handler without provider = %v", err)
+	}
+}
+
+func TestNativeHandlerValidationRejectsTypedNil(t *testing.T) {
+	var nilPointer *nilHandler
+	var nilFunction http.HandlerFunc
+	caps := capabilities()
+	caps.NetHTTPHandler = true
+	for _, handler := range []http.Handler{nil, nilPointer, nilFunction} {
+		adapter := &nativeAdapter{handler: handler}
+		if _, err := httpcontract.NetHTTPHandler(adapter); !errors.Is(err, httpcontract.ErrInvalidAdapter) {
+			t.Fatalf("handler %T: %v", handler, err)
+		}
+		if err := httpcontract.ValidateAdapter(adapter, caps); !errors.Is(err, httpcontract.ErrInvalidAdapter) {
+			t.Fatalf("adapter with handler %T: %v", handler, err)
+		}
+	}
+	want := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("must not run") })
+	adapter := &nativeAdapter{handler: want}
+	if err := httpcontract.ValidateAdapter(adapter, caps); err != nil {
+		t.Fatal(err)
+	}
+	handler, err := httpcontract.NetHTTPHandler(adapter)
+	if err != nil || handler == nil {
+		t.Fatalf("handler = %v, error = %v", handler, err)
+	}
+}
+
+func TestUpgradeRouteValidationDoesNotInvokeHandlers(t *testing.T) {
+	var nilPointer *nilHandler
+	var nilFunction http.HandlerFunc
+	for _, route := range []httpcontract.NetHTTPUpgradeRoute{
+		{},
+		{Path: "/ws"},
+		{Handler: &nilHandler{}},
+		{Path: "/ws", Handler: nilPointer},
+		{Path: "/ws", Handler: nilFunction},
+	} {
+		if err := httpcontract.ValidateNetHTTPUpgradeRoutes([]httpcontract.NetHTTPUpgradeRoute{route}); !errors.Is(err, httpcontract.ErrInvalidAdapter) {
+			t.Fatalf("route %+v = %v", route, err)
+		}
+	}
+	if err := httpcontract.ValidateNetHTTPUpgradeRoutes([]httpcontract.NetHTTPUpgradeRoute{{Path: "/ws", Handler: &nilHandler{}}}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestConfigRejectsUnsupportedExplicitOptions(t *testing.T) {
+	cases := []struct {
 		name    string
-		factory adapter.Factory
+		options httpcontract.ServerOptions
+		support httpcontract.ServerOptionSupport
 	}{
-		{name: "value", factory: valueFactory{}},
-		{name: "pointer", factory: &testFactory{capabilities: fullCapabilities()}},
-		{name: "function", factory: functionFactory(func() {})},
-		{name: "map", factory: mapFactory{}},
-		{name: "slice", factory: sliceFactory{}},
-		{name: "channel", factory: make(channelFactory)},
+		{"DisableRecover", httpcontract.ServerOptions{DisableRecover: true}, httpcontract.ServerOptionSupport{DisableRecover: true}},
+		{"ReadHeaderTimeout", httpcontract.ServerOptions{ReadHeaderTimeout: time.Second}, httpcontract.ServerOptionSupport{ReadHeaderTimeout: true}},
+		{"ReadTimeout", httpcontract.ServerOptions{ReadTimeout: time.Second}, httpcontract.ServerOptionSupport{ReadTimeout: true}},
+		{"WriteTimeout", httpcontract.ServerOptions{WriteTimeout: time.Second}, httpcontract.ServerOptionSupport{WriteTimeout: true}},
+		{"IdleTimeout", httpcontract.ServerOptions{IdleTimeout: time.Second}, httpcontract.ServerOptionSupport{IdleTimeout: true}},
+		{"MaxHeaderBytes", httpcontract.ServerOptions{MaxHeaderBytes: 1024}, httpcontract.ServerOptionSupport{MaxHeaderBytes: true}},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := adapter.ValidateFactory(tt.factory, adapter.Requirements{WebSocketUpgrade: true})
-			if err != nil {
-				t.Fatalf("nil이 아닌 factory의 종류를 제한해서는 안 됩니다: %v", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := config()
+			cfg.Options = tc.options
+			if err := cfg.Validate(capabilities()); !errors.Is(err, httpcontract.ErrUnsupportedOption) || !strings.Contains(err.Error(), tc.name) {
+				t.Fatalf("unsupported option = %v", err)
+			}
+			caps := capabilities()
+			caps.ServerOptions = tc.support
+			if err := cfg.Validate(caps); err != nil {
+				t.Fatalf("supported option = %v", err)
 			}
 		})
 	}
 }
 
-func fullCapabilities() adapter.Capabilities {
-	return adapter.Capabilities{
-		ContractVersion:  adapter.ContractVersion,
-		WebSocketUpgrade: true,
+func TestConfigRejectsMalformedValuesBeforeSupportChecks(t *testing.T) {
+	for _, options := range []httpcontract.ServerOptions{
+		{ReadHeaderTimeout: -1}, {ReadTimeout: -1}, {WriteTimeout: -1}, {IdleTimeout: -1}, {MaxHeaderBytes: -1},
+	} {
+		cfg := config()
+		cfg.Options = options
+		if err := cfg.Validate(capabilities()); !errors.Is(err, httpcontract.ErrInvalidAdapter) || errors.Is(err, httpcontract.ErrUnsupportedOption) {
+			t.Fatalf("invalid option %+v = %v", options, err)
+		}
+	}
+	if err := (httpcontract.Config{}).Validate(capabilities()); !errors.Is(err, httpcontract.ErrInvalidAdapter) {
+		t.Fatalf("nil Execute = %v", err)
+	}
+	caps := capabilities()
+	caps.ContractVersion = "spine.http-adapter/v2"
+	if err := config().Validate(caps); !errors.Is(err, httpcontract.ErrInvalidAdapter) {
+		t.Fatalf("v2 configuration = %v", err)
 	}
 }
 
-// nil을 가질 수 있는 Go 타입도 factory를 구현할 수 있으므로 각각 검사합니다.
-type functionFactory func()
-type mapFactory map[string]any
-type sliceFactory []any
-type channelFactory chan struct{}
-type valueFactory struct{}
+func TestBodyLimitPolicyDoesNotResolveDefaultsOrRequireNativeOptions(t *testing.T) {
+	for _, limit := range []int64{-100, -1, 0, 1, 32 << 20} {
+		cfg := config()
+		cfg.Options.MaxBodyBytes = limit
+		if err := cfg.Validate(capabilities()); err != nil {
+			t.Fatalf("limit %d: %v", limit, err)
+		}
+		if cfg.Options.MaxBodyBytes != limit {
+			t.Fatalf("validation rewrote limit %d", limit)
+		}
+	}
+}
 
-func (functionFactory) Capabilities() adapter.Capabilities { return fullCapabilities() }
-func (mapFactory) Capabilities() adapter.Capabilities      { return fullCapabilities() }
-func (sliceFactory) Capabilities() adapter.Capabilities    { return fullCapabilities() }
-func (channelFactory) Capabilities() adapter.Capabilities  { return fullCapabilities() }
-func (valueFactory) Capabilities() adapter.Capabilities    { return fullCapabilities() }
-
-func (functionFactory) New(adapter.Config) (adapter.HTTPAdapter, error) {
-	panic("validation must not call Factory.New")
-}
-func (mapFactory) New(adapter.Config) (adapter.HTTPAdapter, error) {
-	panic("validation must not call Factory.New")
-}
-func (sliceFactory) New(adapter.Config) (adapter.HTTPAdapter, error) {
-	panic("validation must not call Factory.New")
-}
-func (channelFactory) New(adapter.Config) (adapter.HTTPAdapter, error) {
-	panic("validation must not call Factory.New")
-}
-func (valueFactory) New(adapter.Config) (adapter.HTTPAdapter, error) {
-	panic("validation must not call Factory.New")
+func TestRequestErrorKeepsClassificationAndOriginalCause(t *testing.T) {
+	for _, cause := range []error{context.Canceled, context.DeadlineExceeded, errors.New("reader failed")} {
+		original := &httpcontract.RequestError{Status: http.StatusRequestEntityTooLarge, Cause: cause}
+		wrapped := fmt.Errorf("body input: %w", original)
+		var input *httpcontract.RequestError
+		if !errors.As(wrapped, &input) || input.Status != http.StatusRequestEntityTooLarge || !errors.Is(wrapped, cause) {
+			t.Fatalf("cause not preserved: %v", wrapped)
+		}
+		if input.Error() != http.StatusText(http.StatusRequestEntityTooLarge) {
+			t.Fatalf("default message = %q", input.Error())
+		}
+	}
+	if text := (&httpcontract.RequestError{Status: 400, Message: "invalid body"}).Error(); text != "invalid body" {
+		t.Fatalf("message = %q", text)
+	}
+	wrapped := fmt.Errorf("serve result: %w", httpcontract.ErrServerClosed)
+	if !errors.Is(wrapped, httpcontract.ErrServerClosed) || errors.Is(wrapped, http.ErrServerClosed) {
+		t.Fatalf("normal exit is not an engine-neutral signal: %v", wrapped)
+	}
 }

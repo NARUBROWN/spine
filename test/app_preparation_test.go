@@ -64,15 +64,15 @@ func TestAppIntegration_PrepareCreatesIndependentDIAndRouteSnapshots(t *testing.
 	options.HTTP.GlobalPrefix = "/second"
 	app.Route("GET", "/later", (*preparationController).Generation)
 	second := prepareForHTTPTest(t, app, context.Background(), options)
-	assertPreparedHTTP(t, first.Handler(), "/first/generation", 200, "1")
-	assertPreparedHTTP(t, first.Handler(), "/first/later", 404, "")
-	assertPreparedHTTP(t, first.Handler(), "/second/generation", 404, "")
-	assertPreparedHTTP(t, second.Handler(), "/second/generation", 200, "2")
-	assertPreparedHTTP(t, second.Handler(), "/second/later", 200, "2")
+	assertPreparedHTTP(t, mustHTTPHandler(t, first), "/first/generation", 200, "1")
+	assertPreparedHTTP(t, mustHTTPHandler(t, first), "/first/later", 404, "")
+	assertPreparedHTTP(t, mustHTTPHandler(t, first), "/second/generation", 404, "")
+	assertPreparedHTTP(t, mustHTTPHandler(t, second), "/second/generation", 200, "2")
+	assertPreparedHTTP(t, mustHTTPHandler(t, second), "/second/later", 200, "2")
 	if err := first.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	assertPreparedHTTP(t, second.Handler(), "/second/generation", 200, "2")
+	assertPreparedHTTP(t, mustHTTPHandler(t, second), "/second/generation", 200, "2")
 }
 
 func TestAppIntegration_PrepareFreezesConsumerRegistrationsBeforeNativeHooks(t *testing.T) {
@@ -100,7 +100,7 @@ func TestAppIntegration_PrepareFreezesConsumerRegistrationsBeforeNativeHooks(t *
 		}
 		t.Fatal("다음 준비에서는 새 consumer의 누락된 DI를 검사해야 합니다")
 	}
-	assertPreparedHTTP(t, first.Handler(), "/generation", 200, "1")
+	assertPreparedHTTP(t, mustHTTPHandler(t, first), "/generation", 200, "1")
 }
 
 func TestAppIntegration_PrepareContextEndsBeforeHTTPHandlerLifetime(t *testing.T) {
@@ -114,7 +114,7 @@ func TestAppIntegration_PrepareContextEndsBeforeHTTPHandlerLifetime(t *testing.T
 	request := httptest.NewRequest("GET", "/context", nil)
 	request = request.WithContext(context.WithValue(request.Context(), preparationContextKey{}, "request"))
 	recorder := httptest.NewRecorder()
-	prepared.Handler().ServeHTTP(recorder, request)
+	mustHTTPHandler(t, prepared).ServeHTTP(recorder, request)
 	if recorder.Code != 200 || strings.TrimSpace(recorder.Body.String()) != "request" {
 		t.Fatalf("준비 context와 요청 context를 분리해야 합니다: %d %s", recorder.Code, recorder.Body.String())
 	}

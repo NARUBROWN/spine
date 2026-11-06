@@ -17,9 +17,15 @@ func TestOpenAPIURLUsesTheBoundPortAndLoopbackForWildcardAddresses(t *testing.T)
 		{"::", "http://[::1]:54321/internal/openapi.json"},
 		{"127.0.0.2", "http://127.0.0.2:54321/internal/openapi.json"},
 	} {
-		if actual := openAPIURL(&net.TCPAddr{IP: net.ParseIP(test.ip), Port: 54321}, "/internal/openapi.json"); actual != test.expected {
+		if actual := openAPIURL(&net.TCPAddr{IP: net.ParseIP(test.ip), Port: 54321}, "/internal/openapi.json", false); actual != test.expected {
 			t.Fatalf("실제 리스너 주소: %s", actual)
 		}
+	}
+}
+
+func TestOpenAPIURLUsesHTTPSForTLS(t *testing.T) {
+	if got := openAPIURL(&net.TCPAddr{IP: net.IPv4zero, Port: 8443}, "/openapi.json", true); got != "https://127.0.0.1:8443/openapi.json" {
+		t.Fatal(got)
 	}
 }
 

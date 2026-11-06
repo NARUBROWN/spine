@@ -1,5 +1,7 @@
 # Echo 플랫폼으로 전환하기
 
+> 이 문서는 이전 계약의 전환 기록을 포함합니다. 현재 작업 브랜치의 입력 처리와 준비 API 변경은 [HTTP v3 전환](http-v3.md)을 먼저 확인하세요.
+
 현재 소스에서는 공통 계약을 `contract/http`, `contract/event`, `contract/validator`로 정리합니다. HTTP의 이전 `adapter` 경로에는 같은 타입의 호환 별칭을 유지하므로 아래 v0.6.0 플랫폼 연결 예제는 계속 사용할 수 있습니다. 새 구현은 [공통 계약](../../contract/README.md)을 참고하세요.
 
 Spine `v0.6.0`부터 새 프로젝트의 공식 시작 경로는 Spine CLI의 `spine new`입니다. CLI가 Echo 플랫폼 연결과 의존성을 구성합니다. 이 문서는 기존 앱의 전환과 직접 플랫폼을 연결하는 방법을 설명합니다.

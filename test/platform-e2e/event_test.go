@@ -224,7 +224,7 @@ func TestFinalE2EHTTPValidatorBrokerConsumer(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer prepared.Close(context.Background())
-			srv := httptest.NewServer(prepared.Handler())
+			srv := httptest.NewServer(mustHTTPHandler(t, prepared))
 			defer srv.Close()
 			send := func(body string) int {
 				req, err := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+"/events", bytes.NewBufferString(body))

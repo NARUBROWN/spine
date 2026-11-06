@@ -76,7 +76,7 @@ func newTestHandlerFromAppWithOptions(t *testing.T, app spine.App, opts boot.Opt
 			t.Errorf("Spine 앱 종료 실패: %v", err)
 		}
 	})
-	return prepared.Handler()
+	return mustHTTPHandler(t, prepared)
 }
 
 func TestAppIntegration_JSON(t *testing.T) {

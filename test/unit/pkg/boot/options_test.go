@@ -1,9 +1,17 @@
 package boot
 
 import (
+	"crypto/tls"
 	"testing"
 	"time"
 )
+
+func TestHTTPOptionsRejectsTLSWithoutCertificateMaterial(t *testing.T) {
+	issues := (HTTPOptions{TLS: &tls.Config{}}).ValidateIssues("HTTP")
+	if len(issues) != 1 || issues[0].Path != "HTTP.TLS" || issues[0].Code != "HTTP_TLS_INVALID" {
+		t.Fatalf("TLS 설정 진단: %v", issues)
+	}
+}
 
 func TestWebSocketOptionsValidateIssues(t *testing.T) {
 	issues := (WebSocketOptions{

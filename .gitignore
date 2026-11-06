@@ -51,3 +51,5 @@ examples/security-config/*
 !docs/migration/v0.7.0.md
 
 __pycache__/
+
+!docs/migration/http-v3.md

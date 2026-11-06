@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -89,6 +88,9 @@ func (a *Application) run(ctx context.Context) error {
 		address := a.config.Address
 		if address == "" {
 			address = ":http"
+			if a.config.HTTP.TLS != nil {
+				address = ":https"
+			}
 		}
 		listener, err := net.Listen("tcp", address)
 		if err != nil {
@@ -101,14 +103,14 @@ func (a *Application) run(ctx context.Context) error {
 		httpErrors = make(chan error, 1)
 		log.Printf("[Bootstrap] Server listening on: %s", listener.Addr())
 		if a.config.HTTP != nil && a.config.HTTP.OpenAPI.Enabled {
-			log.Printf("[OpenAPI] %s", openAPIURL(listener.Addr(), a.config.HTTP.OpenAPI.DocumentPath()))
+			log.Printf("[OpenAPI] %s", openAPIURL(listener.Addr(), a.config.HTTP.OpenAPI.DocumentPath(), a.config.HTTP.TLS != nil))
 		}
 		go func() {
 			err := a.server.Serve(a.listener)
 			if err == nil {
 				err = fmt.Errorf("%w: Serve returned nil", adapter.ErrInvalidAdapter)
 			}
-			if !errors.Is(err, http.ErrServerClosed) {
+			if !errors.Is(err, adapter.ErrServerClosed) {
 				httpErrors <- err
 			}
 		}()
@@ -129,7 +131,7 @@ func (a *Application) run(ctx context.Context) error {
 	}
 }
 
-func openAPIURL(address net.Addr, path string) string {
+func openAPIURL(address net.Addr, path string, secure bool) string {
 	host, port, err := net.SplitHostPort(address.String())
 	if err != nil {
 		return path
@@ -141,5 +143,9 @@ func openAPIURL(address net.Addr, path string) string {
 			host = "::1"
 		}
 	}
-	return (&url.URL{Scheme: "http", Host: net.JoinHostPort(host, port), Path: path}).String()
+	scheme := "http"
+	if secure {
+		scheme = "https"
+	}
+	return (&url.URL{Scheme: scheme, Host: net.JoinHostPort(host, port), Path: path}).String()
 }

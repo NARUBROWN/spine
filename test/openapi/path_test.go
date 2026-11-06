@@ -122,12 +122,12 @@ func pathApplication(t *testing.T, configured bool) (http.Handler, map[string]an
 		t.Fatal(e)
 	}
 	t.Cleanup(func() { _ = p.Close(context.Background()) })
-	w := serve(p.Handler(), "GET", "/openapi.json", "", nil)
+	w := serve(mustHTTPHandler(t, p), "GET", "/openapi.json", "", nil)
 	doc, e := jsonschema.UnmarshalJSON(w.Body)
 	if e != nil {
 		t.Fatal(e)
 	}
-	return p.Handler(), doc.(map[string]any), c
+	return mustHTTPHandler(t, p), doc.(map[string]any), c
 }
 
 func TestFivePathFieldsUseNamesAndStaySeparateFromOtherSources(t *testing.T) {

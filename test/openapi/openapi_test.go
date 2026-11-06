@@ -119,7 +119,7 @@ func application(t *testing.T) (http.Handler, map[string]any) {
 			t.Error(err)
 		}
 	})
-	h := prepared.Handler()
+	h := mustHTTPHandler(t, prepared)
 	w := serve(h, "GET", "/openapi.json", "", nil)
 	if w.Code != 200 {
 		t.Fatalf("문서: %d %s", w.Code, w.Body)
@@ -416,12 +416,12 @@ func TestUnconfiguredValidatorSkipsRequiredRulesButStillRejectsConversionErrors(
 		path   string
 		status int
 	}{{"/search", 200}, {"/search?min_age=invalid", 400}} {
-		w := serve(prepared.Handler(), "POST", test.path, "", nil)
+		w := serve(mustHTTPHandler(t, prepared), "POST", test.path, "", nil)
 		if w.Code != test.status {
 			t.Fatalf("검증기 생략과 변환 오류 구분: %d %s", w.Code, w.Body)
 		}
 	}
-	doc := serve(prepared.Handler(), "GET", "/openapi.json", "", nil)
+	doc := serve(mustHTTPHandler(t, prepared), "GET", "/openapi.json", "", nil)
 	if !strings.Contains(doc.Body.String(), "VALIDATOR_NOT_CONFIGURED") || strings.Contains(doc.Body.String(), `"parameters"`) || strings.Contains(doc.Body.String(), `"components"`) {
 		t.Fatalf("상세 명세는 선택한 검증 설명 계약이 필요합니다: %s", doc.Body)
 	}

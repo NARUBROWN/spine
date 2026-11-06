@@ -39,6 +39,21 @@ def platform_policy(name):
 
 
 class ChannelPolicyTests(unittest.TestCase):
+    def test_nethttp_uses_an_independent_version_and_is_required_in_cohort(self):
+        policy = core_policy()
+        module = release.CORE + "-nethttp-platform"
+        for channel, suffix in (("preview", "-preview.1"), ("rc", "-rc.1"), ("stable", "")):
+            policy["channels"][channel]["modules"][module] = "v0.1.0" + suffix
+        release.validate_policy(policy)
+        for field in ("channels", "ci_sources"):
+            missing = copy.deepcopy(policy)
+            if field == "channels":
+                del missing[field]["preview"]["modules"][module]
+            else:
+                del missing[field][module]
+            with self.subTest(field=field), self.assertRaises(release.ReleaseError):
+                release.validate_policy(missing)
+
     def test_channel_selection_distinguishes_branches_from_complete_tags(self):
         expected = {"preview": "preview", "rc": "rc", "main": "stable",
                     "v0.7.0-preview.1": "preview", "v0.7.0-rc.1": "rc", "v0.7.0": "stable",
@@ -138,7 +153,7 @@ class ChannelPolicyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "go.mod").write_text("module " + release.CORE + "\n\ngo 1.26.0\n")
-            for name in ("test", "test/openapi", "test/platform-e2e", "cmd/demo", "cmd/reference", "examples/security-config"):
+            for name in ("test", "test/openapi", "test/platform-e2e", "test/http-platform", "cmd/demo", "cmd/reference", "examples/security-config"):
                 child = root / name
                 child.mkdir(parents=True, exist_ok=True)
                 (child / "go.mod").write_text("module example.com/child\n\ngo 1.26.0\n")
@@ -221,9 +236,9 @@ class CohortTests(unittest.TestCase):
         with patch.dict(os.environ, {"GITHUB_REF": "refs/heads/preview"}), patch.object(release, "verify_source_candidate", side_effect=self.verify):
             return release.complete_plan(self.github, self.policy, self.version, self.peers.__getitem__)
 
-    def test_completion_requires_all_five_exact_platform_manifests(self):
+    def test_completion_requires_all_exact_platform_manifests(self):
         plan = self.complete()
-        self.assertEqual(len(plan["platform_evidence"]), 5)
+        self.assertEqual(len(plan["platform_evidence"]), len(release.PLATFORMS))
         peer = next(iter(self.peers.values()))
         peer.tags.clear()
         with self.assertRaises(release.ReleaseError):

@@ -24,7 +24,7 @@ def prepare(root, output, published=False):
     validate_policy(policy)
     if policy["kind"] == "core":
         members = [root, *[root.parent / name.removeprefix("github.com/NARUBROWN/") for name in sorted(PLATFORMS)]]
-        members += [root / name for name in ("test", "test/openapi", "test/platform-e2e", "cmd/demo", "cmd/reference", "examples/security-config")]
+        members += [root / name for name in ("test", "test/openapi", "test/platform-e2e", "test/http-platform", "cmd/demo", "cmd/reference", "examples/security-config")]
     else:
         members = [root, root / "spine-core"]
     for member in members:

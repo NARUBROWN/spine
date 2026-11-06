@@ -202,7 +202,9 @@ func validate(config Config) ([]boot.OpenAPIResource, error) {
 	}
 	if config.HTTP != nil {
 		hasWebSocketRoutes := config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0
-		if err := adapter.ValidateFactory(config.HTTPAdapterFactory, adapter.Requirements{WebSocketUpgrade: hasWebSocketRoutes}); err != nil {
+		if err := adapter.ValidateFactory(config.HTTPAdapterFactory, adapter.Requirements{TLS: config.HTTP.TLS != nil, NetHTTPUpgrade: hasWebSocketRoutes}); err != nil {
+			adapterErrors = append(adapterErrors, err)
+		} else if err := (adapter.Config{Options: serverOptions(*config.HTTP), Serve: adapter.ServeOptions{TLS: config.HTTP.TLS}, Execute: func(adapter.HTTPContext) error { return nil }}).Validate(config.HTTPAdapterFactory.Capabilities()); err != nil {
 			adapterErrors = append(adapterErrors, err)
 		}
 		if hasWebSocketRoutes {
@@ -215,6 +217,9 @@ func validate(config Config) ([]boot.OpenAPIResource, error) {
 }
 
 func serverOptions(options boot.HTTPOptions) adapter.ServerOptions {
+	if options.MaxBodyBytes == 0 {
+		options.MaxBodyBytes = 32 << 20
+	}
 	return adapter.ServerOptions{
 		DisableRecover:    options.DisableRecover,
 		ReadHeaderTimeout: options.ReadHeaderTimeout,

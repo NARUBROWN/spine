@@ -4,7 +4,7 @@
 
 ## 적용 대상
 
-Spine, Spine CLI, Echo, Gorilla, Kafka, RabbitMQ, NATS와 validator-playground 8개 저장소에서 사용합니다. 문서 사이트, 테크블로그와 예제 프로젝트는 대상에서 제외합니다. 소비 저장소는 이 Action을 전체 커밋 SHA로 고정합니다. 코어 자체는 checkout한 로컬 Action을 사용합니다.
+Spine, Spine CLI, Echo, net/http, Gorilla, Kafka, RabbitMQ, NATS와 validator-playground 9개 저장소에서 사용합니다. 문서 사이트, 테크블로그와 예제 프로젝트는 대상에서 제외합니다. 소비 저장소는 이 Action을 전체 커밋 SHA로 고정합니다. 코어 자체는 checkout한 로컬 Action을 사용합니다.
 
 기존 발행 workflow의 태그 생성 성공 직후 호출합니다. `GITHUB_TOKEN`이 만든 tag/release 이벤트에 후속 workflow를 기대하지 않습니다. 태그 생성과 Release 게시, 배포를 자동으로 시작하지 않습니다.
 

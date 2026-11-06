@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/multipart"
 )
 
@@ -23,7 +24,7 @@ func (r *UploadedFilesResolver) Resolve(ctx core.ExecutionContext, parameterMeta
 
 	form, err := httpCtx.MultipartForm()
 	if err != nil {
-		return nil, err
+		return nil, &httperr.InputError{Source: "body", Cause: err}
 	}
 
 	var files []multipart.UploadedFile

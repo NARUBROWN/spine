@@ -87,7 +87,7 @@ func sourceApplication(t *testing.T, configured bool) http.Handler {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = prepared.Close(context.Background()) })
-	return prepared.Handler()
+	return mustHTTPHandler(t, prepared)
 }
 
 func TestHTTPValidationUsesBoundSourceAndWireNames(t *testing.T) {

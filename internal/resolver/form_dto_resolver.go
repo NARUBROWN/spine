@@ -39,7 +39,7 @@ func (r *FormDTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta Param
 
 	dto := reflect.New(parameterMeta.Type.Elem()).Interface()
 
-	// Echo의 폼 바인딩에 위임
+	// 요청별 공통 본문 파서에서 폼 값을 읽습니다.
 	if err := httpCtx.Bind(dto); err != nil {
 		return nil, &httperr.InputError{Source: "body", Cause: err}
 	}

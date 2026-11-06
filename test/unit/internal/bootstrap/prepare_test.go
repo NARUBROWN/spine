@@ -22,15 +22,37 @@ type preparationAdapter struct {
 	shutdown      func(context.Context) error
 	serveCalls    atomic.Int32
 	shutdownCalls atomic.Int32
+	gateOnce      sync.Once
+	gate          *preparedHandler
 }
 
-func (a *preparationAdapter) Handler() http.Handler { return a.handler }
-func (a *preparationAdapter) Serve(net.Listener) error {
+func (a *preparationAdapter) Handler() http.Handler {
+	a.gateOnce.Do(func() {
+		if a.handler != nil {
+			a.gate = newPreparedHandler(a.handler)
+		}
+	})
+	if a.gate == nil {
+		return nil
+	}
+	return a.gate
+}
+func (a *preparationAdapter) StopAccepting() {
+	a.Handler()
+	if a.gate != nil {
+		a.gate.stop()
+	}
+}
+func (a *preparationAdapter) Serve(net.Listener, ...adapter.ServeOption) error {
 	a.serveCalls.Add(1)
 	return errors.New("unexpected Serve")
 }
 func (a *preparationAdapter) Shutdown(ctx context.Context) error {
 	a.shutdownCalls.Add(1)
+	a.StopAccepting()
+	if a.gate != nil {
+		<-a.gate.drained
+	}
 	if a.shutdown != nil {
 		return a.shutdown(ctx)
 	}
@@ -64,7 +86,7 @@ func (t callbackTransport) Stop(ctx context.Context) error {
 
 func preparationFactory(a adapter.HTTPAdapter) *configurableFactory {
 	return &configurableFactory{
-		capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion},
+		capabilities: adapter.Capabilities{ContractVersion: adapter.ContractVersion, NetHTTPHandler: true},
 		newAdapter:   func(adapter.Config) (adapter.HTTPAdapter, error) { return a, nil },
 	}
 }
@@ -106,8 +128,8 @@ func TestPrepareDoesNotListenOrStartRuntime(t *testing.T) {
 	if server.serveCalls.Load() != 0 || transport.startCalls.Load() != 0 || transport.initCalls.Load() != 1 {
 		t.Fatal("준비는 Init만 수행하고 Serve와 Start를 실행하면 안 됩니다")
 	}
-	handler := prepared.Handler()
-	if handler == nil || handler != prepared.Handler() {
+	handler := preparationHandler(t, prepared)
+	if handler == nil || handler != preparationHandler(t, prepared) {
 		t.Fatal("같은 준비 진입점을 반환해야 합니다")
 	}
 	recorder := httptest.NewRecorder()
@@ -211,7 +233,7 @@ func TestPreparedCloseDeadlineAndConcurrentWaitsPreserveActiveRequest(t *testing
 	recorder := httptest.NewRecorder()
 	go func() {
 		defer close(requestDone)
-		prepared.Handler().ServeHTTP(recorder, httptest.NewRequest("GET", "/", nil))
+		preparationHandler(t, prepared).ServeHTTP(recorder, httptest.NewRequest("GET", "/", nil))
 	}()
 	select {
 	case <-started:
@@ -227,7 +249,7 @@ func TestPreparedCloseDeadlineAndConcurrentWaitsPreserveActiveRequest(t *testing
 		t.Fatal("시간 초과 후에도 진행 요청의 자원을 유지해야 합니다")
 	}
 	rejected := httptest.NewRecorder()
-	prepared.Handler().ServeHTTP(rejected, httptest.NewRequest("GET", "/", nil))
+	preparationHandler(t, prepared).ServeHTTP(rejected, httptest.NewRequest("GET", "/", nil))
 	if rejected.Code != 503 {
 		t.Fatalf("종료 중 새 요청 = %d", rejected.Code)
 	}
@@ -272,4 +294,13 @@ func TestPreparedCloseContinuesAfterCleanupPanicAndPreservesErrors(t *testing.T)
 	if next := prepared.Close(context.Background()); next != err {
 		t.Fatal("완료한 정리 결과를 보존해야 합니다")
 	}
+}
+
+func preparationHandler(t *testing.T, a *Application) http.Handler {
+	t.Helper()
+	h, err := adapter.NetHTTPHandler(a.HTTPAdapter())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return h
 }
