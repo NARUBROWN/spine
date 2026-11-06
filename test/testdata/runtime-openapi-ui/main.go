@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/NARUBROWN/spine"
 	"log"
 	"net"
 	"net/http"

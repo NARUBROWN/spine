@@ -119,3 +119,7 @@ python3 scripts/verify-http-platforms.py \
 ```
 
 이 검증은 Go 1.25.5에서 동일한 DTO 결과, 오류와 검증 호출, multipart 파일 수명, native 후처리의 종료 대기, WebSocket과 runtime OpenAPI를 검사합니다. TLS는 실제 HTTPS 요청, 인증서 선택, 신뢰 검증 실패와 연결 해제 취소를 확인합니다. JSON 공백과 줄바꿈, HTTP/2와 성능은 비교하지 않습니다.
+
+## 경로 값의 인코딩된 슬래시
+
+HTTP 라우터는 원시 경로의 `/`로 세그먼트를 나눈 뒤 각 값을 한 번 디코딩합니다. `/files/:name`에서 `/files/a%2Fb`는 `name="a/b"`, `/files/a%252Fb`는 `name="a%2Fb"`로 전달됩니다. 실제 `/files/a/b`는 여전히 세그먼트가 세 개이므로 이 경로와 매칭되지 않습니다. Path DTO와 기존 path 인자는 같은 값을 사용하며 잘못된 percent 인코딩은 400으로 거부합니다.

@@ -70,7 +70,7 @@ def main():
             print(json.dumps({name: results[name]}, ensure_ascii=False), flush=True)
     results["manifests_unchanged"] = before == {str(path): digest(path) for path in manifests}
     results["success"] = results["manifests_unchanged"] and all(
-        result["exit_code"] == 0 and result.get("vet_exit_code") == 0
+        result["exit_code"] == 0 and result["pass"] > 0 and result.get("vet_exit_code") == 0
         for result in results.values() if isinstance(result, dict))
     (output / "summary.json").write_text(json.dumps(results, ensure_ascii=False, indent=2) + "\n")
     return 0 if results["success"] else 1

@@ -74,6 +74,8 @@ Spine `v0.6.0`부터 공식 프로젝트 생성 경로는 `spine new`입니다. 
 
 프로젝트를 생성하고 개발 서버를 실행합니다.
 
+아래 예시는 `@latest`로 정식 CLI를 설치합니다. 이 CLI의 레시피가 현재 체크아웃의 Preview 코어를 생성한다고 보장하지는 않습니다. HTTP v3 Preview를 사용할 때는 설치 명령을 `go install github.com/NARUBROWN/spine-cli/cmd/spine@preview`로 바꾸고 [HTTP v3 전환 안내](docs/migration/http-v3.md)를 따르세요. `@preview`는 이동하는 브랜치이므로 재현 가능한 설치에는 공개된 CLI 태그를 지정하고, `spine version`과 생성된 `go.mod`를 확인하세요.
+
 ```sh
 go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
 spine version

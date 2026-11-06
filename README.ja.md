@@ -82,6 +82,8 @@ Spine `v0.6.0` 以降、公式のプロジェクト作成方法は `spine new` �
 
 プロジェクトを作成し、開発サーバーを起動します。
 
+次の例は `@latest` で正式版 CLI をインストールします。内蔵レシピが、このチェックアウトの Preview コアを生成するとは限りません。HTTP v3 Preview を使う場合はインストールコマンドを `go install github.com/NARUBROWN/spine-cli/cmd/spine@preview` に置き換え、[HTTP v3 移行ガイド](docs/migration/http-v3.md)を参照してください。`@preview` は更新されるブランチを追跡します。再現可能なインストールには公開 CLI タグを指定し、`spine version` と生成された `go.mod` を確認してください。
+
 ```sh
 go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
 spine version

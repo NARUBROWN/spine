@@ -205,6 +205,7 @@ func TestDTOResultsMatchAcrossRealServers(t *testing.T) {
 				{"invalid-urlencoded", "/form", "application/x-www-form-urlencoded", `title=%ZZ`, 400, "", 0, 0},
 				{"invalid-multipart", "/form", "multipart/form-data; boundary=missing", `broken`, 400, "", 0, 0},
 				{"raw-query-and-path", "/inspect/a%252Fb?tags=a%2Cb,c&tags=d&page=2", "", "", 200, `{"host":"api.example:8443","id":"a%2Fb","page":2,"tags":["a,b","c","d"]}`, 1, 3},
+				{"encoded-slash-value", "/inspect/a%2Fb?tags=a%2Cb,c&tags=d&page=2", "", "", 200, `{"host":"api.example:8443","id":"a/b","page":2,"tags":["a,b","c","d"]}`, 1, 3},
 				{"invalid-query", "/inspect/id?page=invalid", "", "", 400, "", 0, 1},
 				{"validation-error", "/required", "application/json", `{}`, 400, "", 0, 1},
 				{"validation-success", "/required", "application/json", `{"name":"ok"}`, 200, `{"name":"ok"}`, 1, 1},

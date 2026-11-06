@@ -166,6 +166,20 @@ def dependency_notices(item):
     return text, {"name": name, "version": entry["version"], "license": expression, "integrity": entry["integrity"]}
 
 
+def patch_swagger_bundle(data, version):
+    patches = json.loads((TOOLS / "swagger-ui-fixes.json").read_text())
+    if version != patches["version"]:
+        raise ValueError("Local Swagger UI fixes require review for version " + version)
+    if hashlib.sha256(data).hexdigest() != patches["upstream_sha256"]:
+        raise ValueError("Local Swagger UI fixes require the reviewed upstream bundle")
+    for patch in patches["replacements"]:
+        before, after = patch["before"].encode(), patch["after"].encode()
+        if data.count(before) != 1:
+            raise ValueError("Local Swagger UI fix no longer matches: " + patch["issue"])
+        data = data.replace(before, after)
+    return patches["notice"].encode() + data
+
+
 def refresh(update):
     package_file = TOOLS / "package.json"
     package = json.loads(package_file.read_text())
@@ -212,6 +226,8 @@ def refresh(update):
             if entry.get("license") != expected_license:
                 raise ValueError(f"Upstream license changed: {name}")
             contents = archive(entry)
+            if name == "swagger-ui-dist":
+                contents["swagger-ui-bundle.js"] = patch_swagger_bundle(contents["swagger-ui-bundle.js"], entry["version"])
             if name == "redoc" and contents["bundles/redoc.standalone.js"].count(b"https://cdn.redoc.ly/redoc/logo-mini.svg") != 1:
                 raise ValueError("The offline handling of the ReDoc logo requires review")
             exact_notices = []
@@ -227,9 +243,10 @@ def refresh(update):
             distributions[name] = {"version": entry["version"], "license": entry["license"], "tarball": entry["resolved"], "integrity": entry["integrity"]}
         files["scripts/openapi-ui/package.json"] = (staging / "package.json").read_bytes()
         files["scripts/openapi-ui/package-lock.json"] = (staging / "package-lock.json").read_bytes()
-        for input_file in [TOOLS / "license-overrides.json", *sorted((TOOLS / "licenses").glob("*.txt"))]:
+        for input_file in [TOOLS / "license-overrides.json", TOOLS / "swagger-ui-fixes.json", *sorted((TOOLS / "licenses").glob("*.txt"))]:
             files[str(input_file.relative_to(ROOT))] = input_file.read_bytes()
         manifest = {"format": 1, "distributions": distributions, "dependencies": [info for _, info in notices], "files": {name: hashlib.sha256(data).hexdigest() for name, data in sorted(files.items())}}
+        manifest["local_patches"] = {"swagger-ui-dist": "scripts/openapi-ui/swagger-ui-fixes.json"}
         for name, data in files.items():
             destination = ROOT / name
             destination.parent.mkdir(parents=True, exist_ok=True)

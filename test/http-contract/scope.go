@@ -34,9 +34,10 @@ func (s *scope) Body() io.Reader                 { return s.body }
 func (s *scope) Writer() contract.ResponseWriter { return s.writer }
 
 type hooks struct {
-	native func()
-	after  func()
-	reads  *atomic.Int64
+	beforeServe func()
+	native      func()
+	after       func()
+	reads       *atomic.Int64
 }
 
 type countedReader struct {

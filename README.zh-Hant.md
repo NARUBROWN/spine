@@ -82,6 +82,8 @@ GitHub Issues 為公開內容。請分享已移除機密資訊的摘要或最小
 
 建立專案並啟動開發伺服器。
 
+以下範例使用 `@latest` 安裝正式版 CLI，其內建配方不一定產生目前簽出的 Preview 核心。使用 HTTP v3 Preview 時，請將安裝命令替換為 `go install github.com/NARUBROWN/spine-cli/cmd/spine@preview`，並參閱 [HTTP v3 遷移指南](docs/migration/http-v3.md)。`@preview` 追蹤持續更新的分支。需要可重現的安裝時，請指定已發布的 CLI 標籤，並檢查 `spine version` 和產生的 `go.mod`。
+
 ```sh
 go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
 spine version

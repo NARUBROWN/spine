@@ -18,6 +18,7 @@ type lifecycle struct {
 	active   int
 	stopping bool
 	served   bool
+	listener net.Listener
 	drained  chan struct{}
 	started  chan struct{}
 	done     chan struct{}
@@ -47,6 +48,7 @@ func (l *lifecycle) claim(listener net.Listener) error {
 		return errors.Join(contract.ErrInvalidState, listener.Close())
 	}
 	l.served = true
+	l.listener = listener
 	close(l.started)
 	return nil
 }

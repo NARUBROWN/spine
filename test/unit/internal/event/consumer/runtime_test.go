@@ -15,6 +15,7 @@ import (
 	eventresolver "github.com/NARUBROWN/spine/internal/event/consumer/resolver"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
+	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 type runtimeTestRouter struct {
@@ -968,5 +969,59 @@ func TestRuntime_StopsAfterTransportReconnectAttemptsAreExhausted(t *testing.T) 
 	case <-runtime.Done():
 	case <-time.After(2 * time.Second):
 		t.Fatal("runtime did not stop after reconnect attempts were exhausted")
+	}
+}
+
+func (*runtimeTestController) Tombstone(payload []byte) error {
+	if payload != nil {
+		return errors.New("tombstone was changed to nonnil bytes")
+	}
+	return nil
+}
+
+func TestRuntimeAcknowledgesRawTombstoneWithoutReconnecting(t *testing.T) {
+	registry := NewRegistry()
+	if err := registry.Register("topic", (*runtimeTestController).Tombstone); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var acks, nacks atomic.Int32
+	message := &Message{EventName: "topic", Payload: nil}
+	message.SetAckHandler(func() error { acks.Add(1); cancel(); return nil })
+	message.SetNackHandler(func() error { nacks.Add(1); cancel(); return ErrReaderInvalidated })
+	factory := &lifecycleRuntimeTestFactory{reader: &runtimeTestReader{msg: message}}
+	runtime := NewRuntime(registry, factory, newRuntimePipeline(t, "Tombstone", nil))
+	runtime.Start(ctx)
+	select {
+	case <-runtime.Done():
+	case <-time.After(time.Second):
+		t.Fatal("tombstone did not settle")
+	}
+	if err := runtime.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	if acks.Load() != 1 || nacks.Load() != 0 || factory.builds.Load() != 1 {
+		t.Fatalf("acks=%d nacks=%d builds=%d", acks.Load(), nacks.Load(), factory.builds.Load())
+	}
+}
+
+type failingCleanupReader struct{ cause error }
+
+func (r failingCleanupReader) Read(context.Context) (*Message, error) { return nil, context.Canceled }
+func (r failingCleanupReader) Close() error                           { return r.cause }
+
+func TestRuntimeCleanupHistoryUsesConfiguredBoundsAndFreezesStopResult(t *testing.T) {
+	registry := NewRegistry()
+	r := NewRuntime(registry, &runtimeTestFactory{}, newRuntimePipeline(t, "Handle", nil), boot.CleanupErrorHistoryOptions{MaxEntries: 1})
+	first, last := errors.New("first cleanup"), errors.New("last cleanup")
+	_ = r.closeReader(failingCleanupReader{first})
+	_ = r.closeReader(failingCleanupReader{last})
+	got := r.Stop()
+	if errors.Is(got, first) || !errors.Is(got, last) {
+		t.Fatal(got)
+	}
+	if r.Stop() != got {
+		t.Fatal("Stop result changed")
 	}
 }

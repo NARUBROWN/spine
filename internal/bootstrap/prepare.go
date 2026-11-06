@@ -88,7 +88,7 @@ func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResourc
 		publisher, err := binding.Factory.NewPublisher(ctx)
 		var managed *eventPublish.PlatformPublisher
 		if !isNilHTTPValue(publisher) {
-			managed = eventPublish.NewPlatformPublisher(binding.Factory, publisher)
+			managed = eventPublish.NewPlatformPublisher(binding.Factory, publisher, binding.Options.PublisherErrorHistory)
 			application.publishers = append(application.publishers, publisherCloser{name: binding.Name, close: managed.Close})
 		}
 		if err != nil {
@@ -356,7 +356,7 @@ func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResourc
 			}
 			runtime := consumer.NewRuntime(config.ConsumerRegistry,
 				consumer.NewPlatformFactory(binding.Factory, binding.Options),
-				buildConsumerPipeline(container, config.ConsumerRegistry, dispatchHook, config.Validator))
+				buildConsumerPipeline(container, config.ConsumerRegistry, dispatchHook, config.Validator), binding.Options.ConsumerErrorHistory)
 			application.consumers = append(application.consumers, consumerRuntime{name: binding.Name, runtime: runtime})
 			if err := runtime.PrepareWithRetry(ctx); err != nil {
 				if ctx.Err() != nil && errors.Is(err, ctx.Err()) {

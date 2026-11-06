@@ -11,6 +11,8 @@ import (
 	"time"
 
 	adapter "github.com/NARUBROWN/spine/contract/http"
+	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 )
 
@@ -129,5 +131,32 @@ func TestHTTPContextParsesRawViewsWithoutNativeNormalization(t *testing.T) {
 	}
 	if err := ctx.Bind(nil); !errors.Is(err, bodyinput.ErrBodyClosed) {
 		t.Fatalf("정리 뒤 바인딩을 거부해야 합니다: %v", err)
+	}
+}
+
+type rawRouteScope struct {
+	testScope
+	path string
+}
+
+func (s rawRouteScope) RawPath() string { return s.path }
+func (s rawRouteScope) Method() string  { return "GET" }
+
+func TestHTTPRoutingSplitsRawPathBeforeDecoding(t *testing.T) {
+	r := router.NewRouter()
+	r.Register("GET", "/files/:name", core.HandlerMeta{})
+	for _, tc := range []struct{ path, want string }{
+		{"/files/a%2Fb", "a/b"}, {"/files/a%2fb", "a/b"}, {"/files/a%252Fb", "a%2Fb"},
+		{"/files/a%2F", "a/"}, {"/files/%E2%9C%93", "✓"}, {"/files/a%3Fb%23c", "a?b#c"},
+	} {
+		c := NewHTTPContext(rawRouteScope{path: tc.path}, 0)
+		if _, e := r.Route(c); e != nil || c.Param("name") != tc.want {
+			t.Fatalf("path=%s param=%q want=%q err=%v", tc.path, c.Param("name"), tc.want, e)
+		}
+	}
+	for _, path := range []string{"/files/a/b", "/files/a%ZZ"} {
+		if _, e := r.Route(NewHTTPContext(rawRouteScope{path: path}, 0)); e == nil {
+			t.Fatalf("invalid route matched: %s", path)
+		}
 	}
 }

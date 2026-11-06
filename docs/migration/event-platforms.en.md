@@ -29,3 +29,13 @@ A failed publisher is retired after active calls finish. A subsequent publicatio
 See `cmd/reference`, `examples/security-config` and the complete [Korean example](event-platforms.md). The core no longer imports Kafka/RabbitMQ clients or concrete platforms. The legacy HTTP adapter import path remains compatible.
 
 Run core tests and `scripts/check-module-boundaries.sh`. With `SPINE_TEST_KAFKA_BROKER` and/or `SPINE_TEST_RABBITMQ_URL` set, run `go -C test test -race . -run '^TestAppEventLive_' -count=1 -timeout=2m`. This checks HTTP publication, worker redelivery and result events with real brokers. Missing broker environment variables skip the corresponding live test. CLI static checks and the partial runtime probe are separate evidence.
+
+## Cleanup error retention
+
+Each event adapter keeps separate publisher and consumer cleanup histories. Defaults are the latest 32 failures for at most one hour from cleanup completion. Both limits apply. New failures evict the oldest entries at capacity, and timers release expired errors even while idle. All cleanup failures are logged; expired or evicted errors are omitted from the final shutdown result.
+
+These options bound in-memory history; log storage retention is separate. Configure the two roles independently with `spine.WithEventPublisherErrorHistory` and `spine.WithEventConsumerErrorHistory`, each taking `boot.CleanupErrorHistoryOptions{MaxEntries: 64, MaxAge: 30*time.Minute}`. Zero fields select defaults; negative values fail preflight. `Close` and `Stop` freeze the retained error snapshot after cleanup completes. Later calls return that same shutdown result even after the retention window expires.
+
+## Nil payloads and Kafka tombstones
+
+Raw `[]byte` and named byte-slice handlers receive nil unchanged, preserving the distinction between a tombstone and a nonnil empty payload. A successful handler is acknowledged; handler failures still follow the NACK policy. DTO handlers that require a body reject nil through the existing decoding and validation failure path. Use a raw-byte handler for subscriptions that must process tombstones; DTO failures are not silently acknowledged or skipped.

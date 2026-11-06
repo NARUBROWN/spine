@@ -1806,7 +1806,7 @@
     "pkg/openapi/ui/swaggerui/assets/LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
     "pkg/openapi/ui/swaggerui/assets/NOTICE": "0d20d1adef18aee3f40dd258172155521ce702ac445cb5f7b7d60ed32dad2fb2",
     "pkg/openapi/ui/swaggerui/assets/THIRD_PARTY_LICENSES.txt": "5fc02fba3214e3f13fe09afc92d1606ec119f2c0fc95def9e699a21fd5b9aebe",
-    "pkg/openapi/ui/swaggerui/assets/swagger-ui-bundle.js": "36eeb4d5640b9c036b1d0f854499af1cceebbdb260b790a03a18be5e8488fbf5",
+    "pkg/openapi/ui/swaggerui/assets/swagger-ui-bundle.js": "2e5039d7d95e9a0d464fcb2229415b673f1ce60586a35c7f1852872c4f6fbb41",
     "pkg/openapi/ui/swaggerui/assets/swagger-ui-bundle.js.LICENSE.txt": "37eb6e7e59aed57b2c1acf076574b818ea07b74265717e0bd67b59e0baf9abbb",
     "pkg/openapi/ui/swaggerui/assets/swagger-ui.css": "c3cfe8248c4b0b89673600fb829924eafbac6de4bc4b2b06f5f5243483074d0a",
     "scripts/openapi-ui/license-overrides.json": "1874d32c90c5647ddb03e59064a906a11b46e156dcc91a58280af079fe4f3362",
@@ -1815,6 +1815,10 @@
     "scripts/openapi-ui/licenses/MIT.txt": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1",
     "scripts/openapi-ui/licenses/nodable-entities-3.1.0.txt": "750cb3fb6362804957ef52caaf9b5c824015be44d494637330d7cd8834d31d40",
     "scripts/openapi-ui/package-lock.json": "0bd92415c9c2a3c9d17255851e576ce8a47abe0eda2bbef9a538a28214ed6e78",
-    "scripts/openapi-ui/package.json": "9f80867ee3c374146cc7c538f02f9dc68ac2cc713424c43e747403ccf2a1a5df"
+    "scripts/openapi-ui/package.json": "9f80867ee3c374146cc7c538f02f9dc68ac2cc713424c43e747403ccf2a1a5df",
+    "scripts/openapi-ui/swagger-ui-fixes.json": "d37f35ebcb38ea79628d3b17bc555e61b049de17d8883fbbdfce61ce1cc4bebb"
+  },
+  "local_patches": {
+    "swagger-ui-dist": "scripts/openapi-ui/swagger-ui-fixes.json"
   }
 }

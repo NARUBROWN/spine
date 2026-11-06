@@ -10,6 +10,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"sync"
 
 	contract "github.com/NARUBROWN/spine/contract/http"
 	"github.com/valyala/fasthttp"
@@ -45,6 +46,18 @@ type fastAdapter struct {
 	cfg    contract.Config
 	hooks  hooks
 	server *fasthttp.Server
+}
+
+// native Shutdown과 Serve 반환 경로가 같은 리스너를 닫아도 결과를 보존합니다.
+type closeOnceListener struct {
+	net.Listener
+	once sync.Once
+	err  error
+}
+
+func (l *closeOnceListener) Close() error {
+	l.once.Do(func() { l.err = l.Listener.Close() })
+	return l.err
 }
 
 func (a *fastAdapter) handle(native *fasthttp.RequestCtx) {
@@ -94,25 +107,40 @@ func (a *fastAdapter) Serve(listener net.Listener, options ...contract.ServeOpti
 		}
 		return err
 	}
+	if !isNil(listener) {
+		listener = &closeOnceListener{Listener: listener}
+	}
 	if err := a.claim(listener); err != nil {
 		return err
 	}
 	defer listener.Close()
+	if a.hooks.beforeServe != nil {
+		a.hooks.beforeServe()
+	}
 	if resolved.TLS != nil {
 		listener = tls.NewListener(listener, resolved.TLS)
 	}
 	err = a.server.Serve(listener)
+	if a.isStopping() && (err == nil || errors.Is(err, net.ErrClosed)) {
+		return contract.ErrServerClosed
+	}
 	if err == nil {
-		if a.isStopping() {
-			return contract.ErrServerClosed
-		}
 		return fmt.Errorf("%w: unexpected nil Serve result", contract.ErrInvalidAdapter)
 	}
 	return err
 }
 
 func (a *fastAdapter) Shutdown(ctx context.Context) error {
-	return a.shutdown(ctx, a.server.Shutdown)
+	return a.shutdown(ctx, func() error {
+		a.mu.Lock()
+		listener := a.listener
+		a.mu.Unlock()
+		var err error
+		if listener != nil {
+			err = listener.Close()
+		}
+		return errors.Join(err, a.server.Shutdown())
+	})
 }
 
 func (a *fastAdapter) external(listener net.Listener) (func(context.Context) error, <-chan error) {

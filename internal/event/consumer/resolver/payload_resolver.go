@@ -22,9 +22,6 @@ func (r *PayloadResolver) Resolve(ctx core.ExecutionContext, meta resolver.Param
 	}
 
 	payload := consumerCtx.Payload()
-	if payload == nil {
-		return nil, fmt.Errorf("Payload not found in RequestContext")
-	}
 
 	value := reflect.ValueOf(payload)
 	if !value.Type().ConvertibleTo(meta.Type) {

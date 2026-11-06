@@ -350,6 +350,23 @@ class ReleasePolicyTests(unittest.TestCase):
         with self.assertRaises(release.ReleaseError):
             verify_public.verify({}, Path("."), Path("."), {}, "unused")
 
+    def test_public_go_tests_allow_testless_packages_but_require_completed_tests(self):
+        passing = [{"Action":"run","Test":"TestOK"},{"Action":"pass","Test":"TestOK"}]
+        for events, allowed in [
+            ([{"Action":"skip","Package":"helper"}, *passing], True),
+            ([{"Action":"skip","Package":"helper"}], False),
+            ([{"Action":"run","Test":"TestOK"}], False),
+            ([*passing,{"Action":"skip","Test":"TestSkipped"}], False),
+            ([*passing,{"Action":"fail","Package":"broken"}], False),
+        ]:
+            result = subprocess.CompletedProcess([],0,"\n".join(json.dumps(e) for e in events),"")
+            with patch.object(verify_public.subprocess,"run",return_value=result):
+                if allowed:
+                    verify_public.go_tests(["./..."],Path("."),{})
+                else:
+                    with self.assertRaises(release.ReleaseError):
+                        verify_public.go_tests(["./..."],Path("."),{})
+
     def test_public_go_tests_reject_skip_and_empty_test_selection(self):
         for events in [[], [{"Action": "skip", "Test": "TestBroker"}], [{"Action": "run", "Test": "TestBroker"}, {"Action": "skip", "Test": "TestBroker"}]]:
             result = subprocess.CompletedProcess([], 0, "\n".join(json.dumps(e) for e in events), "")

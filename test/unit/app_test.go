@@ -67,3 +67,13 @@ func TestAppValidateAggregatesWebSocketConfigurationIssues(t *testing.T) {
 		t.Fatalf("issues = %d, want 2: %v", len(configErr.Issues), configErr.Issues)
 	}
 }
+
+func TestEventCleanupHistoryOptionsRemainIndependent(t *testing.T) {
+	application := New(WithEventAdapter("events", nil,
+		WithEventPublisherErrorHistory(boot.CleanupErrorHistoryOptions{MaxEntries: 3}),
+		WithEventConsumerErrorHistory(boot.CleanupErrorHistoryOptions{MaxEntries: 7}))).(*app)
+	options := application.eventAdapters[0].Options
+	if options.PublisherErrorHistory.MaxEntries != 3 || options.ConsumerErrorHistory.MaxEntries != 7 {
+		t.Fatal(options)
+	}
+}

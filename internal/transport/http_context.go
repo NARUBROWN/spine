@@ -47,6 +47,9 @@ func (c *HTTPContext) SetRoute(params map[string]string, pathKeys []string) {
 func (c *HTTPContext) Context() context.Context { return c.scope.Context() }
 func (c *HTTPContext) Method() string           { return c.scope.Method() }
 
+// RawPath는 라우터가 세그먼트 경계를 먼저 구분할 수 있게 디코딩 전 경로를 제공합니다.
+func (c *HTTPContext) RawPath() string { return c.scope.RawPath() }
+
 // Path는 native 정리 없이 원시 경로를 한 번 디코딩합니다.
 func (c *HTTPContext) Path() string {
 	path, err := url.PathUnescape(c.scope.RawPath())
