@@ -2,7 +2,23 @@
 
 HTTP v3에서는 Spine이 본문, 경로와 쿼리를 해석합니다. 플랫폼은 원시 요청, 응답 writer와 서버 수명을 제공합니다. 일반 DTO, 컨트롤러와 인터셉터 순서는 유지합니다.
 
-이 문서는 이슈 #28 작업 브랜치의 소스 변경을 설명합니다. 로컬 후보는 코어 `v0.7.0-preview.3`, Echo `v0.2.0-preview.2`, net/http `v0.1.0-preview.1`입니다. v3에 맞춘 코어와 플랫폼을 함께 사용해야 하며 공개된 v2 플랫폼은 그대로 연결할 수 없습니다. 새 조합의 태그, CLI 생성 지원과 공개 설치 검증은 아직 없습니다.
+HTTP v3는 코어 `v0.7.0-preview.3`, Echo `v0.2.0-preview.2`, net/http `v0.1.0-preview.1`부터 공개됐습니다. 이 소스의 전체 Preview 검증 조합은 코어 `v0.7.0-preview.4`, Echo `v0.2.0-preview.3`, net/http `v0.1.0-preview.2`와 [릴리스 운영](../../RELEASING.md#정책과-소스-ci)에 나열한 나머지 네 플랫폼입니다. 각 플랫폼은 같은 코어 태그로 검증합니다. HTTP v2 구현은 v3 코어에 그대로 연결할 수 없습니다.
+
+## CLI로 생성하고 업데이트하기
+
+Go와 네트워크 연결이 필요합니다. 기본 Go 프록시 설정에서는 Preview 브랜치 메타데이터를 원본 저장소에서 조회하므로 Git도 설치해야 합니다. 사용자 지정 프록시는 해당 설정을 따릅니다.
+
+```sh
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.3-preview.4
+spine new http-app --module example.com/http-app --platform nethttp
+cd http-app
+spine contract check
+spine update --dry-run --json
+```
+
+Echo는 `--platform echo`로 선택합니다. CLI는 선택한 플랫폼과 코어의 `@preview`를 조회하고 해석한 태그 또는 pseudo-version을 go.mod에 기록합니다. 채널 내 최신 태그만 검색하는 방식은 아닙니다. 업데이트 계획의 diff와 `base_hash`를 확인한 뒤 `spine update --if-match <base_hash>`로 적용하세요. update는 앱 소스를 바꾸지 않습니다.
+
+기존 v2 앱은 대응하는 플랫폼도 함께 업데이트하고 아래 Prepared API와 사용자 바인더 변경을 적용해야 합니다. 단일 패키지 설치 성공은 전체 릴리스 조합 완료를 뜻하지 않습니다. [전체 조합 완료 workflow](https://github.com/NARUBROWN/spine/actions/workflows/complete.yml)의 `release-manifest-<코어 태그>`에서 공개 모듈 조합과 성공 기록을 확인하세요.
 
 ## 외부 HTTP 서버 연결
 
@@ -79,7 +95,7 @@ Echo의 응답 출력 경로와 사용자 JSONSerializer는 유지합니다. wri
 
 정식 import 경로는 `contract/http`입니다. 이전 `adapter`, `adapter/http`는 같은 v3 타입의 별칭입니다. 별칭은 v2 구현의 동작을 자동 변환하지 않습니다. fasthttp는 현재 계약 검증용이며 제품 배포는 이 변경의 범위에 포함하지 않습니다.
 
-독립 `github.com/NARUBROWN/spine-nethttp-platform` 모듈은 독립 v3 구현입니다. `Option()` 또는 `NewFactory()`로 연결하며 `WithMiddleware`로 표준 `http.Handler` 미들웨어를 추가합니다. 먼저 전달한 미들웨어가 바깥에 배치됩니다. 기본 요청 분기는 `ServeMux`를 거치지 않습니다. `net/http.Server` 자체의 패닉 복구는 끌 수 없어 명시적인 `DisableRecover: true`를 준비 단계에서 거부합니다. CLI 생성과 공개 설치 조합은 아직 제공하지 않습니다.
+독립 `github.com/NARUBROWN/spine-nethttp-platform` 모듈은 독립 v3 구현입니다. `Option()` 또는 `NewFactory()`로 연결하며 `WithMiddleware`로 표준 `http.Handler` 미들웨어를 추가합니다. 먼저 전달한 미들웨어가 바깥에 배치됩니다. 기본 요청 분기는 `ServeMux`를 거치지 않습니다. `net/http.Server` 자체의 패닉 복구는 끌 수 없어 명시적인 `DisableRecover: true`를 준비 단계에서 거부합니다. CLI `v0.4.3-preview.4`는 `--platform nethttp` 생성과 v3 계약 분석 및 업데이트를 지원합니다.
 
 ## 로컬 소스 검증
 
@@ -87,7 +103,7 @@ Echo의 응답 출력 경로와 사용자 JSONSerializer는 유지합니다. wri
 
 ```sh
 python3 scripts/verify-http-v3.py \
-  --echo-root ../spine-echo-issue-28 \
+  --echo-root ../spine-echo-platform \
   --output-dir /tmp/spine-http-v3-proof
 ```
 
@@ -98,7 +114,7 @@ net/http 플랫폼 자체와 두 플랫폼의 실제 TCP 비교는 별도로 실
 ```sh
 python3 scripts/verify-http-platforms.py \
   --nethttp-root ../spine-nethttp-platform \
-  --echo-root ../spine-echo-issue-28 \
+  --echo-root ../spine-echo-platform \
   --output-dir /tmp/spine-http-platform-proof
 ```
 
