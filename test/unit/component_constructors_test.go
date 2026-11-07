@@ -8,6 +8,7 @@ import (
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/pkg/api"
 	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/NARUBROWN/spine/pkg/constructor"
 )
 
 type componentDependency struct{}
@@ -58,13 +59,25 @@ func TestRoleConstructorContracts(t *testing.T) {
 		register func(App)
 		want     string
 	}{
-		{"controller", func(a App) { a.ControllerConstructor(&componentMissingController{}) }, "COMPONENT_CONTRACT_INVALID"},
-		{"wrong controller signature", func(a App) { a.ControllerConstructor(&componentWrongRoutes{}) }, "COMPONENT_CONTRACT_INVALID"},
-		{"interceptor", func(a App) { a.InterceptorConstructor(&componentMissingController{}) }, "COMPONENT_CONTRACT_INVALID"},
-		{"constructor", func(a App) { a.ServiceConstructor(&struct{}{}) }, "COMPONENT_CONSTRUCTOR_INVALID"},
-		{"dependency", func(a App) { a.ServiceConstructor(&componentService{}) }, "COMPONENT_DEPENDENCIES_INVALID"},
+		{"controller", func(a App) { a.Constructor(constructor.Controller(&componentMissingController{})) }, "COMPONENT_CONTRACT_INVALID"},
+		{"wrong controller signature", func(a App) { a.Constructor(constructor.Controller(&componentWrongRoutes{})) }, "COMPONENT_CONTRACT_INVALID"},
+		{"interceptor", func(a App) { a.Constructor(constructor.Interceptor(&componentMissingController{})) }, "COMPONENT_CONTRACT_INVALID"},
+		{"constructor", func(a App) { a.Constructor(constructor.Service(&struct{}{})) }, "COMPONENT_CONSTRUCTOR_INVALID"},
+		{"dependency", func(a App) { a.Constructor(constructor.Service(&componentService{})) }, "COMPONENT_DEPENDENCIES_INVALID"},
+		{"empty marker", func(a App) { a.Constructor(constructor.Registration{}) }, "COMPONENT_CONSTRUCTOR_INVALID"},
+		{"nil custom", func(a App) { a.Constructor(constructor.Custom(nil)) }, "COMPONENT_CONSTRUCTOR_INVALID"},
+		{"nil factory", func(a App) { a.Constructor(constructor.Custom((func() *componentDependency)(nil))) }, "COMPONENT_CONSTRUCTOR_INVALID"},
+		{"invalid factory", func(a App) {
+			a.Constructor(constructor.Custom(func() (*componentDependency, error) { panic("must not run") }))
+		}, "COMPONENT_CONSTRUCTOR_INVALID"},
+		{"factory outside custom", func(a App) {
+			a.Constructor(constructor.Repository(func() *componentDependency { panic("must not run") }))
+		}, "COMPONENT_CONSTRUCTOR_INVALID"},
+		{"custom factory graph", func(a App) {
+			a.Constructor(constructor.Custom(func(*componentDependency) *componentService { panic("must not run") }))
+		}, "COMPONENT_DEPENDENCIES_INVALID"},
 		{"duplicate", func(a App) {
-			a.RepositoryConstructor(&componentDependency{})
+			a.Constructor(constructor.Repository(&componentDependency{}))
 			a.Constructor(func() *componentDependency { return nil })
 		}, "COMPONENT_DEPENDENCIES_INVALID"},
 	} {
@@ -92,17 +105,21 @@ func TestRoleConstructorContracts(t *testing.T) {
 }
 func TestAllComponentRolesShareOneContainer(t *testing.T) {
 	a := New().(*app)
-	a.Constructor(&componentDependency{})
-	a.RepositoryConstructor(&componentService{})
-	a.ServiceConstructor(&componentService{})
+	a.Constructor(
+		constructor.Custom(&componentDependency{}),
+		constructor.Repository(&componentService{}),
+		constructor.Service(&componentService{}),
+	)
 	if err := a.Validate(boot.Options{}); err == nil {
 		t.Fatal("duplicate cross-role providers accepted")
 	}
 	a = New().(*app)
-	a.RepositoryConstructor(&componentDependency{})
-	a.ServiceConstructor(&componentService{})
-	a.ControllerConstructor(&componentController{})
-	a.InterceptorConstructor(&componentInterceptor{})
+	a.Constructor(
+		constructor.Repository(&componentDependency{}),
+		constructor.Service(&componentService{}),
+		constructor.Controller(&componentController{}),
+		constructor.Interceptor(&componentInterceptor{}),
+	)
 	if err := a.Validate(boot.Options{}); err != nil {
 		t.Fatal(err)
 	}

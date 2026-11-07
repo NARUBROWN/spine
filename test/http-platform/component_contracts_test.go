@@ -11,10 +11,16 @@ import (
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/pkg/api"
 	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/NARUBROWN/spine/pkg/constructor"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 )
 
 type roleCounters struct{ builds, requests atomic.Int32 }
+
+func (*roleCounters) RegisterRoutes(*api.Registry) {
+	panic("a custom factory must not be collected as a controller")
+}
+
 type roleCustom struct {
 	generation int32
 	counters   *roleCounters
@@ -22,6 +28,9 @@ type roleCustom struct {
 
 func (*roleCustom) Constructor(c *roleCounters) *roleCustom {
 	return &roleCustom{generation: c.builds.Add(1), counters: c}
+}
+func (*roleCustom) RegisterRoutes(*api.Registry) {
+	panic("a custom object must not be collected as a controller")
 }
 
 type roleRepository struct{ custom *roleCustom }
@@ -60,11 +69,14 @@ func TestRoleConstructorsHTTPAndPreparedIsolation(t *testing.T) {
 		t.Run(platform, func(t *testing.T) {
 			counters := &roleCounters{}
 			app := spine.New(spine.WithHTTPAdapter(platformFactory(platform, nativeHooks{})))
-			app.Constructor(func() *roleCounters { return counters }, &roleCustom{})
-			app.RepositoryConstructor(&roleRepository{})
-			app.ServiceConstructor(&roleService{})
-			app.ControllerConstructor(&roleController{})
-			app.InterceptorConstructor(&roleInterceptor{})
+			app.Constructor(
+				constructor.Custom(func() *roleCounters { return counters }),
+				constructor.Custom(&roleCustom{}),
+				constructor.Repository(&roleRepository{}),
+				constructor.Service(&roleService{}),
+				constructor.Controller(&roleController{}),
+				constructor.Interceptor(&roleInterceptor{}),
+			)
 			options := boot.Options{HTTP: &boot.HTTPOptions{}}
 			if err := app.Validate(options); err != nil {
 				t.Fatal(err)

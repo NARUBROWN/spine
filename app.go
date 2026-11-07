@@ -18,15 +18,12 @@ import (
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/ws"
 	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/NARUBROWN/spine/pkg/constructor"
 )
 
 type App interface {
-	// Constructor는 사용자 정의 객체의 생성 계약 또는 기존 생성자 함수를 등록합니다.
+	// Constructor는 constructor의 역할 표식 또는 기존 생성자 함수를 등록합니다.
 	Constructor(constructors ...any)
-	ControllerConstructor(prototypes ...any)
-	ServiceConstructor(prototypes ...any)
-	RepositoryConstructor(prototypes ...any)
-	InterceptorConstructor(prototypes ...any)
 	// 라우트 선언
 	Route(method string, path string, handler any, opts ...router.RouteOption)
 	// 인터셉터 선언
@@ -141,14 +138,16 @@ func New(options ...Option) App {
 }
 
 func (a *app) Constructor(constructors ...any) {
-	for _, constructor := range constructors {
-		if t := reflect.TypeOf(constructor); t != nil && t.Kind() == reflect.Func {
-			a.constructors = append(a.constructors, constructor)
+	for _, value := range constructors {
+		if registration, ok := value.(constructor.Registration); ok {
+			a.componentRegistration(registration)
+		} else if t := reflect.TypeOf(value); t != nil && t.Kind() == reflect.Func {
+			a.constructors = append(a.constructors, value)
 			if a.controllerConstructors != nil {
-				a.controllerConstructors = append(a.controllerConstructors, constructor)
+				a.controllerConstructors = append(a.controllerConstructors, value)
 			}
 		} else {
-			a.componentConstructors("Custom", nil, []any{constructor})
+			a.componentConstructors("Custom", nil, []any{value})
 		}
 	}
 }

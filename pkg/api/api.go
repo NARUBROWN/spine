@@ -8,7 +8,7 @@ type Registry = apiregistry.Registry
 
 // Controller는 기존 DI 생성자로 등록하는 HTTP 컨트롤러의 최소 계약입니다.
 // 추가 메서드와 의존성 인자는 제한하지 않습니다.
-// ControllerConstructor 등록의 공통 Constructor 생성 계약은 별도로 사전 검사합니다.
+// constructor.Controller 등록의 공통 Constructor 생성 계약은 별도로 사전 검사합니다.
 type Controller interface {
 	RegisterRoutes(*Registry)
 }

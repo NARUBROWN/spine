@@ -8,27 +8,22 @@ import (
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/pkg/api"
 	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/NARUBROWN/spine/pkg/constructor"
 )
 
-// ControllerConstructor는 생성 계약과 HTTP 컨트롤러 계약을 함께 등록합니다.
-func (a *app) ControllerConstructor(prototypes ...any) {
-	a.componentConstructors("Controller", reflect.TypeFor[api.Controller](), prototypes)
-}
-
-// ServiceConstructor는 생성 계약을 따르는 서비스를 등록합니다.
-func (a *app) ServiceConstructor(prototypes ...any) {
-	a.componentConstructors("Service", nil, prototypes)
-}
-
-// RepositoryConstructor는 생성 계약을 따르는 저장소를 등록합니다.
-func (a *app) RepositoryConstructor(prototypes ...any) {
-	a.componentConstructors("Repository", nil, prototypes)
-}
-
-// InterceptorConstructor는 생성 계약과 인터셉터 계약을 등록합니다.
-// 실행 범위와 순서는 Interceptor/InterceptorFor 또는 경로 옵션으로 지정합니다.
-func (a *app) InterceptorConstructor(prototypes ...any) {
-	a.componentConstructors("Interceptor", reflect.TypeFor[core.Interceptor](), prototypes)
+func (a *app) componentRegistration(registration constructor.Registration) {
+	var contract reflect.Type
+	switch registration.Role() {
+	case "Custom", "Repository", "Service":
+	case "Controller":
+		contract = reflect.TypeFor[api.Controller]()
+	case "Interceptor":
+		contract = reflect.TypeFor[core.Interceptor]()
+	default:
+		a.componentIssues = append(a.componentIssues, boot.ConfigIssue{Path: "Constructors", Code: "COMPONENT_CONSTRUCTOR_INVALID", Message: "component registration must declare a role", Hint: "Use constructor.Custom, Repository, Service, Controller or Interceptor."})
+		return
+	}
+	a.componentConstructors(registration.Role(), contract, []any{registration.Value()})
 }
 
 func (a *app) componentConstructors(role string, contract reflect.Type, prototypes []any) {
@@ -43,6 +38,14 @@ func (a *app) componentConstructors(role string, contract reflect.Type, prototyp
 		index := a.componentCounts[role]
 		a.componentCounts[role]++
 		path := fmt.Sprintf("%sConstructors[%d]", role, index)
+		if t := reflect.TypeOf(prototype); role == "Custom" && t != nil && t.Kind() == reflect.Func {
+			if err := container.New().RegisterConstructor(prototype); err != nil {
+				a.componentIssues = append(a.componentIssues, boot.ConfigIssue{Path: path, Code: "COMPONENT_CONSTRUCTOR_INVALID", Message: err.Error(), Hint: "Provide a non-nil constructor function returning exactly one value."})
+				continue
+			}
+			a.constructors = append(a.constructors, prototype)
+			continue
+		}
 		constructor, err := container.ObjectConstructor(prototype)
 		if err != nil {
 			a.componentIssues = append(a.componentIssues, boot.ConfigIssue{Path: path, Code: "COMPONENT_CONSTRUCTOR_INVALID", Message: err.Error(), Hint: "Implement Constructor(dependencies...) returning a pointer to the same concrete type."})

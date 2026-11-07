@@ -36,10 +36,10 @@ func (c *UserController) RegisterRoutes(r *api.Registry) {
 애플리케이션 구성에서는 컨트롤러 객체의 타입 표식을 등록합니다.
 
 ```go
-app.ControllerConstructor(&controller.UserController{})
+app.Constructor(constructor.Controller(&controller.UserController{}))
 ```
 
-`ControllerConstructor`는 [공통 생성 계약](component-contracts.md)과 `api.Controller`의 `RegisterRoutes(*api.Registry)`를 함께 검사합니다. 생성 메서드는 구체 자기 타입 포인터를 반환합니다. 어느 계약이든 누락되면 생성자 실행 전에 검증 오류가 납니다. Go 인터페이스 `api.Controller` 자체에는 등록 메서드만 있으며, 의존성 인자가 달라지는 생성 계약은 별도로 형식 검사합니다.
+`constructor`는 `github.com/NARUBROWN/spine/pkg/constructor` 패키지입니다. `constructor.Controller`는 [공통 생성 계약](component-contracts.md)과 `api.Controller`의 `RegisterRoutes(*api.Registry)`를 함께 검사합니다. 생성 메서드는 구체 자기 타입 포인터를 반환합니다. 어느 계약이든 누락되면 생성자 실행 전에 검증 오류가 납니다. Go 인터페이스 `api.Controller` 자체에는 등록 메서드만 있으며, 의존성 인자가 달라지는 생성 계약은 별도로 형식 검사합니다.
 
 추가 메서드의 이름과 공개 여부는 자유입니다. 콜백에서 `c.normalize(a.Name)`을 호출하거나, `RegisterRoutes`가 `c.registerUsers(r)`에 등록을 위임할 수 있습니다. 구조체에 별도 마커를 임베딩할 필요는 없습니다.
 

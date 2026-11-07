@@ -147,7 +147,7 @@ MIT
 
 ## 컨트롤러에 경로와 콜백 선언하기
 
-현재 소스의 `v0.7.0-preview.5` 후보는 `api.Controller.RegisterRoutes`와 `input.Path[T]`, `input.Query[T]`, `input.Body[T]`를 제공합니다. 생성자를 `app.ControllerConstructor`에 등록하면 컨트롤러 내부에서 경로를 수집합니다. 이 문구는 공개 태그나 CLI 배포 완료를 뜻하지 않습니다. [작성 예제와 명세 조회 경계](docs/migration/controller-routes.md)를 확인하세요.
+현재 소스의 `v0.7.0-preview.5` 후보는 `api.Controller.RegisterRoutes`와 `input.Path[T]`, `input.Query[T]`, `input.Body[T]`를 제공합니다. `app.Constructor(constructor.Controller(&UserController{}))`로 컨트롤러 객체 표식을 등록하면 컨트롤러 내부에서 경로를 수집합니다. 이 문구는 공개 태그나 CLI 배포 완료를 뜻하지 않습니다. [작성 예제와 명세 조회 경계](docs/migration/controller-routes.md)를 확인하세요.
 
 ```go
 package controller
