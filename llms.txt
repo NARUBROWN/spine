@@ -612,6 +612,8 @@ app.InterceptorFor(boot.InterceptorHTTP, corsInterceptor)
 
 Credentialed CORS cannot use wildcard origin `*`.
 
+CORS preflight policy: `cors.Config` supports `ExposeHeaders`, `MaxAge` in seconds as `*int`, and `AllowOrigin` as a fallback callback. Register CORS globally before authentication. Denied preflight returns 403; ordinary OPTIONS continues. Existing Vary headers are preserved. Wildcard credentials are rejected, wildcard origin does not include `null`, and `Authorization` must be explicitly allowed. Route-only CORS does not automatically handle OPTIONS.
+
 ### Request transaction pattern
 
 The Bun demo uses this safe boundary:

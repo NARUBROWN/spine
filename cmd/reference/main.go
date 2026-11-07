@@ -91,11 +91,14 @@ func main() {
 		(*CommonController).GetAvatar,
 	)
 
+	corsMaxAge := 600
 	corsInterceptor, err := cors.NewValidated(cors.Config{
 		AllowOrigins:     []string{config.AllowedOrigin},
 		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
 		AllowHeaders:     []string{"Authorization", "Content-Type"},
 		AllowCredentials: true,
+		ExposeHeaders:    []string{"X-Request-ID"},
+		MaxAge:           &corsMaxAge,
 	})
 	if err != nil {
 		log.Fatalf("[Demo] invalid CORS configuration: %v", err)
