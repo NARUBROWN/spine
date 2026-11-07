@@ -74,6 +74,9 @@ func (h *StringReturnHandler) Handle(value any, ctx core.ExecutionContext) error
 	if status == 0 {
 		status = http.StatusOK
 	}
+	if status == http.StatusNoContent {
+		return rw.WriteStatus(status)
+	}
 
 	return rw.WriteString(status, resp.Body)
 }
