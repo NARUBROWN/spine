@@ -3,6 +3,7 @@ package spine
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"time"
 
@@ -20,8 +21,12 @@ import (
 )
 
 type App interface {
-	// 생성자 선언
+	// Constructor는 사용자 정의 객체의 생성 계약 또는 기존 생성자 함수를 등록합니다.
 	Constructor(constructors ...any)
+	ControllerConstructor(prototypes ...any)
+	ServiceConstructor(prototypes ...any)
+	RepositoryConstructor(prototypes ...any)
+	InterceptorConstructor(prototypes ...any)
 	// 라우트 선언
 	Route(method string, path string, handler any, opts ...router.RouteOption)
 	// 인터셉터 선언
@@ -46,6 +51,10 @@ type App interface {
 
 type app struct {
 	constructors            []any
+	controllerConstructors  []any
+	componentIssues         []boot.ConfigIssue
+	componentCounts         map[string]int
+	typedComponents         bool
 	routes                  []router.RouteSpec
 	interceptors            []bootstrap.InterceptorBinding
 	customTransports        []core.CustomTransport
@@ -132,7 +141,16 @@ func New(options ...Option) App {
 }
 
 func (a *app) Constructor(constructors ...any) {
-	a.constructors = append(a.constructors, constructors...)
+	for _, constructor := range constructors {
+		if t := reflect.TypeOf(constructor); t != nil && t.Kind() == reflect.Func {
+			a.constructors = append(a.constructors, constructor)
+			if a.controllerConstructors != nil {
+				a.controllerConstructors = append(a.controllerConstructors, constructor)
+			}
+		} else {
+			a.componentConstructors("Custom", nil, []any{constructor})
+		}
+	}
 }
 
 func (a *app) Route(method string, path string, handler any, opts ...router.RouteOption) {
@@ -173,6 +191,9 @@ func (a *app) bootstrapConfig(opts boot.Options) bootstrap.Config {
 	return bootstrap.Config{
 		Address:                 opts.Address,
 		Constructors:            a.constructors,
+		ControllerConstructors:  a.controllerConstructors,
+		ComponentIssues:         a.componentIssues,
+		TypedComponents:         a.typedComponents,
 		Routes:                  a.routes,
 		ScopedInterceptors:      a.interceptors,
 		CustomTransports:        a.customTransports,

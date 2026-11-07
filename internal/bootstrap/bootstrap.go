@@ -30,6 +30,9 @@ import (
 type Config struct {
 	Address                 string
 	Constructors            []any
+	ControllerConstructors  []any
+	ComponentIssues         []boot.ConfigIssue
+	TypedComponents         bool
 	Routes                  []spineRouter.RouteSpec
 	Interceptors            []core.Interceptor
 	ScopedInterceptors      []InterceptorBinding
@@ -109,6 +112,7 @@ func Validate(config Config) error {
 // validate는 사전 검사에 사용한 UI 리소스를 준비 단계에도 전달합니다.
 func validate(config Config) ([]boot.OpenAPIResource, error) {
 	issues := controllerProviderIssues(config)
+	issues = append(issues, componentValidationIssues(config)...)
 	var openAPIResources []boot.OpenAPIResource
 	if config.ShutdownTimeout < 0 {
 		issues = append(issues, boot.ConfigIssue{

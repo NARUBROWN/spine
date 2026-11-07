@@ -55,3 +55,5 @@ __pycache__/
 !docs/migration/http-v3.md
 
 !docs/migration/controller-routes.md
+
+!docs/migration/component-contracts.md

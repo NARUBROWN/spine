@@ -149,7 +149,7 @@ MIT
 
 ## 在控制器中宣告路由
 
-目前 `v0.7.0-preview.5` 原始碼候選版本提供 `api.Controller.RegisterRoutes` 和 `input.Path[T]`、`input.Query[T]`、`input.Body[T]`。將具體控制器的建構函式註冊至 `app.Constructor` 後，框架會收集控制器中的路由，不需要獨立的路由表。這不代表公開標籤或 CLI 已發布。請參閱[程式碼範例和規格查詢條件](docs/migration/controller-routes.md)。
+目前 `v0.7.0-preview.5` 原始碼候選版本提供 `api.Controller.RegisterRoutes` 和 `input.Path[T]`、`input.Query[T]`、`input.Body[T]`。將具體控制器的建構函式註冊至 `app.ControllerConstructor` 後，框架會收集控制器中的路由，不需要獨立的路由表。這不代表公開標籤或 CLI 已發布。請參閱[程式碼範例和規格查詢條件](docs/migration/controller-routes.md)。
 
 ```go
 package controller
@@ -164,9 +164,8 @@ type UserController struct{}
 type CreateUser struct { Name string `json:"name"` }
 type User struct { Name string `json:"name"` }
 
-func NewUserController() *UserController { return &UserController{} }
+func (*UserController) Constructor() *UserController { return &UserController{} }
 
-var _ api.Controller = (*UserController)(nil)
 
 func (c *UserController) RegisterRoutes(r *api.Registry) {
     r.POST("/users", func(a input.Body[CreateUser]) httpx.Response[User] {

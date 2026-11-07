@@ -150,7 +150,7 @@ MIT
 
 ## Declare routes inside controllers
 
-The current `v0.7.0-preview.5` source candidate adds `api.Controller.RegisterRoutes` and `input.Path[T]`, `input.Query[T]`, `input.Body[T]`. Register the concrete controller constructor with `app.Constructor`; a separate route table is unnecessary. This describes the source candidate, not a published tag or CLI release. See the [controller example and description lifecycle](docs/migration/controller-routes.md).
+The current `v0.7.0-preview.5` source candidate adds `api.Controller.RegisterRoutes` and `input.Path[T]`, `input.Query[T]`, `input.Body[T]`. Register the concrete controller constructor with `app.ControllerConstructor`; a separate route table is unnecessary. This describes the source candidate, not a published tag or CLI release. See the [controller example and description lifecycle](docs/migration/controller-routes.md).
 
 ```go
 package controller
@@ -165,9 +165,8 @@ type UserController struct{}
 type CreateUser struct { Name string `json:"name"` }
 type User struct { Name string `json:"name"` }
 
-func NewUserController() *UserController { return &UserController{} }
+func (*UserController) Constructor() *UserController { return &UserController{} }
 
-var _ api.Controller = (*UserController)(nil)
 
 func (c *UserController) RegisterRoutes(r *api.Registry) {
     r.POST("/users", func(a input.Body[CreateUser]) httpx.Response[User] {

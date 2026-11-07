@@ -38,7 +38,7 @@ func collectControllers(ctx context.Context, config *Config, container *containe
 	if config.HTTP == nil {
 		return nil
 	}
-	for _, owner := range controllerTypes(config.Constructors) {
+	for _, owner := range controllerTypes(config.controllerCandidates()) {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -117,6 +117,25 @@ func controllerProviderIssues(config Config) []boot.ConfigIssue {
 		output := t.Out(0)
 		if output.Kind() == reflect.Interface && output.Implements(reflect.TypeFor[api.Controller]()) {
 			issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("Constructors[%d]", index), Code: "HTTP_CONTROLLER_PROVIDER_ABSTRACT", Message: "HTTP controller constructors must return a concrete controller type.", Hint: "Return *UserController rather than api.Controller so DI can distinguish controllers without executing providers."})
+		}
+	}
+	return issues
+}
+
+// controllerCandidates는 명시적 역할 등록을 사용한 앱의 HTTP 등록 의도를 보존합니다.
+func (config Config) controllerCandidates() []any {
+	if config.ControllerConstructors != nil {
+		return config.ControllerConstructors
+	}
+	return config.Constructors
+}
+
+// componentValidationIssues는 명세 조회에서도 실행 없이 공통 생성 계약을 검사합니다.
+func componentValidationIssues(config Config) []boot.ConfigIssue {
+	issues := append([]boot.ConfigIssue{}, config.ComponentIssues...)
+	if config.TypedComponents {
+		if err := container.ValidateConstructors(config.Constructors); err != nil {
+			issues = append(issues, boot.ConfigIssue{Path: "Constructors", Code: "COMPONENT_DEPENDENCIES_INVALID", Message: err.Error(), Hint: "Register one provider per type and resolve missing or circular dependencies before initialization."})
 		}
 	}
 	return issues
