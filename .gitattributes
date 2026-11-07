@@ -2,3 +2,5 @@
 /pkg/openapi/ui/*/assets/* -text -whitespace linguist-vendored
 /pkg/openapi/ui/*/assets/THIRD_PARTY_LICENSES.txt conflict-marker-size=128
 /scripts/openapi-ui/** -text
+
+/pkg/input/testdata/conformance.json text eol=lf
