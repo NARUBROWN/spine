@@ -17,6 +17,9 @@ type RouteSpec struct {
 	Handler        any
 	ControllerType reflect.Type
 	Interceptors   []core.Interceptor
+	Tags           []string
+	Summary        string
+	Description    string
 }
 
 type Router interface {

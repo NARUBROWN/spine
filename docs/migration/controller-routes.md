@@ -113,3 +113,31 @@ CLI `--source runtime`도 새 컨트롤러를 위해 `Prepare`를 자동 실행�
 4. `spine contract check --json`을 실행하고 실제 요청과 명세를 확인합니다.
 
 [구조체 입력 전환](structured-inputs.md)과 [HTTP v3 전환](http-v3.md)을 함께 참고하세요.
+
+## 그룹 경로와 API 문서
+
+현재 개발 소스에서 그룹은 경로 접두사와 문서 태그를 묶습니다. 이 기능이 기존 공개 태그에 포함되어 있다고 가정하지 마세요.
+
+```go
+type UserQuery struct {
+    ID int64 `query:"id" validate:"gt=0" example:"1" description:"사용자 ID"`
+}
+
+func (c *UserController) RegisterRoutes(r *api.Registry) {
+    users := r.Group("/users", api.Tags("Users"))
+    users.GET("/", api.Options(
+        api.Summary("사용자 조회"),
+        api.Description("사용자 ID로 조회합니다."),
+    ), func(q input.Query[UserQuery]) httpx.Response[User] {
+        return httpx.Response[User]{Body: User{Name: "example"}}
+    })
+}
+```
+
+`users.GET("/", ...)`은 `GET /users`를 등록합니다. 하위 그룹은 접두사와 태그를 상속하며 중복 태그는 제거합니다. 빈 옵션은 `api.Options()`로 전달합니다. `api.Interceptors(...)`는 그룹과 라우트에 적용할 인터셉터를 추가합니다. 그룹 밖의 기존 `Registry.GET(path, handler, options...)` 호출도 유지됩니다.
+
+`example`과 `description` 필드 태그는 문서용이며 런타임 기본값이나 검증 규칙이 아닙니다. 지원하지 않는 타입이나 잘못된 예시는 명세 진단에 표시됩니다. 숫자 범위, 문자열 길이, 열거값과 필수값을 포함해 명세로 표현된 제약을 예시와 대조합니다. 이메일, URI, UUID와 정규식처럼 명세만으로 실제 검증기와 같은 결과를 보장할 수 없는 경우에는 `FIELD_EXAMPLE_VALIDATION_UNRESOLVED` 진단을 남깁니다. 사용자 정의 검증기는 실행하지 않습니다. 자동 생성 명세의 정수 경계는 그대로 유지하며 내장 UI에서는 타입 자체의 범위만 간결하게 표시합니다. JavaScript 클라이언트의 안전 정수 범위를 넘는 숫자는 별도 처리가 필요합니다.
+
+CLI 정적 분석은 상수 그룹 경로와 `api.Tags`, `api.Summary`, `api.Description`, 식별 가능한 `api.Interceptors`를 읽습니다. 정적으로 확인되는 보조 함수에 그룹을 전달해도 경로와 옵션을 추적하며, 인터셉터의 선언 위치는 `interceptor_sources`에 보존합니다. 동적 그룹이나 인터셉터 값, 확장된 인터셉터 목록은 미해결 진단을 반환합니다. 정적 분석은 사용자 코드를 실행하지 않습니다.
+
+CLI가 정적으로 내보낸 OpenAPI는 검증기를 실행하지 않으므로 쿼리 필드의 필수 여부와 검증 제약을 확정하지 않습니다. 해당 매개변수에는 `x-spine-validation-unresolved`가 표시됩니다. 실제 검증기를 반영한 명세는 준비된 앱의 `/openapi.json`에서 확인하세요.

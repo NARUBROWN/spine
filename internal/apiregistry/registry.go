@@ -48,6 +48,7 @@ func (r *Registry) add(method, path string, handler any, options []router.RouteO
 		option(&spec)
 	}
 	spec.Interceptors = append(spec.Interceptors[:0:0], spec.Interceptors...)
+	spec.Tags = append([]string(nil), spec.Tags...)
 	r.routes = append(r.routes, spec)
 }
 
@@ -59,6 +60,7 @@ func (r *Registry) Freeze() ([]router.RouteSpec, error) {
 	routes := append([]router.RouteSpec(nil), r.routes...)
 	for i := range routes {
 		routes[i].Interceptors = append(routes[i].Interceptors[:0:0], routes[i].Interceptors...)
+		routes[i].Tags = append([]string(nil), routes[i].Tags...)
 	}
 	return routes, errors.Join(r.errors...)
 }

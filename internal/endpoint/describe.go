@@ -73,7 +73,7 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 			return result, fmt.Errorf("duplicate HTTP route: %s", key)
 		}
 		seen[key] = true
-		route := description.Route{Method: spec.Method, Path: fullPath, Handler: meta.HandlerName(), Inputs: []description.Input{}, Returns: []description.Return{}}
+		route := description.Route{Method: spec.Method, Path: fullPath, Handler: meta.HandlerName(), Tags: append([]string(nil), spec.Tags...), Summary: spec.Summary, Description: spec.Description, Inputs: []description.Input{}, Returns: []description.Return{}}
 		if result.PathsOnly {
 			result.Routes = append(result.Routes, route)
 			continue

@@ -7,11 +7,15 @@ import (
 	"fmt"
 	"math/big"
 	"mime/multipart"
+	"net/url"
 	"reflect"
+	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/NARUBROWN/spine/contract/description"
 	validation "github.com/NARUBROWN/spine/contract/validator"
@@ -110,9 +114,13 @@ func (c *catalog) schemaValue(t reflect.Type, mode string) any {
 			minimum.Neg(new(big.Int).Set(maximum))
 		}
 		maximum.Sub(maximum, big.NewInt(1))
-		result := map[string]any{"type": "integer", "minimum": json.Number(minimum.String()), "maximum": json.Number(maximum.String())}
-		if t.Kind() == reflect.Int64 {
-			result["format"] = "int64"
+		result := map[string]any{"type": "integer", "minimum": json.Number(minimum.String()), "maximum": json.Number(maximum.String()), "x-spine-type-range": true, "x-spine-type-range-text": minimum.String() + " ~ " + maximum.String()}
+		if t.Kind() >= reflect.Int && t.Kind() <= reflect.Int64 {
+			if bits == 64 {
+				result["format"] = "int64"
+			} else if bits == 32 {
+				result["format"] = "int32"
+			}
 		}
 		return result
 	case reflect.Float32, reflect.Float64:
@@ -276,6 +284,39 @@ func (c *catalog) structure(t reflect.Type, mode string, planned ...[]input.Fiel
 		if strings.HasSuffix(mode, "/path") || strings.HasPrefix(mode, "response/") && !field.optional && !field.indirect {
 			required = append(required, field.name)
 		}
+		// Metadata describes the wire value and never changes runtime validation.
+		source := t.FieldByIndex(field.index)
+		annotation := map[string]any{}
+		if description, ok := source.Tag.Lookup("description"); ok {
+			annotation["description"] = description
+		}
+		if example, ok := source.Tag.Lookup("example"); ok {
+			value, err := fieldExample(field.typeOf, field.quoted, example)
+			if err != nil {
+				c.diagnostic("FIELD_EXAMPLE_INVALID", t.String()+"."+field.name, "The example does not match the supported wire type.")
+			} else {
+				matches, known := true, true
+				if exists && !field.quoted {
+					matches, known = checkExampleConstraints(value, constraint.Schema)
+				}
+				if !matches {
+					c.diagnostic("FIELD_EXAMPLE_INVALID", t.String()+"."+field.name, "The example conflicts with a described validation constraint.")
+				} else {
+					if !known {
+						c.diagnostic("FIELD_EXAMPLE_VALIDATION_UNRESOLVED", t.String()+"."+field.name, "Some described constraints could not be checked without executing user code.")
+					}
+					annotation["examples"] = []any{value}
+					annotation["example"] = value
+				}
+			}
+		}
+		if len(annotation) > 0 {
+			annotated := map[string]any{"allOf": []any{schema}}
+			for key, value := range annotation {
+				annotated[key] = value
+			}
+			schema = annotated
+		}
 		properties[field.name] = schema
 	}
 	sort.Strings(required)
@@ -285,6 +326,268 @@ func (c *catalog) structure(t reflect.Type, mode string, planned ...[]input.Fiel
 		result["required"] = required
 	}
 	return result
+}
+
+// checkExampleConstraints interprets supported schema keywords without invoking a validator.
+// Unknown keywords return known=false rather than claiming full validation.
+func checkExampleConstraints(value any, raw json.RawMessage) (bool, bool) {
+	var schema any
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	if decoder.Decode(&schema) != nil {
+		return true, false
+	}
+	var check func(any) (bool, bool)
+	equal := func(a, b any) bool {
+		if x, ok := a.(json.Number); ok {
+			if y, ok := b.(json.Number); ok {
+				left, lok := new(big.Rat).SetString(x.String())
+				right, rok := new(big.Rat).SetString(y.String())
+				return lok && rok && left.Cmp(right) == 0
+			}
+		}
+		return reflect.DeepEqual(a, b)
+	}
+	check = func(node any) (bool, bool) {
+		m, ok := node.(map[string]any)
+		if !ok {
+			return true, false
+		}
+		known := true
+		for key, raw := range m {
+			switch key {
+			case "allOf":
+				clauses, ok := raw.([]any)
+				if !ok {
+					known = false
+					continue
+				}
+				for _, clause := range clauses {
+					matches, resolved := check(clause)
+					if !matches {
+						return false, true
+					}
+					known = known && resolved
+				}
+			case "anyOf", "oneOf":
+				clauses, ok := raw.([]any)
+				if !ok {
+					known = false
+					continue
+				}
+				matches, unknown := 0, false
+				for _, clause := range clauses {
+					match, resolved := check(clause)
+					if !resolved {
+						unknown = true
+					}
+					if match && resolved {
+						matches++
+					}
+				}
+				if !unknown && ((key == "anyOf" && matches == 0) || (key == "oneOf" && matches != 1)) {
+					return false, true
+				}
+				if unknown {
+					known = false
+				}
+			case "not":
+				matches, resolved := check(raw)
+				if !resolved {
+					known = false
+				} else if matches {
+					return false, true
+				}
+			case "type":
+				typ, ok := raw.(string)
+				if !ok {
+					known = false
+					continue
+				}
+				switch typ {
+				case "null":
+					if value != nil {
+						return false, true
+					}
+				case "string":
+					if _, ok := value.(string); !ok {
+						return false, true
+					}
+				case "number", "integer":
+					if _, ok := value.(json.Number); !ok {
+						return false, true
+					}
+				case "boolean":
+					if _, ok := value.(bool); !ok {
+						return false, true
+					}
+				default:
+					known = false
+				}
+			case "const":
+				if !equal(value, raw) {
+					return false, true
+				}
+			case "enum":
+				values, ok := raw.([]any)
+				if !ok {
+					known = false
+					continue
+				}
+				found := false
+				for _, candidate := range values {
+					if equal(value, candidate) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					return false, true
+				}
+			case "minLength", "maxLength":
+				text, ok := value.(string)
+				if !ok {
+					continue
+				}
+				n, ok := raw.(json.Number)
+				if !ok {
+					known = false
+					continue
+				}
+				limit, err := strconv.Atoi(n.String())
+				if err != nil {
+					known = false
+					continue
+				}
+				length := utf8.RuneCountInString(text)
+				if (key == "minLength" && length < limit) || (key == "maxLength" && length > limit) {
+					return false, true
+				}
+			case "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum":
+				number, ok := value.(json.Number)
+				if !ok {
+					continue
+				}
+				bound, ok := raw.(json.Number)
+				if !ok {
+					known = false
+					continue
+				}
+				actual, aok := new(big.Rat).SetString(number.String())
+				limit, lok := new(big.Rat).SetString(bound.String())
+				if !aok || !lok {
+					known = false
+					continue
+				}
+				cmp := actual.Cmp(limit)
+				if (key == "minimum" && cmp < 0) || (key == "maximum" && cmp > 0) || (key == "exclusiveMinimum" && cmp <= 0) || (key == "exclusiveMaximum" && cmp >= 0) {
+					return false, true
+				}
+			case "pattern":
+				// JSON Schema uses ECMA patterns, which Go cannot safely interpret in general.
+				known = false
+			case "format":
+				text, ok := value.(string)
+				if !ok {
+					continue
+				}
+				format, ok := raw.(string)
+				if !ok {
+					known = false
+					continue
+				}
+				switch format {
+				case "email":
+					// Validators differ on quoted and internationalized addresses.
+					separator := strings.LastIndexByte(text, '@')
+					if separator <= 0 || separator == len(text)-1 || strings.ContainsAny(text, "\r\n") {
+						return false, true
+					}
+					known = false
+				case "uuid":
+					if !regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`).MatchString(text) {
+						return false, true
+					}
+					// A schema format does not reveal narrower validator variants such as uuid4.
+					known = false
+				case "uri":
+					parsed, err := url.Parse(text)
+					if err != nil || parsed.Scheme == "" {
+						return false, true
+					}
+					known = false
+				default:
+					known = false
+				}
+			case "title", "description", "default", "examples", "example", "$comment":
+			default:
+				known = false
+			}
+		}
+		return true, known
+	}
+	return check(schema)
+}
+func exampleMatchesConstraints(value any, raw json.RawMessage) bool {
+	matches, _ := checkExampleConstraints(value, raw)
+	return matches
+}
+
+func fieldExample(t reflect.Type, quoted bool, value string) (any, error) {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t == reflect.TypeFor[time.Time]() {
+		if _, err := time.Parse(time.RFC3339Nano, value); err != nil {
+			return nil, err
+		}
+		return value, nil
+	}
+	if customCodec(t) {
+		return nil, fmt.Errorf("custom codec")
+	}
+	if quoted {
+		if t.Kind() == reflect.String {
+			return nil, fmt.Errorf("quoted string example unsupported")
+		}
+		_, err := fieldExample(t, false, value)
+		if err != nil {
+			return nil, err
+		}
+		return value, nil
+	}
+	switch t.Kind() {
+	case reflect.String:
+		return value, nil
+	case reflect.Bool:
+		return strconv.ParseBool(value)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if _, err := strconv.ParseInt(value, 10, t.Bits()); err != nil {
+			return nil, err
+		}
+		if !json.Valid([]byte(value)) {
+			return nil, fmt.Errorf("invalid JSON integer")
+		}
+		return json.Number(value), nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if _, err := strconv.ParseUint(value, 10, t.Bits()); err != nil {
+			return nil, err
+		}
+		if !json.Valid([]byte(value)) {
+			return nil, fmt.Errorf("invalid JSON integer")
+		}
+		return json.Number(value), nil
+	case reflect.Float32, reflect.Float64:
+		if _, err := strconv.ParseFloat(value, t.Bits()); err != nil {
+			return nil, err
+		}
+		if !json.Valid([]byte(value)) {
+			return nil, fmt.Errorf("invalid JSON number")
+		}
+		return json.Number(value), nil
+	default:
+		return nil, fmt.Errorf("unsupported example type")
+	}
 }
 
 type wireField struct {

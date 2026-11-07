@@ -51,7 +51,7 @@ func New(options Options) boot.OpenAPIUI {
 			title = "API documentation"
 		}
 		assetURL := func(name string) string { return ui.RelativeURL(page, page+"/_assets/"+name) }
-		initializer := ui.DocumentScript(page, documentPath, "swagger-ui", `SwaggerUIBundle({url:documentURL.href,spec:spec,dom_id:"#swagger-ui",deepLinking:true,validatorUrl:null,persistAuthorization:false});`)
+		initializer := ui.DocumentScript(page, documentPath, "swagger-ui", `SwaggerUIBundle({url:documentURL.href,spec:presentation,dom_id:"#swagger-ui",deepLinking:true,validatorUrl:null,persistAuthorization:false});`)
 		body := `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>` + html.EscapeString(title) + `</title><link rel="icon" href="data:,"><link rel="stylesheet" href="` + html.EscapeString(assetURL("swagger-ui.css")) + `"></head><body><div id="swagger-ui"></div><script src="` + html.EscapeString(assetURL("swagger-ui-bundle.js")) + `"></script><script src="` + html.EscapeString(assetURL("init.js")) + `"></script><footer><a href="` + html.EscapeString(assetURL("LICENSE")) + `">Swagger UI license</a> <a href="` + html.EscapeString(assetURL("NOTICE")) + `">Notices</a> <a href="` + html.EscapeString(assetURL("THIRD_PARTY_LICENSES.txt")) + `">Third-party licenses</a></footer></body></html>`
 		return []boot.OpenAPIResource{
 			{Path: page, ContentType: "text/html; charset=utf-8", Body: body},

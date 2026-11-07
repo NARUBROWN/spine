@@ -72,6 +72,15 @@ func OpenAPI(contract description.HTTP, options boot.OpenAPIOptions) (json.RawMe
 		}
 		id := sha256.Sum256([]byte(route.Method + " " + route.Path))
 		op := map[string]any{"operationId": fmt.Sprintf("%s_%x", method, id[:8])}
+		if len(route.Tags) > 0 {
+			op["tags"] = route.Tags
+		}
+		if route.Summary != "" {
+			op["summary"] = route.Summary
+		}
+		if route.Description != "" {
+			op["description"] = route.Description
+		}
 		if contract.PathsOnly {
 			// 경로 변수의 존재만 표현하며 타입이나 검증 규칙을 추측하지 않습니다.
 			parameters := []any{}

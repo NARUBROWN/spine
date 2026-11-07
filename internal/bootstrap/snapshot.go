@@ -15,6 +15,7 @@ func snapshotConfig(config Config) Config {
 	config.Routes = slices.Clone(config.Routes)
 	for i := range config.Routes {
 		config.Routes[i].Interceptors = slices.Clone(config.Routes[i].Interceptors)
+		config.Routes[i].Tags = slices.Clone(config.Routes[i].Tags)
 	}
 	config.Interceptors = slices.Clone(config.Interceptors)
 	config.ScopedInterceptors = slices.Clone(config.ScopedInterceptors)

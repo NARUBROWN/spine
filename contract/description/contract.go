@@ -19,11 +19,14 @@ type HTTP struct {
 }
 
 type Route struct {
-	Method  string   `json:"method"`
-	Path    string   `json:"path"`
-	Handler string   `json:"handler"`
-	Inputs  []Input  `json:"inputs"`
-	Returns []Return `json:"returns"`
+	Method      string   `json:"method"`
+	Path        string   `json:"path"`
+	Handler     string   `json:"handler"`
+	Tags        []string `json:"tags,omitempty"`
+	Summary     string   `json:"summary,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Inputs      []Input  `json:"inputs"`
+	Returns     []Return `json:"returns"`
 }
 
 type Input struct {
