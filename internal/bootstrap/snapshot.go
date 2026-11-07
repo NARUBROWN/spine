@@ -10,9 +10,12 @@ import (
 // 생성자, 인터셉터 인스턴스와 사용자 제공 transport/factory는 복제하지 않습니다.
 func snapshotConfig(config Config) Config {
 	config.Constructors = slices.Clone(config.Constructors)
+	config.ControllerConstructors = slices.Clone(config.ControllerConstructors)
+	config.ComponentIssues = slices.Clone(config.ComponentIssues)
 	config.Routes = slices.Clone(config.Routes)
 	for i := range config.Routes {
 		config.Routes[i].Interceptors = slices.Clone(config.Routes[i].Interceptors)
+		config.Routes[i].Tags = slices.Clone(config.Routes[i].Tags)
 	}
 	config.Interceptors = slices.Clone(config.Interceptors)
 	config.ScopedInterceptors = slices.Clone(config.ScopedInterceptors)

@@ -2,6 +2,7 @@ package invoker
 
 import (
 	"fmt"
+	"github.com/NARUBROWN/spine/core"
 	"reflect"
 	"sync"
 
@@ -118,4 +119,29 @@ func (i *Invoker) controllerValue(controllerType reflect.Type) (reflect.Value, e
 	i.cached[controllerType] = value
 	i.mu.Unlock()
 	return value, nil
+}
+
+// InvokeHandler는 콜백에 별도 receiver나 새 컨트롤러를 추가하지 않습니다.
+func (i *Invoker) InvokeHandler(meta core.HandlerMeta, args []any) ([]any, error) {
+	if !meta.Callback.IsValid() {
+		return i.Invoke(meta.ControllerType, meta.Method, args)
+	}
+	t := meta.Callback.Type()
+	if len(args) != t.NumIn() {
+		return nil, fmt.Errorf("callback expects %d arguments, got %d", t.NumIn(), len(args))
+	}
+	values := make([]reflect.Value, len(args))
+	for index, arg := range args {
+		value, err := invocationValue(arg, t.In(index))
+		if err != nil {
+			return nil, fmt.Errorf("invalid callback argument %d: %w", index, err)
+		}
+		values[index] = value
+	}
+	results := meta.Callback.Call(values)
+	out := make([]any, len(results))
+	for index, value := range results {
+		out[index] = value.Interface()
+	}
+	return out, nil
 }

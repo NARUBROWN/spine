@@ -874,3 +874,19 @@ Core targets v0.7.0 and each platform targets its independent v0.2.0 line. Every
 Core candidate publication records core-candidate-<tag> after kernel checks and a public core consumer build. Publish all five platform tags against that exact core tag, then run Complete Core Release Cohort. Only the completed release-manifest-<tag> permits promotion. Preview/RC have tags and artifacts; GitHub Releases are stable-only.
 Use promote/rc/<rc-tag> or promote/stable/<stable-tag> PR branches for dependency-only promotion. The controller checks ancestry, merged PR direction, normalized code fingerprints, exact channel pins and public verification. General dependency/code changes require a new Preview. pin_channel.py prints a local pin plan unless --apply is supplied; --tidy runs only after the required core tag is public.
 Release examples stay on stable versions and are updated and verified after stable publication through post-release-examples.yml. Do not make old release-only example commits block Preview or RC. See RELEASING.md for branch/environment bootstrap and publication stages.
+
+## Controller route source candidate
+
+The v0.7.0-preview.5 source candidate adds pkg/api.Controller with RegisterRoutes(*api.Registry).
+Keep the constructor as a DI function returning a concrete controller type. Additional private helpers are allowed.
+Use input.Path[T], input.Query[T], input.Body[T] with struct payloads and direct fields such as a.Name.
+Path/Query prefer explicit source tags, skip '-', and otherwise map Name/ID/UserID/HTTPCode to name/id/userId/httpCode.
+Body keeps existing JSON/form decoding. Named pointer wrappers do not promote DTO methods; use (*a).Validate() explicitly.
+Prepare collects each controller once per prepared application, freezes routes and uses the existing execution pipeline.
+DescribeHTTP before collection returns ErrRoutesNotCollected without constructors or external readiness.
+DescribePreparedHTTP returns the prepared snapshot. CLI runtime export does not call Prepare automatically.
+Validator FieldNameMapper supplies request-local wire names without replacing DTO types or mutating shared validators.
+Existing app.Route, DTO pointers, contexts, httpx returns, event and WebSocket methods remain supported.
+The matching CLI candidate analyzes Registry callbacks/helpers with go/types and generates RegisterRoutes for cores >=v0.7.0-preview.5.
+Older selected cores keep legacy generation. Local replacements and source tests do not prove public installation support.
+See docs/migration/controller-routes.md for the complete example and lifecycle limits. Publication still requires matching tags.

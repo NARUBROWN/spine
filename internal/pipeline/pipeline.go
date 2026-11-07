@@ -155,7 +155,7 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 		routeFinalizers = append(routeFinalizers, it)
 	}
 
-	paramMetas := buildParameterMeta(meta.Method, meta.PathKeys)
+	paramMetas := resolver.HandlerParameters(meta, meta.PathKeys)
 
 	// 인자 리졸버 체인 실행
 	args, err := p.resolveArguments(ctx, paramMetas)
@@ -164,11 +164,7 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 	}
 
 	// 컨트롤러 메서드 호출
-	results, err = p.invoker.Invoke(
-		meta.ControllerType,
-		meta.Method,
-		args,
-	)
+	results, err = p.invoker.InvokeHandler(meta, args)
 	if err != nil {
 		return err
 	}

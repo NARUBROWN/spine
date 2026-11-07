@@ -3,6 +3,7 @@ package spine
 import (
 	"context"
 	"fmt"
+	"github.com/NARUBROWN/spine/contract/description"
 	"net/http"
 	"reflect"
 
@@ -56,4 +57,20 @@ func NetHTTPHandler(prepared PreparedApplication) (http.Handler, error) {
 		return nil, fmt.Errorf("%w: HTTP runtime is disabled", httpcontract.ErrUnsupportedCapability)
 	}
 	return httpcontract.NetHTTPHandler(adapter)
+}
+
+// ErrRoutesNotCollected는 생성자를 실행하지 않는 조회에서 미수집 컨트롤러를 발견했음을 나타냅니다.
+var ErrRoutesNotCollected = bootstrap.ErrRoutesNotCollected
+
+// DescribePreparedHTTP는 준비된 앱의 명세 스냅샷을 조회합니다. 생성자나 등록 함수를 다시 실행하지 않습니다.
+func DescribePreparedHTTP(prepared PreparedApplication) (description.HTTP, error) {
+	if prepared == nil || reflect.ValueOf(prepared).Kind() == reflect.Pointer && reflect.ValueOf(prepared).IsNil() {
+		return description.HTTP{}, ErrHTTPDescriptionUnavailable
+	}
+	if describer, ok := prepared.(interface {
+		DescribeHTTP() (description.HTTP, error)
+	}); ok {
+		return describer.DescribeHTTP()
+	}
+	return description.HTTP{}, ErrHTTPDescriptionUnavailable
 }

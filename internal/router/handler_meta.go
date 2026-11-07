@@ -19,7 +19,7 @@ func NewHandlerMeta(handler any) (core.HandlerMeta, error) {
 	}
 
 	// 1. 함수인지 검증
-	if t.Kind() != reflect.Func {
+	if t.Kind() != reflect.Func || v.IsNil() {
 		return core.HandlerMeta{}, fmt.Errorf("handler must be a function")
 	}
 
@@ -58,4 +58,19 @@ func NewHandlerMeta(handler any) (core.HandlerMeta, error) {
 		ControllerType: receiverType,
 		Method:         method,
 	}, nil
+}
+
+// Meta는 기존 메서드 표현식과 컨트롤러 콜백을 구분합니다.
+func Meta(spec RouteSpec) (core.HandlerMeta, error) {
+	if spec.ControllerType == nil {
+		return NewHandlerMeta(spec.Handler)
+	}
+	value := reflect.ValueOf(spec.Handler)
+	if !value.IsValid() || value.Kind() != reflect.Func || value.IsNil() {
+		return core.HandlerMeta{}, fmt.Errorf("callback must be a non-nil function")
+	}
+	if value.Type().IsVariadic() {
+		return core.HandlerMeta{}, fmt.Errorf("variadic callbacks are not supported")
+	}
+	return core.HandlerMeta{ControllerType: spec.ControllerType, Callback: value}, nil
 }

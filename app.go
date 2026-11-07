@@ -3,6 +3,7 @@ package spine
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"time"
 
@@ -17,12 +18,16 @@ import (
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/ws"
 	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/NARUBROWN/spine/pkg/constructor"
 )
 
 type App interface {
-	// 생성자 선언
+	// Constructor는 constructor의 역할 표식 또는 기존 생성자 함수를 등록합니다.
 	Constructor(constructors ...any)
-	// 라우트 선언
+	// Route는 메서드 표현식으로 HTTP 경로를 등록합니다.
+	//
+	// Deprecated: 새 HTTP 경로는 api.Controller의 RegisterRoutes 메서드에 등록하세요.
+	// 기존 등록은 전환 기간에 계속 사용할 수 있습니다.
 	Route(method string, path string, handler any, opts ...router.RouteOption)
 	// 인터셉터 선언
 	Interceptor(interceptors ...core.Interceptor)
@@ -46,6 +51,10 @@ type App interface {
 
 type app struct {
 	constructors            []any
+	controllerConstructors  []any
+	componentIssues         []boot.ConfigIssue
+	componentCounts         map[string]int
+	typedComponents         bool
 	routes                  []router.RouteSpec
 	interceptors            []bootstrap.InterceptorBinding
 	customTransports        []core.CustomTransport
@@ -132,7 +141,18 @@ func New(options ...Option) App {
 }
 
 func (a *app) Constructor(constructors ...any) {
-	a.constructors = append(a.constructors, constructors...)
+	for _, value := range constructors {
+		if registration, ok := value.(constructor.Registration); ok {
+			a.componentRegistration(registration)
+		} else if t := reflect.TypeOf(value); t != nil && t.Kind() == reflect.Func {
+			a.constructors = append(a.constructors, value)
+			if a.controllerConstructors != nil {
+				a.controllerConstructors = append(a.controllerConstructors, value)
+			}
+		} else {
+			a.componentConstructors("Custom", nil, []any{value})
+		}
+	}
 }
 
 func (a *app) Route(method string, path string, handler any, opts ...router.RouteOption) {
@@ -173,6 +193,9 @@ func (a *app) bootstrapConfig(opts boot.Options) bootstrap.Config {
 	return bootstrap.Config{
 		Address:                 opts.Address,
 		Constructors:            a.constructors,
+		ControllerConstructors:  a.controllerConstructors,
+		ComponentIssues:         a.componentIssues,
+		TypedComponents:         a.typedComponents,
 		Routes:                  a.routes,
 		ScopedInterceptors:      a.interceptors,
 		CustomTransports:        a.customTransports,

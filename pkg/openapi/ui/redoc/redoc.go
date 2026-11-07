@@ -50,7 +50,7 @@ func New(options Options) boot.OpenAPIUI {
 			title = "API reference"
 		}
 		assetURL := func(name string) string { return ui.RelativeURL(page, page+"/_assets/"+name) }
-		initializer := ui.DocumentScript(page, documentPath, "redoc", `Redoc.init(spec,{disableGoogleFont:true,theme:{typography:{fontFamily:"system-ui, sans-serif",headings:{fontFamily:"system-ui, sans-serif"},code:{fontFamily:"monospace"}}}},document.getElementById("redoc"));`)
+		initializer := ui.DocumentScript(page, documentPath, "redoc", `Redoc.init(presentation,{downloadDefinitionUrl:documentURL.href,disableGoogleFont:true,theme:{typography:{fontFamily:"system-ui, sans-serif",headings:{fontFamily:"system-ui, sans-serif"},code:{fontFamily:"monospace"}}}},document.getElementById("redoc"));`)
 		body := `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>` + html.EscapeString(title) + `</title><link rel="icon" href="data:,"></head><body style="margin:0"><div id="redoc"></div><script src="` + html.EscapeString(assetURL("redoc.standalone.js")) + `"></script><script src="` + html.EscapeString(assetURL("init.js")) + `"></script><footer><a href="` + html.EscapeString(assetURL("LICENSE")) + `">ReDoc license</a> <a href="` + html.EscapeString(assetURL("THIRD_PARTY_LICENSES.txt")) + `">Third-party licenses</a></footer></body></html>`
 		return []boot.OpenAPIResource{
 			{Path: page, ContentType: "text/html; charset=utf-8", Body: body},

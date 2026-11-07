@@ -45,19 +45,7 @@ func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResourc
 	}
 	var openAPIDocument []byte
 	openAPIResources := map[string]boot.OpenAPIResource{}
-	if config.HTTP != nil && config.HTTP.OpenAPI.Enabled {
-		description, describeErr := DescribeHTTP(config)
-		if describeErr != nil {
-			return nil, describeErr
-		}
-		openAPIDocument, err = endpoint.OpenAPI(description, config.HTTP.OpenAPI)
-		if err != nil {
-			return nil, err
-		}
-		for _, resource := range resources {
-			openAPIResources[resource.Path] = resource
-		}
-	}
+
 	application := &Application{config: config, closeDone: make(chan struct{})}
 	ready := false
 	defer func() {
@@ -142,6 +130,28 @@ func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResourc
 		return nil, err
 	}
 
+	if err := collectControllers(ctx, &config, container); err != nil {
+		return nil, err
+	}
+	if config.HTTP != nil {
+		if err := validateCollectedRoutes(config, resources); err != nil {
+			return nil, err
+		}
+	}
+	application.config = config
+	if config.HTTP != nil && config.HTTP.OpenAPI.Enabled {
+		description, describeErr := application.DescribeHTTP()
+		if describeErr != nil {
+			return nil, describeErr
+		}
+		openAPIDocument, err = endpoint.OpenAPI(description, config.HTTP.OpenAPI)
+		if err != nil {
+			return nil, err
+		}
+		for _, resource := range resources {
+			openAPIResources[resource.Path] = resource
+		}
+	}
 	if config.HTTP != nil {
 		prefix := config.HTTP.GlobalPrefix
 		if prefix != "" {
@@ -167,7 +177,7 @@ func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResourc
 		loggedRouteInterceptors := make(map[reflect.Type]bool)
 
 		for _, route := range config.Routes {
-			meta, err := spineRouter.NewHandlerMeta(route.Handler)
+			meta, err := spineRouter.Meta(route)
 			if err != nil {
 				return nil, err
 			}
