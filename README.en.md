@@ -150,7 +150,7 @@ MIT
 
 ## Declare routes inside controllers
 
-The current `v0.7.0-preview.5` source candidate adds `api.Controller.RegisterRoutes` and `input.Path[T]`, `input.Query[T]`, `input.Body[T]`. Register the concrete controller prototype with `app.Constructor(constructor.Controller(&UserController{}))`; a separate route table is unnecessary. This describes the source candidate, not a published tag or CLI release. See the [controller example and description lifecycle](docs/migration/controller-routes.md).
+The current `v0.7.0-preview.6` source candidate adds `api.Controller.RegisterRoutes` and `input.Path[T]`, `input.Query[T]`, `input.Body[T]`. Register the concrete controller prototype with `app.Constructor(constructor.Controller(&UserController{}))`; a separate route table is unnecessary. This describes the source candidate, not a published tag or CLI release. See the [controller example and description lifecycle](docs/migration/controller-routes.md).
 
 ```go
 package controller

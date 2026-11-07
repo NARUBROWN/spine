@@ -2,7 +2,7 @@
 
 `app.Constructor(...)` 안에서 객체의 역할을 표시하고 생성 계약과 실행 계약을 앱 시작 전에 검사합니다. 모든 역할은 하나의 DI 컨테이너를 공유합니다.
 
-`github.com/NARUBROWN/spine/pkg/constructor`의 `Custom`, `Repository`, `Service`, `Controller`, `Interceptor`는 각각 인자 하나를 받아 `constructor.Registration` 표식을 반환합니다. 표식을 만들 때 생성자나 의존성을 실행하지 않으며 제네릭 타입 인자를 직접 적을 필요가 없습니다. 이 문서는 미공개 `v0.7.0-preview.5` 후보 소스의 동작을 설명하며 공개 태그 설치 검증을 뜻하지 않습니다.
+`github.com/NARUBROWN/spine/pkg/constructor`의 `Custom`, `Repository`, `Service`, `Controller`, `Interceptor`는 각각 인자 하나를 받아 `constructor.Registration` 표식을 반환합니다. 표식을 만들 때 생성자나 의존성을 실행하지 않으며 제네릭 타입 인자를 직접 적을 필요가 없습니다. 이 문서는 미공개 `v0.7.0-preview.6` 후보 소스의 동작을 설명하며 공개 태그 설치 검증을 뜻하지 않습니다.
 
 ## 공통 생성 계약
 
