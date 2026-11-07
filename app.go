@@ -24,7 +24,10 @@ import (
 type App interface {
 	// Constructor는 constructor의 역할 표식 또는 기존 생성자 함수를 등록합니다.
 	Constructor(constructors ...any)
-	// 라우트 선언
+	// Route는 메서드 표현식으로 HTTP 경로를 등록합니다.
+	//
+	// Deprecated: 새 HTTP 경로는 api.Controller의 RegisterRoutes 메서드에 등록하세요.
+	// 기존 등록은 전환 기간에 계속 사용할 수 있습니다.
 	Route(method string, path string, handler any, opts ...router.RouteOption)
 	// 인터셉터 선언
 	Interceptor(interceptors ...core.Interceptor)

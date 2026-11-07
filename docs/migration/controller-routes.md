@@ -4,7 +4,7 @@
 
 ## 적용 대상
 
-이 문서는 현재 소스의 `v0.7.0-preview.6` 후보 API를 설명합니다. 이 문서가 공개 태그나 배포 완료를 뜻하지는 않습니다. 설치할 때는 해당 기능이 포함된 공개 코어와 CLI 태그가 있는지 확인하세요. 이전 코어를 대상으로 하는 CLI 생성 결과는 기존 `app.Route` 방식을 유지합니다.
+이 문서는 현재 소스의 `v0.7.0-preview.7` 후보 API를 설명합니다. 이 문서가 공개 태그나 배포 완료를 뜻하지는 않습니다. 설치할 때는 해당 기능이 포함된 공개 코어와 CLI 태그가 있는지 확인하세요. 이전 코어를 대상으로 하는 CLI 생성 결과는 기존 `app.Route` 방식을 유지합니다.
 
 코어의 Go 하한은 1.25.5입니다. playground 검증기를 사용하는 앱은 해당 모듈의 Go 1.26 이상 조건을 따릅니다.
 
@@ -70,7 +70,9 @@ type SearchUsers struct {
 
 ## 준비와 호환성
 
-`app.Route(...)`와 `RegisterRoutes(...)`는 한 앱에서 함께 사용할 수 있습니다. 기존 라우트 API는 제거하거나 deprecated 처리하지 않았습니다. 신규 생성기는 컨트롤러 등록 방식을 사용하지만, 기존 `route.go`를 삭제하거나 한 번에 이관할 필요는 없습니다. 두 방식에서 같은 HTTP 메서드와 경로를 등록하면 준비 단계에서 중복으로 거부합니다.
+생성자 함수를 등록하고 별도 `route.go`에서 `app.Route(...)`로 메서드 표현식을 연결하는 기존 컨트롤러 방식은 Deprecated입니다. 새 컨트롤러는 `Constructor` 메서드와 `RegisterRoutes(*api.Registry)`를 정의하고 `constructor.Controller`로 앱에 등록하세요.
+
+전환 기간에는 기존 등록과 새 등록을 한 앱에서 함께 사용할 수 있습니다. 같은 HTTP 메서드와 경로를 두 방식으로 등록하면 준비 단계에서 중복으로 거부합니다. 기존 방식의 제거 버전은 아직 정하지 않았습니다.
 
 `Prepare`는 HTTP가 켜진 앱에서 DI의 구체 반환 타입이 `api.Controller`를 구현하는지 확인하고 실제 인스턴스를 호출합니다. 컨트롤러마다 준비한 앱 인스턴스별로 한 번 수집한 뒤 등록을 고정합니다. 요청이나 문서 조회에서는 다시 실행하지 않습니다. HTTP를 끈 앱은 HTTP 컨트롤러를 생성하지 않습니다.
 
@@ -103,8 +105,11 @@ spine verify --json
 
 CLI `--source runtime`도 새 컨트롤러를 위해 `Prepare`를 자동 실행하지 않습니다. 수집 전이면 오류를 반환하므로 정적 내보내기 또는 이미 준비된 앱의 조회를 사용하세요. 새 콜백의 operationId는 런타임과 같은 HTTP 메서드와 최종 경로의 해시를 사용합니다.
 
-## 이전 프로젝트를 유지하는 경우
+## 기존 컨트롤러 전환
 
-기존 라우트 파일은 그대로 실행할 수 있습니다. 새 코어를 선택한 뒤 컨트롤러를 이전하고 실제 요청과 명세를 확인한 다음 이전 연결을 제거하세요. CLI가 사용자의 수동 `route.go`를 임의로 삭제하지 않습니다.
+1. `NewUserController(...) *UserController` 같은 생성자 함수 대신 `func (*UserController) Constructor(...) *UserController` 메서드를 정의합니다.
+2. `app.Constructor(...)`에서 기존 컨트롤러 생성자 등록을 `constructor.Controller(&controller.UserController{})`로 교체합니다.
+3. `app.Route(...)`로 연결했던 경로를 `RegisterRoutes`로 옮기고, 옮긴 경로의 기존 등록을 제거합니다. 처리 로직은 기존 메서드에 두고 콜백에서 호출할 수 있습니다.
+4. `spine contract check --json`을 실행하고 실제 요청과 명세를 확인합니다.
 
 [구조체 입력 전환](structured-inputs.md)과 [HTTP v3 전환](http-v3.md)을 함께 참고하세요.

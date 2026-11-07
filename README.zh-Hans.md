@@ -149,7 +149,7 @@ MIT
 
 ## 在控制器中声明路由
 
-当前 `v0.7.0-preview.6` 源码候选版本提供 `api.Controller.RegisterRoutes` 和 `input.Path[T]`、`input.Query[T]`、`input.Body[T]`。将具体控制器的对象注册到 `app.Constructor(constructor.Controller(&UserController{}))` 后，框架会收集控制器中的路由，无需单独的路由表。这不表示公开标签或 CLI 已经发布。请参阅[代码示例和规范查询条件](docs/migration/controller-routes.md)。
+当前 `v0.7.0-preview.7` 源码候选版本提供 `api.Controller.RegisterRoutes` 和 `input.Path[T]`、`input.Query[T]`、`input.Body[T]`。将具体控制器的对象注册到 `app.Constructor(constructor.Controller(&UserController{}))` 后，框架会收集控制器中的路由，无需单独的路由表。这不表示公开标签或 CLI 已经发布。请参阅[代码示例和规范查询条件](docs/migration/controller-routes.md)。
 
 ```go
 package controller

@@ -10,15 +10,15 @@
 
 | 모듈 | Preview 버전 |
 | --- | --- |
-| Spine 코어 | `v0.7.0-preview.6` |
+| Spine 코어 | `v0.7.0-preview.7` |
 | Echo | `v0.2.0-preview.3` |
 | Gorilla | `v0.2.0-preview.2` |
 | Kafka | `v0.2.0-preview.2` |
 | RabbitMQ | `v0.2.0-preview.2` |
-| playground validator | `v0.2.0-preview.5` |
+| playground validator | `v0.2.0-preview.6` |
 | net/http | `v0.1.0-preview.2` |
 
-코어 `v0.7.0-preview.6`는 이번 수정의 후보 버전입니다. 표는 소스 CI의 검증 조합이며 아직 발행하지 않은 playground 후보도 포함합니다. Echo, Gorilla, Kafka, RabbitMQ와 net/http의 기존 태그는 코어 `v0.7.0-preview.4`를 기준으로 발행됐으며, 이 표만으로 새 코어의 공개 조합이 완료된 것은 아닙니다. 새 코어의 전체 조합을 발행하려면 코어 후보 태그 생성 전에 새 플랫폼 후보 버전을 정책에 고정하고, 코어 후보 발행 후 각 플랫폼을 그 코어 태그로 발행해야 합니다. 발행과 전체 조합 완료 여부는 해당 태그의 Actions manifest에서 확인합니다. 이미 발행한 태그는 이동하거나 재사용하지 않습니다.
+코어 `v0.7.0-preview.7`는 이번 수정의 후보 버전입니다. 표는 소스 CI의 검증 조합이며 아직 발행하지 않은 playground 후보도 포함합니다. Echo, Gorilla, Kafka, RabbitMQ와 net/http의 기존 태그는 코어 `v0.7.0-preview.4`를 기준으로 발행됐으며, 이 표만으로 새 코어의 공개 조합이 완료된 것은 아닙니다. 새 코어의 전체 조합을 발행하려면 코어 후보 태그 생성 전에 새 플랫폼 후보 버전을 정책에 고정하고, 코어 후보 발행 후 각 플랫폼을 그 코어 태그로 발행해야 합니다. 발행과 전체 조합 완료 여부는 해당 태그의 Actions manifest에서 확인합니다. 이미 발행한 태그는 이동하거나 재사용하지 않습니다.
 
 RC는 코어 `v0.7.0-rc.1`, 기존 다섯 플랫폼 `v0.2.0-rc.1`, net/http `v0.1.0-rc.1`을 대상으로 합니다. 정식 대상은 코어 `v0.7.0`, 기존 다섯 플랫폼 `v0.2.0`, net/http `v0.1.0`입니다.
 

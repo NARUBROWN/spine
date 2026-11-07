@@ -151,7 +151,7 @@ MIT
 
 ## コントローラー内でルートを宣言する
 
-現在の `v0.7.0-preview.6` ソース候補では、`api.Controller.RegisterRoutes` と `input.Path[T]`、`input.Query[T]`、`input.Body[T]` を使用できます。具象コントローラーのオブジェクトを `app.Constructor(constructor.Controller(&UserController{}))` に登録すると、内部のルートを収集します。別のルート表は不要です。公開タグや CLI のリリース完了を示すものではありません。[コード例と仕様取得の条件](docs/migration/controller-routes.md)を参照してください。
+現在の `v0.7.0-preview.7` ソース候補では、`api.Controller.RegisterRoutes` と `input.Path[T]`、`input.Query[T]`、`input.Body[T]` を使用できます。具象コントローラーのオブジェクトを `app.Constructor(constructor.Controller(&UserController{}))` に登録すると、内部のルートを収集します。別のルート表は不要です。公開タグや CLI のリリース完了を示すものではありません。[コード例と仕様取得の条件](docs/migration/controller-routes.md)を参照してください。
 
 ```go
 package controller
