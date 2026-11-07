@@ -602,6 +602,34 @@ func TestExecute_ControllerReturnedErrorReachesBeforeResponseBeforeErrorWrite(t 
 	}
 }
 
+func TestExecute_NoContentTransportErrorReachesAfterCompletion(t *testing.T) {
+	controllerCalled := 0
+	p, _ := newPipelineWithController(t, "Handle", &controllerCalled)
+	p.AddArgumentResolver(&testArgumentResolver{
+		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
+		resolve:  func(core.ExecutionContext, resolver.ParameterMeta) (any, error) { return 7, nil },
+	})
+	p.AddReturnValueHandler(&testReturnHandler{
+		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
+		handle: func(_ any, ctx core.ExecutionContext) error {
+			return ctx.(core.HTTPResponseContext).ResponseWriter().WriteStatus(http.StatusNoContent)
+		},
+	})
+	want := errors.New("transport write failed")
+	writer := &testResponseWriter{writeErr: want}
+	ctx := newTestExecutionContext()
+	ctx.SetResponseWriter(writer)
+	var completion error
+	events := []string{}
+	p.AddInterceptor(&testInterceptor{name: "probe", events: &events, after: func(_ core.HandlerMeta, err error) { completion = err }})
+	if err := p.Execute(ctx); !errors.Is(err, want) {
+		t.Fatalf("execution error=%v", err)
+	}
+	if !errors.Is(completion, want) || writer.status != http.StatusNoContent {
+		t.Fatalf("completion error=%v status=%d", completion, writer.status)
+	}
+}
+
 func TestExecute_RecoversErrorResponseAndAfterCompletionPanics(t *testing.T) {
 	controllerCalled := 0
 	p, _ := newPipelineWithController(t, "Fail", &controllerCalled)
