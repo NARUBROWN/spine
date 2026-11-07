@@ -70,6 +70,8 @@ type SearchUsers struct {
 
 ## 준비와 호환성
 
+`app.Route(...)`와 `RegisterRoutes(...)`는 한 앱에서 함께 사용할 수 있습니다. 기존 라우트 API는 제거하거나 deprecated 처리하지 않았습니다. 신규 생성기는 컨트롤러 등록 방식을 사용하지만, 기존 `route.go`를 삭제하거나 한 번에 이관할 필요는 없습니다. 두 방식에서 같은 HTTP 메서드와 경로를 등록하면 준비 단계에서 중복으로 거부합니다.
+
 `Prepare`는 HTTP가 켜진 앱에서 DI의 구체 반환 타입이 `api.Controller`를 구현하는지 확인하고 실제 인스턴스를 호출합니다. 컨트롤러마다 준비한 앱 인스턴스별로 한 번 수집한 뒤 등록을 고정합니다. 요청이나 문서 조회에서는 다시 실행하지 않습니다. HTTP를 끈 앱은 HTTP 컨트롤러를 생성하지 않습니다.
 
 `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`가 제공됩니다. 기존 `route.WithInterceptors(...)`를 선택 인자로 전달할 수 있습니다. 사용자 구성 오류는 `r.Error(err)`로 전달합니다. 등록 패닉, nil 핸들러, 지원하지 않는 입력이나 반환, 중복 경로와 OpenAPI 리소스 충돌은 리스너 시작 전에 실패합니다.

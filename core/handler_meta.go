@@ -32,6 +32,9 @@ func (m HandlerMeta) ArgumentOffset() int {
 	return 1
 }
 func (m HandlerMeta) HandlerName() string {
+	if m.ControllerType == nil {
+		return ""
+	}
 	if m.Callback.IsValid() {
 		return m.ControllerType.String() + ".RegisterRoutes"
 	}

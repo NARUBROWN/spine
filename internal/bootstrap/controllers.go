@@ -109,14 +109,18 @@ func controllerProviderIssues(config Config) []boot.ConfigIssue {
 		return nil
 	}
 	var issues []boot.ConfigIssue
-	for index, constructor := range config.Constructors {
+	candidates, field := config.controllerCandidates(), "Constructors"
+	if config.ControllerConstructors != nil {
+		field = "ControllerConstructors"
+	}
+	for index, constructor := range candidates {
 		t := reflect.TypeOf(constructor)
 		if t == nil || t.Kind() != reflect.Func || t.NumOut() != 1 {
 			continue
 		}
 		output := t.Out(0)
 		if output.Kind() == reflect.Interface && output.Implements(reflect.TypeFor[api.Controller]()) {
-			issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("Constructors[%d]", index), Code: "HTTP_CONTROLLER_PROVIDER_ABSTRACT", Message: "HTTP controller constructors must return a concrete controller type.", Hint: "Return *UserController rather than api.Controller so DI can distinguish controllers without executing providers."})
+			issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s[%d]", field, index), Code: "HTTP_CONTROLLER_PROVIDER_ABSTRACT", Message: "HTTP controller constructors must return a concrete controller type.", Hint: "Return *UserController rather than api.Controller so DI can distinguish controllers without executing providers."})
 		}
 	}
 	return issues
