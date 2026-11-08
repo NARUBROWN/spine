@@ -64,24 +64,24 @@ func (r *Registry) Freeze() ([]router.RouteSpec, error) {
 	}
 	return routes, errors.Join(r.errors...)
 }
-func (r *Registry) GET(path string, handler any, options ...router.RouteOption) {
+func (r *Registry) GET(path string, handler any, options ...Option) {
 	r.add(http.MethodGet, path, handler, options)
 }
-func (r *Registry) POST(path string, handler any, options ...router.RouteOption) {
+func (r *Registry) POST(path string, handler any, options ...Option) {
 	r.add(http.MethodPost, path, handler, options)
 }
-func (r *Registry) PUT(path string, handler any, options ...router.RouteOption) {
+func (r *Registry) PUT(path string, handler any, options ...Option) {
 	r.add(http.MethodPut, path, handler, options)
 }
-func (r *Registry) PATCH(path string, handler any, options ...router.RouteOption) {
+func (r *Registry) PATCH(path string, handler any, options ...Option) {
 	r.add(http.MethodPatch, path, handler, options)
 }
-func (r *Registry) DELETE(path string, handler any, options ...router.RouteOption) {
+func (r *Registry) DELETE(path string, handler any, options ...Option) {
 	r.add(http.MethodDelete, path, handler, options)
 }
-func (r *Registry) HEAD(path string, handler any, options ...router.RouteOption) {
+func (r *Registry) HEAD(path string, handler any, options ...Option) {
 	r.add(http.MethodHead, path, handler, options)
 }
-func (r *Registry) OPTIONS(path string, handler any, options ...router.RouteOption) {
+func (r *Registry) OPTIONS(path string, handler any, options ...Option) {
 	r.add(http.MethodOptions, path, handler, options)
 }

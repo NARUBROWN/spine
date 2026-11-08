@@ -16,13 +16,9 @@ type Controller interface {
 // Group은 공통 경로와 설정을 보유합니다.
 type Group = apiregistry.Group
 
-// Option은 API 문서와 그룹 실행 설정을 선언합니다.
+// Option은 Registry와 Group 경로의 문서 및 실행 설정을 선언합니다.
 type Option = apiregistry.Option
 
-// OptionSet은 라우트에 적용할 옵션 모음입니다.
-type OptionSet = apiregistry.OptionSet
-
-var Options = apiregistry.Options
 var Tags = apiregistry.Tags
 var Summary = apiregistry.Summary
 var Description = apiregistry.Description

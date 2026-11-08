@@ -9,10 +9,8 @@ import (
 	"github.com/NARUBROWN/spine/internal/router"
 )
 
-type Option func(*router.RouteSpec)
-type OptionSet struct{ values []Option }
+type Option = router.RouteOption
 
-func Options(values ...Option) OptionSet { return OptionSet{values: append([]Option(nil), values...)} }
 func Tags(tags ...string) Option {
 	copyTags := append([]string(nil), tags...)
 	return func(s *router.RouteSpec) {
@@ -61,26 +59,26 @@ func join(prefix, path string) string {
 	}
 	return strings.TrimSuffix(prefix, "/") + path
 }
-func (g *Group) add(method, path string, options OptionSet, handler any) {
+func (g *Group) add(method, path string, handler any, options []Option) {
 	if path == "" || !strings.HasPrefix(path, "/") || strings.Contains(path, "//") {
 		g.registry.Error(fmt.Errorf("invalid group route path %q", path))
 		return
 	}
-	all := append(append([]Option(nil), g.options...), options.values...)
-	converted := make([]router.RouteOption, 0, len(all))
-	for _, option := range all {
-		if option == nil {
-			g.registry.Error(fmt.Errorf("nil group route option"))
-			continue
-		}
-		converted = append(converted, router.RouteOption(option))
-	}
-	g.registry.add(method, join(g.prefix, path), handler, converted)
+	all := append(append([]Option(nil), g.options...), options...)
+	g.registry.add(method, join(g.prefix, path), handler, all)
 }
-func (g *Group) GET(p string, o OptionSet, h any)     { g.add(http.MethodGet, p, o, h) }
-func (g *Group) POST(p string, o OptionSet, h any)    { g.add(http.MethodPost, p, o, h) }
-func (g *Group) PUT(p string, o OptionSet, h any)     { g.add(http.MethodPut, p, o, h) }
-func (g *Group) PATCH(p string, o OptionSet, h any)   { g.add(http.MethodPatch, p, o, h) }
-func (g *Group) DELETE(p string, o OptionSet, h any)  { g.add(http.MethodDelete, p, o, h) }
-func (g *Group) HEAD(p string, o OptionSet, h any)    { g.add(http.MethodHead, p, o, h) }
-func (g *Group) OPTIONS(p string, o OptionSet, h any) { g.add(http.MethodOptions, p, o, h) }
+func (g *Group) GET(p string, h any, options ...Option) { g.add(http.MethodGet, p, h, options) }
+func (g *Group) POST(p string, h any, options ...Option) {
+	g.add(http.MethodPost, p, h, options)
+}
+func (g *Group) PUT(p string, h any, options ...Option) { g.add(http.MethodPut, p, h, options) }
+func (g *Group) PATCH(p string, h any, options ...Option) {
+	g.add(http.MethodPatch, p, h, options)
+}
+func (g *Group) DELETE(p string, h any, options ...Option) {
+	g.add(http.MethodDelete, p, h, options)
+}
+func (g *Group) HEAD(p string, h any, options ...Option) { g.add(http.MethodHead, p, h, options) }
+func (g *Group) OPTIONS(p string, h any, options ...Option) {
+	g.add(http.MethodOptions, p, h, options)
+}

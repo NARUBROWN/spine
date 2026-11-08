@@ -141,16 +141,18 @@ type UserQuery struct {
 
 func (c *UserController) RegisterRoutes(r *api.Registry) {
     users := r.Group("/users", api.Tags("Users"))
-    users.GET("/", api.Options(
+    users.GET(
+        "/",
+        func(q input.Query[UserQuery]) httpx.Response[User] {
+            return httpx.Response[User]{Body: User{Name: "example"}}
+        },
         api.Summary("사용자 조회"),
         api.Description("사용자 ID로 조회합니다."),
-    ), func(q input.Query[UserQuery]) httpx.Response[User] {
-        return httpx.Response[User]{Body: User{Name: "example"}}
-    })
+    )
 }
 ```
 
-`users.GET("/", ...)`은 `GET /users`를 등록합니다. 하위 그룹은 접두사와 태그를 상속하며 중복 태그는 제거합니다. 빈 옵션은 `api.Options()`로 전달합니다. `api.Interceptors(...)`는 그룹과 라우트에 적용할 인터셉터를 추가합니다. 그룹 밖의 기존 `Registry.GET(path, handler, options...)` 호출도 유지됩니다.
+`users.GET("/", handler, options...)`은 `GET /users`를 등록합니다. 하위 그룹은 접두사와 태그를 상속하며 중복 태그는 제거합니다. 옵션이 없으면 핸들러 뒤의 인자를 생략합니다. `api.Interceptors(...)`는 그룹과 라우트에 적용할 인터셉터를 추가합니다. `Registry.GET`과 `Group.GET`은 모두 `path, handler, options...` 순서를 사용합니다. 이 통일된 순서는 `v0.7.0-preview.10` 이상을 대상으로 하며, `v0.7.0-preview.9`까지는 그룹 라우트에 `api.Options(...), handler` 순서를 사용합니다.
 
 `example`과 `description` 필드 태그는 문서용이며 런타임 기본값이나 검증 규칙이 아닙니다. 지원하지 않는 타입이나 잘못된 예시는 명세 진단에 표시됩니다. 숫자 범위, 문자열 길이, 열거값과 필수값을 포함해 명세로 표현된 제약을 예시와 대조합니다. 이메일, URI, UUID와 정규식처럼 명세만으로 실제 검증기와 같은 결과를 보장할 수 없는 경우에는 `FIELD_EXAMPLE_VALIDATION_UNRESOLVED` 진단을 남깁니다. 사용자 정의 검증기는 실행하지 않습니다. 자동 생성 명세의 정수 경계는 그대로 유지하며 내장 UI에서는 타입 자체의 범위만 간결하게 표시합니다. JavaScript 클라이언트의 안전 정수 범위를 넘는 숫자는 별도 처리가 필요합니다.
 
