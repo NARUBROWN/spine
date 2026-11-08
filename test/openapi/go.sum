@@ -1,7 +1,11 @@
 github.com/NARUBROWN/spine-echo-platform v0.1.0 h1:2ca5eudam0k0dsX1bToo0SG90HnHIodU6LZW2VdA5WQ=
 github.com/NARUBROWN/spine-echo-platform v0.1.0/go.mod h1:qf9ub1FlTfIpsOxTG9DfDw6sKqv7bZvssUFhDJ+wJVk=
+github.com/NARUBROWN/spine-echo-platform v0.2.0-preview.3 h1:cKsrEPPlRZs0SqBwzzLHqoldLY/jBhZzSRQJzmPYPT4=
+github.com/NARUBROWN/spine-echo-platform v0.2.0-preview.3/go.mod h1:/vN8upRFYTCcPfXJfw/B+kNPBeZ8Uf/VLazVm19HqCU=
 github.com/NARUBROWN/spine-validator-playground v0.1.1-0.20261103094358-5a664f41943b h1:aOrlX7q/mn/IAcOCaePMloV5qVNVubdQlLXVrN6ulPA=
 github.com/NARUBROWN/spine-validator-playground v0.1.1-0.20261103094358-5a664f41943b/go.mod h1:kt9MopDrL5Wf/SOWYTRmjgjjmHZj2m9HGm6RIw2hv3o=
+github.com/NARUBROWN/spine-validator-playground v0.2.0-preview.6 h1:FIusmMcsen+VYFeh6InVwAgaIIrYZNq2vfCFxZFehDo=
+github.com/NARUBROWN/spine-validator-playground v0.2.0-preview.6/go.mod h1:yYY/fxm6/q/XKcK9JVpujNm2nCv3hWKLpPAB0vF/I7g=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dlclark/regexp2 v1.11.0 h1:G/nrcoOa7ZXlpoa/91N3X7mM3r8eIlMBBJZvsz/mxKI=

@@ -14,6 +14,7 @@ type Plan struct {
 	Source   string
 	Fields   []Field
 	Wrapped  bool
+	Scalar   bool
 }
 
 func Wrapper(t reflect.Type) (string, bool) {
@@ -32,6 +33,10 @@ func Inspect(t reflect.Type) (Plan, bool, error) {
 	source, wrapped := Wrapper(t)
 	plan := Plan{Declared: t, Source: source, Wrapped: wrapped}
 	if wrapped {
+		if t.Kind() == reflect.Pointer && source == "path" && scalarPathType(t.Elem()) {
+			plan.Payload, plan.Scalar = t.Elem(), true
+			return plan, true, nil
+		}
 		if t.Kind() != reflect.Pointer || t.Elem().Kind() != reflect.Struct {
 			return plan, true, fmt.Errorf("input.%s requires a struct payload", t.Name())
 		}
@@ -88,4 +93,24 @@ func (p Plan) FieldName(owner reflect.Type, field reflect.StructField) (string, 
 		}
 	}
 	return "", false
+}
+
+// scalarPathType는 명세와 변환을 일치시킬 수 있는 기본 스칼라만 허용합니다.
+func scalarPathType(t reflect.Type) bool {
+	if t.PkgPath() != "" {
+		return false
+	}
+	switch t.Kind() {
+	case reflect.String, reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr, reflect.Float32, reflect.Float64:
+		return true
+	}
+	return false
+}
+
+// BindScalarPath는 DTO 필드와 같은 변환 규칙과 오류 형태를 사용합니다.
+func BindScalarPath(target reflect.Value, name, raw string) error {
+	if err := set(target, []string{raw}); err != nil {
+		return fmt.Errorf("invalid path field %s", name)
+	}
+	return nil
 }

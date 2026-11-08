@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/input"
 	"reflect"
 
 	"github.com/NARUBROWN/spine/pkg/header"
@@ -24,6 +25,9 @@ func callableParameters(signature reflect.Type, offset int, pathKeys []string) [
 	for i := offset; i < signature.NumIn(); i++ {
 		t := signature.In(i)
 		parameter := ParameterMeta{Index: i - offset, Type: t}
+		if plan, _, _ := input.Inspect(t); plan.Scalar && len(pathKeys) == 1 {
+			parameter.PathKey = pathKeys[0]
+		}
 		if IsLegacyPath(t) {
 			if pathIndex < len(pathKeys) {
 				parameter.PathKey = pathKeys[pathIndex]

@@ -93,6 +93,9 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 				}
 				matched = true
 				switch candidate.(type) {
+				case *resolver.ScalarPathResolver:
+					input.Binding, input.Name, input.Required = "path", parameter.PathKey, true
+					input.Schema = raw(c.schema(parameter.Type.Elem(), "request/path"))
 				case *resolver.InputDTOResolver:
 					plan, _, planErr := inputbinding.Inspect(parameter.Type)
 					payload, source := plan.Payload, plan.Source

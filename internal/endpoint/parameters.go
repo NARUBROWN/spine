@@ -35,6 +35,7 @@ func HandlerDTOParameterIssues(meta core.HandlerMeta, prefix, routePath string) 
 	seen := map[reflect.Type]int{}
 	keys := map[string]int{}
 	bodyIndex := -1
+	scalarPathIndex := -1
 	var issues []boot.ConfigIssue
 	resolvers := Resolvers(nil)
 	for index := offset; index < signature.NumIn(); index++ {
@@ -74,6 +75,15 @@ func HandlerDTOParameterIssues(meta core.HandlerMeta, prefix, routePath string) 
 			issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_INPUT_CONTRACT_INVALID", Message: planErr.Error(), Hint: "Use a struct payload with fields from one input source."})
 			continue
 		}
+		if plan.Scalar {
+			if scalarPathIndex >= 0 || len(pathKeys) != 1 {
+				issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_PATH_SCALAR_AMBIGUOUS", Message: "A scalar path input requires exactly one route key and one scalar path argument.", Hint: "Use one scalar path argument for a route with one key, or use a path DTO."})
+			}
+			scalarPathIndex = parameter.Index
+			if len(pathKeys) == 1 {
+				plan.Fields = []input.Field{{Name: pathKeys[0], Type: plan.Payload}}
+			}
+		}
 		if planned && plan.Source != "body" {
 			source = plan.Source
 			fields = plan.Fields
@@ -102,6 +112,8 @@ func HandlerDTOParameterIssues(meta core.HandlerMeta, prefix, routePath string) 
 				continue
 			}
 			switch candidate.(type) {
+			case *resolver.ScalarPathResolver:
+				// 스칼라와 DTO가 같은 경로 키를 중복 선언하는지 공통 검사합니다.
 			case *resolver.PaginationResolver:
 				source = "query"
 				fields = []input.Field{{Name: "page"}, {Name: "size"}}
