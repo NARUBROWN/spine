@@ -4,7 +4,7 @@
 
 ## 적용 대상
 
-이 문서는 현재 소스의 `v0.7.0-preview.7` 후보 API를 설명합니다. 이 문서가 공개 태그나 배포 완료를 뜻하지는 않습니다. 설치할 때는 해당 기능이 포함된 공개 코어와 CLI 태그가 있는지 확인하세요. 이전 코어를 대상으로 하는 CLI 생성 결과는 기존 `app.Route` 방식을 유지합니다.
+이 문서는 현재 소스의 Preview 후보 API를 설명합니다. 스칼라 경로 입력은 `v0.7.0-preview.8` 후보에서 추가됩니다. 이 문서가 공개 태그나 배포 완료를 뜻하지는 않습니다. 설치할 때는 해당 기능이 포함된 공개 코어와 CLI 태그가 있는지 확인하세요. 이전 코어를 대상으로 하는 CLI 생성 결과는 기존 `app.Route` 방식을 유지합니다.
 
 코어의 Go 하한은 1.25.5입니다. playground 검증기를 사용하는 앱은 해당 모듈의 Go 1.26 이상 조건을 따릅니다.
 
@@ -51,7 +51,7 @@ app.Constructor(constructor.Controller(&controller.UserController{}))
 | `input.Query[T]` | URL 쿼리 | `query` 태그가 우선이며 없으면 lowerCamel |
 | `input.Body[T]` | 기존 JSON, 폼 등 요청 본문 디코더 | 기존 `encoding/json`과 폼 규칙 유지 |
 
-`T`는 구조체여야 하며 준비 단계에서 검사합니다. `Name`, `ID`, `UserID`, `HTTPCode`의 기본 경로와 쿼리 이름은 각각 `name`, `id`, `userId`, `httpCode`입니다. 해당 출처 태그의 `-`는 필드를 제외합니다. `json` 태그가 경로나 쿼리 이름을 덮어쓰지는 않습니다.
+`input.Query[T]`와 `input.Body[T]`의 `T`는 구조체여야 합니다. `input.Path[T]`는 구조체 또는 기본 스칼라 타입을 허용하며 준비 단계에서 검사합니다. `Name`, `ID`, `UserID`, `HTTPCode`의 기본 경로와 쿼리 이름은 각각 `name`, `id`, `userId`, `httpCode`입니다. 해당 출처 태그의 `-`는 필드를 제외합니다. `json` 태그가 경로나 쿼리 이름을 덮어쓰지는 않습니다.
 
 ```go
 type UserPath struct { ID int }
@@ -67,6 +67,22 @@ type SearchUsers struct {
 한 콜백에 본문 DTO는 하나만 둡니다. 서로 다른 출처를 한 DTO에 섞거나 외부 필드 이름을 중복 선언하면 준비 단계에서 오류가 납니다. 기존 포인터 DTO와 컨텍스트 주입도 계속 사용할 수 있습니다. 바깥쪽 입력 포인터만으로 HTTP 본문의 optional 또는 nullable 여부를 결정하지 않습니다.
 
 선택한 검증기는 실제 `T` 또는 `*T`를 받습니다. 새 필드 이름을 오류에도 사용하려는 검증 구현은 `contract/validator`의 요청별 `FieldNameMapper`를 반영해야 합니다. 함께 변경한 playground 후보는 이 매핑을 사용하며 공유 검증기 설정은 변경하지 않습니다. 이전 구현의 검증 규칙은 계속 동작하지만 태그 없는 필드 오류 이름은 해당 구현의 기존 규칙을 따를 수 있습니다.
+
+### 단일 경로 값
+
+경로 변수가 정확히 하나라면 DTO 없이 기본 스칼라를 사용할 수 있습니다.
+
+```go
+r.GET("/users/:id", func(id input.Path[int64]) httpx.Response[int64] {
+    return httpx.Response[int64]{Body: *id}
+})
+```
+
+`input.Path[T]`는 이름이 있는 포인터 타입이므로 스칼라 값은 `*id`로 읽습니다. 문자열, bool, 정수와 부동소수점 기본 타입을 지원합니다. 별도 정의한 타입은 지원하지 않으며 타입 별칭은 기본 타입으로 취급합니다. 경로 변수가 없거나 둘 이상이면 준비 단계에서 거부합니다. 같은 핸들러에 스칼라 경로 인자를 여러 개 선언하거나 같은 키를 다른 DTO로 중복 선언할 수 없습니다. 잘못된 값과 정수 범위 초과는 HTTP 400입니다.
+
+상세 런타임 OpenAPI는 경로 이름과 타입 및 정수의 실제 범위를 표시합니다. 검증기가 없으면 기존 PathsOnly 정책을 따릅니다. 스칼라 인자에는 `validate` 태그를 붙일 수 없으므로 `gt=0` 같은 규칙을 자동 검증하거나 명세에 추가하지 않습니다. 필드별 검증이 필요하면 구조체 DTO를 사용하세요.
+
+현재 발행된 CLI Preview의 정적 계약 검사는 아직 스칼라 `input.Path[T]`를 지원하지 않으며 `HTTP_INPUT_CONTRACT_INVALID`를 반환합니다. CLI 지원이 추가되기 전에는 정적 검사와 함께 사용해야 하는 경로에 구조체 DTO를 사용하세요.
 
 ## 준비와 호환성
 

@@ -40,8 +40,8 @@ func TestWrappedInputNamesAndPayload(t *testing.T) {
 	if _, _, err := Inspect(reflect.TypeFor[markers.Body[*dto]]()); err == nil {
 		t.Fatal("pointer payload accepted")
 	}
-	if _, _, err := Inspect(reflect.TypeFor[markers.Path[int]]()); err == nil {
-		t.Fatal("scalar payload accepted")
+	if plan, ok, err := Inspect(reflect.TypeFor[markers.Path[int]]()); !ok || err != nil || !plan.Scalar {
+		t.Fatal(plan, err)
 	}
 }
 
@@ -66,5 +66,32 @@ func TestSharedInputNameConformance(t *testing.T) {
 		if got := LowerCamel(field.Go); got != field.Wire {
 			t.Errorf("%s: %s != %s", field.Go, got, field.Wire)
 		}
+	}
+}
+
+func TestScalarPathBinding(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		target  any
+		raw     string
+		want    any
+		invalid bool
+	}{
+		{"string", new(string), "hello", "hello", false},
+		{"bool", new(bool), "true", true, false},
+		{"bad bool", new(bool), "on", false, true},
+		{"int8 min", new(int8), "-128", int8(-128), false},
+		{"int8 overflow", new(int8), "128", int8(0), true},
+		{"unsigned negative", new(uint16), "-1", uint16(0), true},
+		{"float", new(float64), "1.25", float64(1.25), false},
+		{"infinite", new(float64), "Inf", float64(0), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			value := reflect.ValueOf(tc.target).Elem()
+			err := BindScalarPath(value, "id", tc.raw)
+			if (err != nil) != tc.invalid || !tc.invalid && value.Interface() != tc.want {
+				t.Fatalf("value=%v err=%v", value, err)
+			}
+		})
 	}
 }
