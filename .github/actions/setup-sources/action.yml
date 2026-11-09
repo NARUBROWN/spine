@@ -52,6 +52,12 @@ runs:
         persist-credentials: false
     - uses: actions/checkout@v4
       with:
+        repository: NARUBROWN/spine-nats-platform
+        ref: ${{ steps.refs.outputs.nats }}
+        path: spine-nats-platform
+        persist-credentials: false
+    - uses: actions/checkout@v4
+      with:
         repository: NARUBROWN/spine-validator-playground
         ref: ${{ steps.refs.outputs.playground }}
         path: spine-validator-playground

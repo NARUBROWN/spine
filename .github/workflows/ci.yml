@@ -306,6 +306,16 @@ jobs:
           done
           docker logs event-kafka
           exit 1
+      - name: Start NATS JetStream
+        shell: bash
+        run: |
+          docker run -d --name event-nats -p 127.0.0.1:4222:4222 nats:2.11 -js
+          for attempt in $(seq 1 30); do
+            if (echo > /dev/tcp/127.0.0.1/4222) 2>/dev/null; then exit 0; fi
+            sleep 1
+          done
+          docker logs event-nats
+          exit 1
       - name: HTTP publication, worker redelivery and result events
         env:
           SPINE_TEST_KAFKA_BROKER: 127.0.0.1:19092
@@ -316,6 +326,11 @@ jobs:
           SPINE_TEST_KAFKA_BROKER: 127.0.0.1:19092
           SPINE_TEST_RABBITMQ_URL: amqp://guest:guest@127.0.0.1:5672/
         run: go -C test/platform-e2e test -race -v ./... -count=1 -timeout=3m
+
+      - name: NATS JetStream HTTP and worker event flow
+        env:
+          SPINE_TEST_NATS_URL: nats://127.0.0.1:4222
+        run: go -C test/nats-e2e test -race -v ./... -count=1 -timeout=3m
 
       - name: OpenAPI schemas and actual HTTP behavior
         run: go -C test/openapi test -race -v ./... -count=1 -timeout=3m
