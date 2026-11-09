@@ -24,6 +24,9 @@ type scalarPathController struct{}
 func (*scalarPathController) Constructor() *scalarPathController { return &scalarPathController{} }
 func (*scalarPathController) RegisterRoutes(r *api.Registry) {
 	r.GET("/users/:id", func(id input.Path[int8]) httpx.Response[int8] { return httpx.Response[int8]{Body: *id} })
+	r.GET("/users/:id/:name", func(ctx context.Context, id input.Path[int64], name input.Path[string]) httpx.Response[string] {
+		return httpx.Response[string]{Body: *name}
+	})
 }
 func scalarApp(t *testing.T) spine.App {
 	t.Helper()
@@ -76,5 +79,15 @@ func TestScalarPathHTTPAndOpenAPI(t *testing.T) {
 	schema := param["schema"].(map[string]any)
 	if param["name"] != "id" || param["in"] != "path" || param["required"] != true || schema["type"] != "integer" || schema["minimum"] != float64(-128) || schema["maximum"] != float64(127) {
 		t.Fatalf("%v", param)
+	}
+	params = operation(doc, "/users/{id}/{name}", "get")["parameters"].([]any)
+	if len(params) != 2 {
+		t.Fatalf("expected two path parameters: %v", params)
+	}
+	for index, want := range []struct{ name, typ string }{{"id", "integer"}, {"name", "string"}} {
+		param := params[index].(map[string]any)
+		if param["name"] != want.name || param["in"] != "path" || param["required"] != true || param["schema"].(map[string]any)["type"] != want.typ {
+			t.Fatalf("parameter %d: %v", index, param)
+		}
 	}
 }

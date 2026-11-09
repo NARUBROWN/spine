@@ -2,7 +2,7 @@
   <a href="README.md">한국어</a> | <a href="README.en.md">English</a> | <a href="README.ja.md">日本語</a> | 简体中文 | <a href="README.zh-Hant.md">繁體中文</a>
 </p>
 
-> **发布渠道：Preview → RC → Stable。** 此源码的目标版本为 `v0.7.0`。请参阅[发布流程](RELEASING.md)、[import 迁移指南](docs/migration/v0.7.0.md)和[已发布版本](https://github.com/NARUBROWN/spine/releases)。
+> **发布渠道：Preview → RC → Stable。** 此源码的目标版本为 `v0.7.1`。请参阅[发布流程](RELEASING.md)、[import 迁移指南](docs/migration/v0.7.1.md)和[已发布版本](https://github.com/NARUBROWN/spine/releases)。
 
 > **v0.6.5** 统一 HTTP、WebSocket、event、validator 的公开契约与独立实现选择。核心仅使用标准库。请参阅 [v0.6.5 迁移指南](docs/migration/v0.6.5.md)。
 
