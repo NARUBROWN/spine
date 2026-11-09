@@ -1,0 +1,34 @@
+name: Prepare Platform Release PRs
+on:
+  workflow_dispatch:
+    inputs:
+      core_tag:
+        description: Verified core candidate tag
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: platform-release-sync
+  cancel-in-progress: false
+jobs:
+  synchronize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.0'
+          cache: false
+      - name: Prepare and open platform PRs
+        env:
+          GH_TOKEN: ${{ secrets.PLATFORM_SYNC_TOKEN }}
+          CORE_TAG: ${{ inputs.core_tag }}
+          WORKSPACE: ${{ runner.temp }}/platform-sync
+        run: |
+          test -n "$GH_TOKEN"
+          gh auth setup-git
+          python3 scripts/release/sync_platform_prs.py --core-tag "$CORE_TAG" --workspace "$WORKSPACE"

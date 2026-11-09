@@ -58,14 +58,16 @@ python3 scripts/release/configure_branches.py --bootstrap
 
 작업 PR을 preview에 반영하고 소스 CI를 통과시킵니다. 코어 저장소의 **Actions → Publish Preview**에서 preview 브랜치, 새 버전과 preview HEAD의 전체 SHA를 지정합니다.
 
-코어 후보 artifact가 생성되면 플랫폼 저장소마다 코어 태그의 체크섬을 기록합니다.
+코어 후보 artifact가 생성되면 **Prepare Platform Release PRs** workflow에 코어 후보 태그를 지정합니다. 코어 후보 manifest의 조합을 읽어 플랫폼 7개의 코어 정책, CI SHA, `go.mod`와 체크섬을 동기화하고 각 `preview` 대상 PR을 만듭니다. `PLATFORM_SYNC_TOKEN`은 코어 Actions 읽기와 플랫폼 저장소의 Contents 및 Pull requests 쓰기 권한이 필요합니다. workflow는 기존 브랜치를 덮어쓰지 않습니다. 일부 PR 생성 후 오류가 나면 생성된 브랜치와 PR을 확인한 뒤 남은 작업을 처리합니다.
+
+로컬에서 계획을 검토하거나 적용하려면 플랫폼 7개의 깨끗한 작업 브랜치를 같은 상위 디렉터리에 준비하고 다음 명령을 사용합니다.
 
 ```sh
-python3 scripts/release/pin_channel.py --channel preview
-python3 scripts/release/pin_channel.py --channel preview --apply --tidy
+python3 scripts/release/sync_platforms.py --core-tag v0.7.0-preview.12 --platform-parent /path/to/platforms
+python3 scripts/release/sync_platforms.py --core-tag v0.7.0-preview.12 --platform-parent /path/to/platforms --apply
 ```
 
-이 변경을 커밋해 preview에 반영하고 각 플랫폼의 Publish Preview를 실행합니다. 플랫폼은 go.mod의 코어 태그가 해당 채널과 정확히 일치하는지 확인하며, 공개 의존성만으로 CI와 실제 발행 모듈 검증을 수행합니다.
+코어 후보 태그와 검증 artifact가 일치해야 합니다. 플랫폼별 정책과 `go.mod`는 코어 조합에서 생성한 결과이며, 예정된 플랫폼 태그도 명령 출력에서 확인합니다. 적용 후 각 플랫폼 PR을 검증하고 병합한 뒤 Publish Preview를 실행합니다. RC와 정식 후보 태그도 같은 workflow에서 사용할 수 있습니다. 이전 채널의 완료 manifest에 기록된 플랫폼 태그에서 승격 브랜치를 만들고, RC는 `rc`, 정식은 `main`을 대상으로 PR을 생성합니다.
 
 일곱 플랫폼의 manifest가 준비되면 코어의 **Complete Core Release Combination**에서 같은 코어 태그를 지정합니다. 코어 채널 HEAD는 후보 발행 시점과 같아야 합니다. 문서와 버전 정책도 후보 발행 전에 확정하세요. 발행 후 이 파일들을 수정해야 하면 기존 태그를 바꾸지 않고 새 Preview 후보와 플랫폼 조합을 준비합니다. 다른 코어를 사용한 플랫폼, 누락된 태그나 manifest, 실패하거나 skip된 공개 테스트는 완료로 처리하지 않습니다.
 
@@ -76,14 +78,14 @@ Preview 전체 조합 완료 후 72시간이 지나야 RC를 발행할 수 있�
 채널별 의존 버전 변경은 전용 승격 브랜치에서 준비합니다. RC 예시는 다음과 같습니다.
 
 ```sh
-git switch -c promote/rc/v0.7.0-rc.1 v0.7.0-preview.4
+git switch -c promote/rc/v0.7.0-rc.1 v0.7.0-preview.12
 python3 scripts/release/pin_channel.py --channel rc
 python3 scripts/release/pin_channel.py --channel rc --apply
 ```
 
-이 브랜치의 PR 대상은 rc입니다. 코어는 아직 없는 플랫폼 RC 태그를 기다리지 않도록 이 단계에서 `--tidy`를 사용하지 않습니다. 코어 RC 후보 태그를 먼저 발행한 후 플랫폼별 `promote/rc/v0.2.0-rc.1` 브랜치에서 `pin_channel.py --channel rc --apply --tidy`로 실제 코어 RC의 체크섬을 기록합니다.
+이 브랜치의 PR 대상은 rc입니다. 코어는 아직 없는 플랫폼 RC 태그를 기다리지 않도록 이 단계에서 `--tidy`를 사용하지 않습니다. 코어 RC 후보 태그를 먼저 발행한 후 **Prepare Platform Release PRs**에서 해당 태그를 지정합니다. workflow는 이전에 완료된 Preview 조합의 플랫폼 태그를 출발점으로 선택하고 플랫폼별 `promote/rc/<버전>` 브랜치와 PR을 만듭니다. 로컬에서는 해당 코어 RC 태그를 지정해 `sync_platforms.py --apply`를 사용할 수 있습니다.
 
-정식은 `promote/stable/v0.7.0`과 플랫폼별 `promote/stable/v0.2.0` 브랜치에서 같은 방식으로 stable 핀을 준비하고 main을 대상으로 PR을 만듭니다. 일반 작업 PR은 preview만 대상으로 합니다. 승격 PR은 merge commit으로 병합합니다.
+정식은 코어 `promote/stable/v0.7.0` 브랜치에서 stable 핀을 준비하고 main을 대상으로 PR을 만듭니다. 코어 정식 후보 발행 후 같은 workflow가 이전 RC 조합의 플랫폼 태그에서 플랫폼별 `promote/stable/<버전>` PR을 만듭니다. 일반 작업 PR은 preview만 대상으로 합니다. 승격 PR은 merge commit으로 병합합니다.
 
 발행 코드는 이전 후보가 승격 PR의 조상인지, 병합된 PR의 방향과 두 번째 부모가 맞는지 확인합니다. 소스 fingerprint는 공식 모듈 require의 같은 기본 버전 내 채널 태그, 해당 go.sum 항목과 CI 출처만 정규화합니다. 코드, 일반 의존성, replace, 기본 의존 버전과 관찰 정책의 변경은 새 Preview가 필요합니다. 실제 채널 핀과 공개 모듈 조합은 매 단계 다시 검증합니다.
 
