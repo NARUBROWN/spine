@@ -1,25 +1,28 @@
 name: Publish Stable
-run-name: Stable from ${{ inputs.rc_tag }}
 on:
   workflow_dispatch:
     inputs:
       rc_tag:
-        description: '승격할 RC 태그 (예: v0.6.6-rc.1). 정식 버전은 자동 결정'
+        description: RC tag that passed full verification
         type: string
         required: true
       observation_override_reason:
-        description: '긴급 관찰 기간·출시 간격 단축 사유 (평소에는 비움, 20자 이상)'
+        description: Observation period override reason; normally left blank
         type: string
-        required: false
+        default: ''
 permissions:
   contents: write
   actions: read
 concurrency:
-  group: spine-release-publication
+  group: release-publication
   cancel-in-progress: false
 jobs:
   publish:
     uses: ./.github/workflows/release-pipeline.yml
+    secrets:
+      DISCORD_WEBHOOK_PREVIEW: ${{ secrets.DISCORD_WEBHOOK_PREVIEW }}
+      DISCORD_WEBHOOK_RC: ${{ secrets.DISCORD_WEBHOOK_RC }}
+      DISCORD_WEBHOOK_RELEASE: ${{ secrets.DISCORD_WEBHOOK_RELEASE }}
     with:
       channel: stable
       source: ${{ inputs.rc_tag }}

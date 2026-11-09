@@ -6,9 +6,11 @@ import (
 	"strconv"
 
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/query"
 )
 
+// PaginationResolver는 Deprecated 페이지네이션 입력의 기존 파싱을 유지합니다.
 type PaginationResolver struct{}
 
 func (r *PaginationResolver) Supports(parameterMeta ParameterMeta) bool {
@@ -19,6 +21,12 @@ func (r *PaginationResolver) Resolve(ctx core.ExecutionContext, parameterMeta Pa
 	httpCtx, ok := ctx.(core.HttpRequestContext)
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")
+	}
+	values := httpCtx.Queries()
+	for _, name := range []string{"page", "size"} {
+		if len(values[name]) > 1 {
+			return nil, &httperr.InputError{Source: "query", Cause: httperr.BadRequest("multiple values for query field " + name)}
+		}
 	}
 
 	page := parseInt(httpCtx.Query("page"), 1)

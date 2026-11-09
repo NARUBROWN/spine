@@ -1,21 +1,99 @@
-# HTTP 어댑터 실행 계약
+# HTTP v3 계약
 
-`github.com/NARUBROWN/spine/contract/http`는 Spine 커널과 플랫폼 구현이 공유하는 공개 패키지입니다. Spine 모듈에 포함되며 버전도 Spine과 함께 관리합니다. 별도 계약 모듈이나 저장소는 사용하지 않습니다.
+플랫폼은 원시 요청 입력과 응답 출력을 제공하고, Spine은 DTO 파싱과 실행 규칙을 소유합니다. 필수 계약은 net/http나 fasthttp의 native 요청 및 handler 타입을 요구하지 않습니다.
 
-계약 패키지는 표준 라이브러리만 import합니다. Spine의 내부 파이프라인, 요청 store, 이벤트 버스와 구체 HTTP 프레임워크에 의존하지 않습니다. 외부 플랫폼 모듈은 이 공개 패키지를 import하여 Factory와 HTTPAdapter를 구현할 수 있습니다.
+`github.com/NARUBROWN/spine/contract/http`는 커널과 플랫폼이 공유하는 `spine.http-adapter/v3` 계약입니다. 이 브랜치의 커널은 v3를 사용합니다. 공개된 v2 플랫폼과 함께 사용할 수 없으며, 새 조합은 아직 발행하지 않았습니다. 이전 `adapter`, `adapter/http`는 정식 계약의 타입과 오류를 재노출합니다.
 
-Factory는 기능을 선언하고 리스너 없이 새 어댑터를 구성합니다. HTTPContext는 요청 입력과 실제 ResponseWriter를 제공하며, ExecuteFunc는 요청마다 커널을 한 번 동기 실행합니다. Handler는 외부 HTTP 서버에 연결할 수 있고 Serve와 Shutdown은 관리 서버 실행에 사용합니다.
+## 입력과 출력
 
-현재 계약 버전은 `spine.http-adapter/v2`입니다. `ResponseWriter.WriteJSON`은 core에서 직렬화한 `json.RawMessage`만 받습니다. DTO의 동적 타입이 필요한 `HTTPContext.Bind(any)`가 공개 HTTP 계약에 남는 유일한 `any`입니다.
+`HTTPContext`는 `Context`, `Method`, `RawPath`, `RawQuery`, `Header`, `Headers`, `Body`, `Writer`를 제공합니다. 플랫폼의 `Bind`, `MultipartForm`, `Param/Params`, `Query/Queries`는 v3 필수 계약에 없습니다. 컨트롤러에 제공하는 해당 기능은 코어가 구현합니다.
 
-native Echo 설정은 플랫폼의 `WithEcho(func(*echo.Echo))` 옵션이 소유합니다. 공통 Config와 Capabilities에는 native hook을 넣지 않습니다. v1 구현은 버전 검사에서 거부하므로 커널과 플랫폼을 함께 전환해야 합니다.
+| 입력 | 보장 |
+| --- | --- |
+| `RawPath` | 쿼리와 authority를 제외한 디코딩 전 경로입니다. native 엔진의 경로 정리 전 값을 제공합니다. |
+| `RawQuery` | 선행 `?`가 없는 원문입니다. 반복 값, 빈 값과 `%2C`를 파싱한 값으로 대체하지 않습니다. |
+| `Headers` | Host와 포트를 보존하며 맵과 슬라이스 수정이 원본 요청에 영향을 주지 않습니다. native 버퍼 재사용으로 반환 값이 바뀌지 않습니다. |
+| `Body` | nil이 아닌 reader이며 같은 읽기 위치를 유지합니다. getter가 추가 읽기, native 폼 파싱과 재생을 시작하지 않습니다. 원본 스트림은 플랫폼이 정리합니다. |
+| `Context` | 요청 종료 때 취소하는 안전한 표준 context입니다. 풀링된 native 객체를 그대로 노출하지 않습니다. 연결 해제 취소 지원은 별도로 선언합니다. |
 
-scope와 writer는 요청 중에만 사용하며 별도 goroutine에서 동시 접근하거나 보관하지 않습니다. Spine의 요청 store, 라우팅 결과, EventBus와 응답 staging은 커널이 소유합니다. 요청 오류는 RequestError로 상태와 원인을 전달하고 커널이 공개 HTTP 오류로 변환합니다.
+코어가 인증 뒤 본문 파싱을 시작하도록 플랫폼이 선행 DTO/폼 파싱을 하지 않습니다. 서버가 이미 본문을 수신했거나 native HTTP 파서가 요청을 거부하는 상황은 Spine 파싱과 구분합니다. 요청 뷰, reader와 writer는 요청 안에서 동기 사용합니다.
 
-ASGI의 앱과 서버 경계 및 수명 정의를 참고하지만 **Python ASGI 호환을 제공하지 않습니다.** Spine v0.6.0과 Echo 플랫폼 v0.1.0에서 이 계약을 사용합니다.
+`ResponseWriter`는 기존 메서드를 유지합니다. `WriteJSON`은 직렬화된 `json.RawMessage`를 받고 `WriteBytes`와 함께 반환 뒤 입력 bytes를 재사용할 수 있어야 합니다. `IsCommitted`와 성공 반환은 논리적 응답 확정이며 실제 송신 또는 클라이언트 수신 완료를 뜻하지 않습니다. 관측 가능한 쓰기 오류는 반환합니다.
 
-```sh
-go test ./contract/http -count=1
+## 실행과 종료
+
+| 메서드 | 보장 |
+| --- | --- |
+| `Serve(net.Listener, ...ServeOption)` | 리스너를 소유하고 모든 반환 경로에서 닫습니다. 한 번만 실행하고 정상 종료를 `ErrServerClosed`로 정규화합니다. 예상하지 못한 nil 반환은 계약 위반입니다. |
+| `StopAccepting()` | 새 실행 진입을 동기 차단하고 반복 호출할 수 있습니다. 기존 요청은 보존하며 차단 뒤 handler에 도착한 요청에는 503을 반환합니다. |
+| `Shutdown(context.Context)` | 차단과 진행 요청의 종료를 기다립니다. 호출 context는 대기만 제한하고 정리는 계속합니다. 새 context로 다시 기다릴 수 있으며 인스턴스를 재실행하지 않습니다. |
+
+구현체는 가장 바깥 native handler에서 Spine 경로, native middleware, native 경로와 업그레이드 진입을 함께 추적합니다. 관리 서버와 외부 서버는 같은 보호된 handler를 사용합니다. 외부 서버 자체는 호출자가, 장기 WS 연결은 코어 런타임이 종료합니다. graceful 종료 시작만으로 진행 요청을 일괄 취소하지 않습니다.
+
+## TLS 실행
+
+`Config.Serve.TLS`는 관리 서버의 `*tls.Config` 기본값입니다. nil이면 평문 HTTP를 사용합니다. Spine 앱에서는 `boot.HTTPOptions.TLS`로 전달하며, 인증서 파일은 `tls.LoadX509KeyPair`로 먼저 읽습니다. 주소를 생략하면 TLS 설정이 있을 때 `:https`, 없을 때 `:http`를 사용합니다.
+
+```go
+certificate, err := tls.LoadX509KeyPair("server.crt", "server.key")
+if err != nil {
+    return err
+}
+config := &tls.Config{Certificates: []tls.Certificate{certificate}}
+err = prepared.HTTPAdapter().Serve(listener, httpcontract.WithTLS(config))
 ```
 
-이전 `github.com/NARUBROWN/spine/adapter` 경로는 같은 타입과 오류의 호환 별칭을 제공합니다. 기존 Echo 플랫폼을 그대로 연결할 수 있으며 새 구현은 `contract/http`를 사용합니다.
+옵션 없이 `Serve(listener)`를 호출하면 준비한 기본값을 사용합니다. TLS 설정을 적용할 때는 `net.Listen`으로 만든 평문 TCP 리스너를 전달합니다. `ServeOptions.Resolve`는 기본값에 옵션을 순서대로 적용하고 설정을 복사한 뒤 검증합니다. 마지막 `WithTLS`가 우선합니다. `WithTLS(nil)`과 nil 옵션은 오류이며 평문 전환을 뜻하지 않습니다. 공개 진입점은 `Serve` 하나입니다.
+
+`ServeOptions.Validate`와 `Config.Validate`는 TLS 지원 선언, 명시한 버전 범위, 정적 인증서 체인과 개인 키의 일치를 검사합니다. 인증서나 `GetCertificate` 또는 `GetConfigForClient` 중 하나는 필요합니다. 이 사전 검사는 native 훅보다 먼저 수행하며 인증서 선택 콜백을 호출하지 않습니다. 동적 인증서의 가용성, 클라이언트의 신뢰 체인, 호스트명과 유효 기간 검증은 실제 연결에서 수행합니다.
+
+`ServeOptions.Clone`은 수정 가능한 TLS 슬라이스, 인증서 바이트와 CA 풀을 복사합니다. 개인 키 객체, 콜백과 I/O 제공자는 공유하므로 호출자가 안전한 동시 사용을 보장해야 합니다. `Serve`는 명시한 옵션을 실행 전에 다시 검사합니다. 옵션 오류도 리스너를 닫지만 실행 가능 상태는 소비하지 않습니다.
+
+Echo와 net/http 구현은 선택한 설정의 TLS 리스너를 native 서버에 전달합니다. 외부 서버에 `NetHTTPHandler`만 연결하면 인증서와 TLS 실행은 외부 서버 소유입니다. 이 계약은 HTTP 버전 선택이나 ALPN 정책을 추가하지 않습니다. HTTP 스펙 개선은 별도 범위입니다.
+
+## 선택 기능과 검사 순서
+
+`Capabilities`는 계약 버전, `TLS`, `NetHTTPHandler`, `NetHTTPUpgrade`, `ClientDisconnectCancellation`, `ServerOptions` 지원을 선언합니다. 기본 HTTP 처리와 본문 읽기 제한은 필수입니다. net/http native 진입점이 없는 엔진도 기본 계약을 구현할 수 있습니다.
+
+1. `ValidateFactory`로 버전과 필요한 기능을 검사합니다. 이 함수는 `New`와 native 훅을 호출하지 않습니다.
+2. `Config.Validate`로 Execute, 옵션 값과 명시적으로 요청한 옵션의 지원 여부를 검사합니다.
+3. net/http 업그레이드가 있으면 `ValidateNetHTTPUpgradeRoutes`로 누락 경로와 nil handler를 검사합니다.
+4. 일반 HTTP는 `Factory.New`, 기존 net/http WS는 선택 `NetHTTPUpgradeFactory.NewWithNetHTTPUpgrades`를 호출합니다. 구현체도 native 훅 실행 전에 구성을 검증해야 합니다.
+5. `ValidateAdapter`로 nil 결과와 선언한 native handler를 검사합니다. 실행, 차단과 종료는 시작하지 않습니다.
+
+`NetHTTPHandler(adapter)`는 선택 `NetHTTPHandlerProvider`를 조회합니다. 지원하지 않는 엔진은 `ErrUnsupportedCapability`, nil adapter나 nil native handler는 `ErrInvalidAdapter`를 반환합니다. `PreparedApplication.HTTPAdapter()`는 동일한 준비 어댑터를 반환합니다. 외부 net/http 서버에는 `spine.NetHTTPHandler(prepared)`로 얻은 handler를 연결합니다. HTTP 비활성화는 `ErrUnsupportedCapability`로 알립니다. 실행과 종료 소유권은 Prepared에 남습니다.
+
+`NetHTTPUpgrade`를 선언한 factory는 `NetHTTPUpgradeFactory`를 구현해야 합니다. 선언은 있으나 인터페이스가 없으면 잘못된 구현입니다. 기능을 선언하지 않은 엔진에 기존 net/http WS를 요청하면 미지원 조합입니다. 두 경우 모두 준비 단계에서 거부하며 호환 변환기를 자동 설치하지 않습니다.
+
+## 옵션 값과 지원 범위
+
+`ServerOptions.Validate`는 값만 검사하고 `Config.Validate`는 지원 여부까지 검사합니다. 계약 자체는 기본값을 적용하지 않습니다. 커널은 기존 `boot.HTTPOptions.MaxBodyBytes`의 0을 32 MiB로 정규화하고, native timeout과 헤더 옵션의 0은 플랫폼 기본값으로 전달합니다. 지원 선언은 요청한 의미를 구현할 수 있을 때만 켭니다.
+
+| 옵션 | 값과 지원 규칙 |
+| --- | --- |
+| `ReadHeaderTimeout` | 음수를 거부합니다. 명시적인 양수는 요청 헤더 수신 기한을 지원해야 합니다. |
+| `ReadTimeout` | 음수를 거부합니다. 명시적인 양수는 헤더와 본문을 포함한 요청 읽기 기한을 지원해야 합니다. |
+| `WriteTimeout` | 음수를 거부합니다. 명시적인 양수의 쓰기 기한은 요청 헤더 수신 뒤 시작하는 의미를 지원해야 합니다. handler 실행을 강제 중단하는 제한은 아닙니다. |
+| `IdleTimeout` | 음수를 거부합니다. 명시적인 양수는 keepalive의 다음 요청 대기 기한을 지원해야 합니다. |
+| `MaxHeaderBytes` | 음수를 거부합니다. 명시적인 양수는 요청 줄과 헤더 파싱 한도를 지원해야 합니다. |
+| `DisableRecover` | true를 요청하면 native 복구 비활성화를 지원해야 합니다. |
+| `MaxBodyBytes` | 본문 읽기 한도는 필수입니다. 양수는 길이를 모르는 입력에도 적용하고 음수는 해제합니다. 커널은 0을 32 MiB로 정규화합니다. |
+
+지원하지 않는 명시적 native 옵션은 `ErrUnsupportedOption`으로 거부합니다. 필드 이름만 맞추거나 지원하지 않는 값을 무시하지 않습니다. 0인 native 옵션은 지원 요구를 만들지 않으며 플랫폼이 기본값을 적용합니다. `boot.HTTPOptions.MultipartMemoryBytes`는 코어 파서의 파일 메모리 예산이며 0은 32 MiB, 음수는 준비 오류입니다. 전체 본문 한도와 전체 요청 메모리 상한은 아닙니다.
+
+## 오류와 검증 범위
+
+| 분류 | 오류 |
+| --- | --- |
+| nil, 버전 불일치, 잘못된 지원 선언과 값 | `ErrInvalidAdapter` |
+| 중복 실행, 종료 후 재실행 등 | `ErrInvalidState` |
+| 선택 기능 미지원 | `ErrUnsupportedCapability` |
+| 명시적인 native 옵션 미지원 | `ErrUnsupportedOption` |
+| 정상 관리 서버 종료 | `ErrServerClosed` |
+| 입력 오류 상태와 원래 원인 | `RequestError`의 `Status`, `Message`, `Cause` |
+
+본문 한도 초과는 `RequestError` 상태 413으로 표현하고 `Unwrap`으로 원인을 보존합니다. 취소와 일반 I/O 오류를 일괄 400으로 바꾸지 않습니다. 코어는 본문과 파일 오류의 `in: body`, 400/413/415와 원인을 보존합니다. native 프로토콜 거부는 Execute 이전에 일어날 수 있습니다.
+
+검증은 계약 검사, 두 엔진의 최소 구현과 실제 Spine 통합으로 나눕니다. 두 엔진 검증의 fasthttp 스트리밍은 EOF 패치를 적용한 로컬 조합입니다. 독립 net/http 플랫폼과 이행한 Echo의 로컬 소스를 연결해 [플랫폼 비교 E2E](../../test/http-platform/README.md)로 HTTP/WS/OpenAPI, 인증 전 무읽기와 multipart 정리를 검사합니다. CLI와 공개 모듈 조합은 후속 범위입니다.
+
+본문의 JSON/XML/form/multipart 해석은 커널이 소유하며 Echo Binder를 호출하지 않습니다. 요청별 파서는 실제 바인딩 때 생성하고, 모든 `AfterCompletion` 뒤 Execute 바깥에서 임시 파일을 정리합니다. 자세한 이행은 [HTTP v3 전환](../../docs/migration/http-v3.md)을 참고하세요.

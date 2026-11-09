@@ -17,21 +17,16 @@ import (
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	spinemultipart "github.com/NARUBROWN/spine/pkg/multipart"
-	"github.com/NARUBROWN/spine/pkg/path"
 )
 
 type httpBaselineDTO struct {
-	Name  string `json:"name" xml:"name" query:"name" validate:"required"`
-	Count int    `json:"count" xml:"count" query:"count"`
+	Name  string `json:"name" xml:"name" validate:"required"`
+	Count int    `json:"count" xml:"count"`
 }
 
 type httpBaselineForm struct {
 	Name  string `json:"name" form:"name"`
 	Count int    `json:"count" form:"count"`
-}
-
-type httpBaselinePathDTO struct {
-	ID int `param:"id"`
 }
 
 type httpBaselineFile struct {
@@ -47,6 +42,9 @@ type httpBaselineUpload struct {
 	Files []httpBaselineFile `json:"files"`
 }
 
+type httpBaselinePath struct {
+	ID int64 `path:"id"`
+}
 type httpBaselineController struct{}
 
 func (*httpBaselineController) Bind(dto *httpBaselineDTO) httpx.Response[httpBaselineDTO] {
@@ -57,10 +55,9 @@ func (*httpBaselineController) Form(dto *httpBaselineForm) httpx.Response[httpBa
 	return httpx.Response[httpBaselineForm]{Body: *dto}
 }
 
-func (*httpBaselineController) Path(id path.Int, dto *httpBaselinePathDTO) httpx.Response[map[string]int] {
+func (*httpBaselineController) Path(p *httpBaselinePath) httpx.Response[map[string]int] {
 	return httpx.Response[map[string]int]{Body: map[string]int{
-		"spine_id": int(id.Value),
-		"dto_id":   dto.ID,
+		"id": int(p.ID),
 	}}
 }
 
@@ -103,7 +100,7 @@ func newHTTPBaselineHandler(t *testing.T, app spine.App, options boot.HTTPOption
 			t.Errorf("기준 앱 종료 실패: %v", err)
 		}
 	})
-	return prepared.Handler()
+	return mustHTTPHandler(t, prepared)
 }
 
 func setupHTTPBaselineApp(options ...platform.EchoOption) spine.App {
@@ -129,9 +126,9 @@ func TestAppIntegration_HTTPBindingBaseline(t *testing.T) {
 		{name: "json", method: "POST", target: "/body", contentType: "application/json; charset=utf-8", body: `{"name":"json","count":2}`, status: 200, want: httpBaselineDTO{Name: "json", Count: 2}},
 		{name: "xml", method: "POST", target: "/body", contentType: "application/xml", body: `<item><name>xml</name><count>3</count></item>`, status: 200, want: httpBaselineDTO{Name: "xml", Count: 3}},
 		{name: "text_xml", method: "POST", target: "/body", contentType: "text/xml", body: `<item><name>xml</name><count>4</count></item>`, status: 200, want: httpBaselineDTO{Name: "xml", Count: 4}},
-		{name: "get_query", method: "GET", target: "/body?name=query&count=5", status: 200, want: httpBaselineDTO{Name: "query", Count: 5}},
-		{name: "delete_query", method: "DELETE", target: "/body?name=query&count=6", status: 200, want: httpBaselineDTO{Name: "query", Count: 6}},
-		{name: "get_body_overrides_query", method: "GET", target: "/body?name=query&count=7", contentType: "application/json", body: `{"name":"body","count":8}`, status: 200, want: httpBaselineDTO{Name: "body", Count: 8}},
+		{name: "body_dto_does_not_bind_get_query", method: "GET", target: "/body?name=query&count=5", status: 200},
+		{name: "body_dto_does_not_bind_delete_query", method: "DELETE", target: "/body?name=query&count=6", status: 200},
+		{name: "get_body_dto_uses_body_only", method: "GET", target: "/body?name=query&count=7", contentType: "application/json", body: `{"name":"body","count":8}`, status: 200, want: httpBaselineDTO{Name: "body", Count: 8}},
 		{name: "post_does_not_bind_query", method: "POST", target: "/body?name=query&count=9", status: 200},
 		{name: "post_body", method: "POST", target: "/body?name=query&count=9", contentType: "application/json", body: `{"name":"body","count":10}`, status: 200, want: httpBaselineDTO{Name: "body", Count: 10}},
 		{name: "required_tag_is_not_validation", method: "POST", target: "/body", contentType: "application/json", body: `{}`, status: 200},
@@ -240,9 +237,7 @@ func TestAppIntegration_PathBindingBaseline(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &got); recorder.Code != 200 || err != nil {
 		t.Fatalf("경로 응답: 상태=%d 본문=%s 오류=%v", recorder.Code, recorder.Body.String(), err)
 	}
-	// DTO param 바인딩을 지원하도록 바꾸는 작업은 이 리팩터링과 분리한다.
-	dtoID, hasDTOID := got["dto_id"]
-	if got["spine_id"] != 43 || !hasDTOID || dtoID != 0 {
-		t.Fatalf("Spine 경로 인자와 DTO param의 현재 동작을 보존해야 합니다: %+v", got)
+	if got["id"] != 43 {
+		t.Fatalf("경로 값은 기존 Spine 경로 인자로 읽어야 합니다: %+v", got)
 	}
 }

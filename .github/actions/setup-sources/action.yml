@@ -1,0 +1,72 @@
+name: Prepare contract sources
+description: Immutable source CI or published tag checkouts with a temporary workspace
+inputs:
+  published:
+    description: Select published platform tags instead of bootstrap source commits
+    default: 'false'
+  ref:
+    description: Channel branch or tag
+    default: preview
+runs:
+  using: composite
+  steps:
+    - name: Read immutable platform references
+      id: refs
+      shell: bash
+      env:
+        PUBLISHED: ${{ inputs.published }}
+        CHANNEL_REF: ${{ inputs.ref }}
+      run: |
+        args=()
+        if [ "$PUBLISHED" = true ]; then args+=(--published); fi
+        python3 spine/scripts/release/ci_workspace.py refs --root spine --ref "$CHANNEL_REF" "${args[@]}"
+    - uses: actions/checkout@v4
+      with:
+        repository: NARUBROWN/spine-echo-platform
+        ref: ${{ steps.refs.outputs.echo }}
+        path: spine-echo-platform
+        persist-credentials: false
+    - uses: actions/checkout@v4
+      with:
+        repository: NARUBROWN/spine-nethttp-platform
+        ref: ${{ steps.refs.outputs.nethttp }}
+        path: spine-nethttp-platform
+        persist-credentials: false
+    - uses: actions/checkout@v4
+      with:
+        repository: NARUBROWN/spine-gorilla-platform
+        ref: ${{ steps.refs.outputs.gorilla }}
+        path: spine-gorilla-platform
+        persist-credentials: false
+    - uses: actions/checkout@v4
+      with:
+        repository: NARUBROWN/spine-kafka-platform
+        ref: ${{ steps.refs.outputs.kafka }}
+        path: spine-kafka-platform
+        persist-credentials: false
+    - uses: actions/checkout@v4
+      with:
+        repository: NARUBROWN/spine-rabbitmq-platform
+        ref: ${{ steps.refs.outputs.rabbitmq }}
+        path: spine-rabbitmq-platform
+        persist-credentials: false
+    - uses: actions/checkout@v4
+      with:
+        repository: NARUBROWN/spine-nats-platform
+        ref: ${{ steps.refs.outputs.nats }}
+        path: spine-nats-platform
+        persist-credentials: false
+    - uses: actions/checkout@v4
+      with:
+        repository: NARUBROWN/spine-validator-playground
+        ref: ${{ steps.refs.outputs.playground }}
+        path: spine-validator-playground
+        persist-credentials: false
+    - name: Prepare source workspace
+      shell: bash
+      env:
+        PUBLISHED: ${{ inputs.published }}
+      run: |
+        args=()
+        if [ "$PUBLISHED" = true ]; then args+=(--published); fi
+        python3 spine/scripts/release/ci_workspace.py prepare --root spine --output "$RUNNER_TEMP/spine-contracts/go.work" "${args[@]}"

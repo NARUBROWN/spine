@@ -14,16 +14,16 @@ import (
 	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
+	"github.com/NARUBROWN/spine/internal/endpoint"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	"github.com/NARUBROWN/spine/internal/event/hook"
 	eventPublish "github.com/NARUBROWN/spine/internal/event/publish"
-	"github.com/NARUBROWN/spine/internal/handler"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
-	"github.com/NARUBROWN/spine/internal/resolver"
 	spineRouter "github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/transport"
 	"github.com/NARUBROWN/spine/internal/ws"
+	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 // Prepare는 실행 작업이나 리스너를 시작하지 않고 앱 자원을 준비합니다.
@@ -32,16 +32,20 @@ func Prepare(ctx context.Context, config Config) (*Application, error) {
 		return nil, ErrInvalidContext
 	}
 	config = snapshotConfig(config)
-	if err := Validate(config); err != nil {
+	resources, err := validate(config)
+	if err != nil {
 		return nil, err
 	}
-	return prepare(ctx, config)
+	return prepare(ctx, config, resources)
 }
 
-func prepare(ctx context.Context, config Config) (result *Application, err error) {
+func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResource) (result *Application, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	var openAPIDocument []byte
+	openAPIResources := map[string]boot.OpenAPIResource{}
+
 	application := &Application{config: config, closeDone: make(chan struct{})}
 	ready := false
 	defer func() {
@@ -72,7 +76,7 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 		publisher, err := binding.Factory.NewPublisher(ctx)
 		var managed *eventPublish.PlatformPublisher
 		if !isNilHTTPValue(publisher) {
-			managed = eventPublish.NewPlatformPublisher(binding.Factory, publisher)
+			managed = eventPublish.NewPlatformPublisher(binding.Factory, publisher, binding.Options.PublisherErrorHistory)
 			application.publishers = append(application.publishers, publisherCloser{name: binding.Name, close: managed.Close})
 		}
 		if err != nil {
@@ -126,6 +130,28 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 		return nil, err
 	}
 
+	if err := collectControllers(ctx, &config, container); err != nil {
+		return nil, err
+	}
+	if config.HTTP != nil {
+		if err := validateCollectedRoutes(config, resources); err != nil {
+			return nil, err
+		}
+	}
+	application.config = config
+	if config.HTTP != nil && config.HTTP.OpenAPI.Enabled {
+		description, describeErr := application.DescribeHTTP()
+		if describeErr != nil {
+			return nil, describeErr
+		}
+		openAPIDocument, err = endpoint.OpenAPI(description, config.HTTP.OpenAPI)
+		if err != nil {
+			return nil, err
+		}
+		for _, resource := range resources {
+			openAPIResources[resource.Path] = resource
+		}
+	}
 	if config.HTTP != nil {
 		prefix := config.HTTP.GlobalPrefix
 		if prefix != "" {
@@ -151,7 +177,7 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 		loggedRouteInterceptors := make(map[reflect.Type]bool)
 
 		for _, route := range config.Routes {
-			meta, err := spineRouter.NewHandlerMeta(route.Handler)
+			meta, err := spineRouter.Meta(route)
 			if err != nil {
 				return nil, err
 			}
@@ -218,43 +244,8 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 		}
 
 		log.Println("[Bootstrap] Registering argument resolvers")
-		httpPipeline.AddArgumentResolver(
-			// 표준 컨텍스트 리졸버
-			&resolver.StdContextResolver{},
-
-			// Spine 컨트롤러 컨텍스트 뷰
-			&resolver.ControllerContextResolver{},
-
-			// 헤더 리졸버
-			&resolver.HeaderResolver{},
-
-			// 경로 리졸버들
-			&resolver.PathIntResolver{},
-			&resolver.PathStringResolver{},
-			&resolver.PathBooleanResolver{},
-
-			// 쿼리의 의미 타입 리졸버들
-			&resolver.PaginationResolver{},
-			&resolver.QueryValuesResolver{},
-
-			// 요청 본문 리졸버
-			&resolver.DTOResolver{Validator: config.Validator},
-
-			// 폼 DTO(멀티파트/폼)
-			&resolver.FormDTOResolver{Validator: config.Validator},
-
-			// 멀티파트 파일
-			&resolver.UploadedFilesResolver{},
-		)
-
-		log.Println("[Bootstrap] Registering return value handlers")
-		httpPipeline.AddReturnValueHandler(
-			&handler.RedirectReturnValueHandler{},
-			&handler.BinaryReturnHandler{},
-			&handler.StringReturnHandler{},
-			&handler.JSONReturnHandler{},
-			&handler.ErrorReturnHandler{},
-		)
+		httpPipeline.AddArgumentResolver(endpoint.Resolvers(config.Validator)...)
+		httpPipeline.AddReturnValueHandler(endpoint.Returns()...)
 
 		log.Println("[Bootstrap] Registering interceptors")
 
@@ -272,7 +263,7 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 		log.Println("[Bootstrap] Mounting HTTP adapter")
 
 		// WebSocket 런타임은 업그레이드 이후의 연결과 메시지를 계속 소유합니다.
-		var upgrades []adapter.UpgradeRoute
+		var upgrades []adapter.NetHTTPUpgradeRoute
 		if config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0 {
 			wsRegistrations := config.WebSocketRegistry.Registrations()
 			log.Println("[Bootstrap] Configuring WebSocket runtime")
@@ -297,7 +288,7 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 
 			for _, reg := range wsRegistrations {
 				log.Printf("[Bootstrap] Registered WebSocket route: %s", reg.Path)
-				upgrades = append(upgrades, adapter.UpgradeRoute{
+				upgrades = append(upgrades, adapter.NetHTTPUpgradeRoute{
 					Path: reg.Path,
 					Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 						application.wsRuntime.HandleConn(w, r, reg)
@@ -306,27 +297,47 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 			}
 		}
 
-		server, err := config.HTTPAdapterFactory.New(adapter.Config{
+		httpConfig := adapter.Config{
 			Options: serverOptions(*config.HTTP),
-			Execute: func(scope adapter.HTTPContext) error {
-				return httpPipeline.Execute(transport.NewHTTPContext(scope))
+			Serve:   adapter.ServeOptions{TLS: config.HTTP.TLS},
+			Execute: func(scope adapter.HTTPContext) (executionErr error) {
+				request := transport.NewHTTPContext(scope, config.HTTP.MultipartMemoryBytes)
+				defer func() { executionErr = errors.Join(executionErr, request.Cleanup()) }()
+				if resource, ok := openAPIResources[request.Path()]; ok && (scope.Method() == http.MethodGet || scope.Method() == http.MethodHead) {
+					scope.Writer().SetHeader("Content-Type", resource.ContentType)
+					scope.Writer().SetHeader("Cache-Control", "no-cache")
+					scope.Writer().SetHeader("X-Content-Type-Options", "nosniff")
+					if scope.Method() == http.MethodHead {
+						return scope.Writer().WriteStatus(http.StatusOK)
+					}
+					return scope.Writer().WriteString(http.StatusOK, resource.Body)
+				}
+				if len(openAPIDocument) > 0 && request.Path() == config.HTTP.OpenAPI.DocumentPath() && (scope.Method() == http.MethodGet || scope.Method() == http.MethodHead) {
+					scope.Writer().SetHeader("Cache-Control", "no-cache")
+					if scope.Method() == http.MethodHead {
+						scope.Writer().SetHeader("Content-Type", "application/json")
+						return scope.Writer().WriteStatus(http.StatusOK)
+					}
+					return scope.Writer().WriteJSON(http.StatusOK, append([]byte(nil), openAPIDocument...))
+				}
+				return httpPipeline.Execute(request)
 			},
-			Upgrades: upgrades,
-		})
+		}
+		var server adapter.HTTPAdapter
+		if len(upgrades) > 0 {
+			server, err = config.HTTPAdapterFactory.(adapter.NetHTTPUpgradeFactory).NewWithNetHTTPUpgrades(httpConfig, upgrades)
+		} else {
+			server, err = config.HTTPAdapterFactory.New(httpConfig)
+		}
 		if !isNilHTTPValue(server) {
 			application.server = server
 		}
 		if err != nil {
 			return nil, fmt.Errorf("[Bootstrap] failed to configure HTTP adapter: %w", err)
 		}
-		if application.server == nil {
-			return nil, fmt.Errorf("%w: factory returned a nil adapter", adapter.ErrInvalidAdapter)
+		if err := adapter.ValidateAdapter(server, config.HTTPAdapterFactory.Capabilities()); err != nil {
+			return nil, err
 		}
-		nativeHandler := server.Handler()
-		if isNilHTTPValue(nativeHandler) {
-			return nil, fmt.Errorf("%w: factory returned a nil handler", adapter.ErrInvalidAdapter)
-		}
-		application.handler = newPreparedHandler(nativeHandler)
 	}
 
 	if err := ctx.Err(); err != nil {
@@ -355,7 +366,7 @@ func prepare(ctx context.Context, config Config) (result *Application, err error
 			}
 			runtime := consumer.NewRuntime(config.ConsumerRegistry,
 				consumer.NewPlatformFactory(binding.Factory, binding.Options),
-				buildConsumerPipeline(container, config.ConsumerRegistry, dispatchHook, config.Validator))
+				buildConsumerPipeline(container, config.ConsumerRegistry, dispatchHook, config.Validator), binding.Options.ConsumerErrorHistory)
 			application.consumers = append(application.consumers, consumerRuntime{name: binding.Name, runtime: runtime})
 			if err := runtime.PrepareWithRetry(ctx); err != nil {
 				if ctx.Err() != nil && errors.Is(err, ctx.Err()) {

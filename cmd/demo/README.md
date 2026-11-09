@@ -45,7 +45,7 @@ spine context --root cmd/demo --json
 spine contract check --root cmd/demo --warnings-as-errors --json
 spine verify --root cmd/demo --warnings-as-errors --json
 spine contract probe --root cmd/demo --json
-go -C cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=90s
+go run ./scripts/test -module cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=90s
 ```
 
 CLI 정적 계약 검사, 부분 runtime probe와 실제 네트워크 E2E 결과를 구분해서 기록합니다.
@@ -58,8 +58,8 @@ HTTP 구성은 `spine.New(platform.Option())`으로 Echo 통합 모듈을 명시
 커널의 `spine.New()`만 호출하면 HTTP 구현이 선택되지 않습니다.
 
 예제는 독립 Go 모듈입니다. `go.mod`의 replace로 공개 계약을 포함한 현재 커널과 별도 Echo 플랫폼 모듈을 함께 사용합니다. 의존 버전은 공개 커밋의 Go 의사버전으로 고정하며 replace로 현재 소스를 검사합니다. 정식 버전 태그는 아직 발행하지 않았습니다.
-저장소 루트의 `go test ./...`는 이 중첩 모듈을 검사하지 않으므로 위 E2E 명령을 별도로 실행해야 합니다.
-프레임워크 자체의 전체 검사는 루트에서 `spine check --root .`로 수행합니다.
+테스트 소스는 루트 `test/unit/cmd/demo/`에 모으며 위 실행기로 원본 예제 패키지에 연결합니다. 루트의 `go test ./...`는 예제와 분리된 테스트를 검사하지 않습니다.
+프레임워크 단위 테스트는 `go run ./scripts/test test ./...`로 실행합니다. [전체 테스트 안내](../../test/README.md)에서 모듈별 검증 명령을 확인할 수 있습니다.
 
 전체 검증에서는 `../spine-echo-platform`, `test`, `cmd/reference`, `examples/security-config`의 테스트도 각각 실행하고 `bash scripts/check-module-boundaries.sh`로 의존 경계를 검사합니다.
 

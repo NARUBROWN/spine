@@ -161,7 +161,7 @@ func TestAppEventLive_HTTPToBrokerWorkerAndResult(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer prepared.Close(context.Background())
-			server := httptest.NewServer(prepared.Handler())
+			server := httptest.NewServer(mustHTTPHandler(t, prepared))
 			defer server.Close()
 			sendHTTP := func(id string) int {
 				body, err := json.Marshal(liveEventInput{ID: id})

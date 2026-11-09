@@ -5,45 +5,89 @@ import (
 	"reflect"
 )
 
-// Capabilities는 factory의 규약 버전과 선택적 지원 기능입니다.
-// 기본 HTTP 처리는 필수이며 별도의 기능 플래그를 두지 않습니다.
+// Capabilities는 필수 HTTP 처리 외에 지원하는 기능을 선언합니다.
+// ClientDisconnectCancellation은 요청 종료 시의 공통 취소와 별개입니다.
 type Capabilities struct {
-	ContractVersion  string
-	WebSocketUpgrade bool
+	ContractVersion              string
+	TLS                          bool
+	NetHTTPHandler               bool
+	NetHTTPUpgrade               bool
+	ClientDisconnectCancellation bool
+	ServerOptions                ServerOptionSupport
 }
 
-// Requirements는 애플리케이션에 등록된 경로가 요구하는 기능입니다.
+// Requirements는 선택한 실행 방식에 필요한 기능입니다.
+// 기존 net/http WS v1을 사용하는 앱은 NetHTTPUpgrade를 요구합니다.
 type Requirements struct {
-	WebSocketUpgrade bool
+	TLS                          bool
+	NetHTTPHandler               bool
+	NetHTTPUpgrade               bool
+	ClientDisconnectCancellation bool
 }
 
-// ValidateFactory는 어댑터를 생성하거나 훅을 실행하지 않고 버전과 지원 기능을 검사합니다.
-// nil factory와 버전 불일치는 ErrInvalidAdapter, 미지원 기능은 ErrUnsupportedCapability로 감쌉니다.
-// factory가 반환하는 어댑터와 handler의 유효성은 New 이후 별도로 검사해야 합니다.
+// ValidateFactory는 New, native 훅과 업그레이드 생성을 실행하지 않습니다.
+// 버전/선언 오류와 요청한 기능의 미지원을 구분합니다.
 func ValidateFactory(factory Factory, required Requirements) error {
-	if isNilFactory(factory) {
+	if isNil(factory) {
 		return fmt.Errorf("%w: factory is nil", ErrInvalidAdapter)
 	}
-
-	capabilities := factory.Capabilities()
-	if capabilities.ContractVersion != ContractVersion {
-		return fmt.Errorf("%w: contract version %q, want %q", ErrInvalidAdapter, capabilities.ContractVersion, ContractVersion)
+	caps := factory.Capabilities()
+	if err := validateVersion(caps); err != nil {
+		return err
 	}
-
-	if required.WebSocketUpgrade && !capabilities.WebSocketUpgrade {
-		return fmt.Errorf("%w: WebSocketUpgrade", ErrUnsupportedCapability)
+	if caps.NetHTTPUpgrade {
+		if _, ok := factory.(NetHTTPUpgradeFactory); !ok {
+			return fmt.Errorf("%w: NetHTTPUpgrade requires NetHTTPUpgradeFactory", ErrInvalidAdapter)
+		}
+	}
+	for _, feature := range []struct {
+		name                string
+		required, supported bool
+	}{
+		{"TLS", required.TLS, caps.TLS},
+		{"NetHTTPHandler", required.NetHTTPHandler, caps.NetHTTPHandler},
+		{"NetHTTPUpgrade", required.NetHTTPUpgrade, caps.NetHTTPUpgrade},
+		{"ClientDisconnectCancellation", required.ClientDisconnectCancellation, caps.ClientDisconnectCancellation},
+	} {
+		if feature.required && !feature.supported {
+			return fmt.Errorf("%w: %s", ErrUnsupportedCapability, feature.name)
+		}
 	}
 	return nil
 }
 
-func isNilFactory(factory Factory) bool {
-	if factory == nil {
+// ValidateAdapter는 New 결과와 선언한 native handler의 유효성을 검사합니다.
+// Serve, StopAccepting과 Shutdown을 호출하지 않습니다.
+func ValidateAdapter(adapter HTTPAdapter, caps Capabilities) error {
+	if err := validateVersion(caps); err != nil {
+		return err
+	}
+	if isNil(adapter) {
+		return fmt.Errorf("%w: factory returned a nil adapter", ErrInvalidAdapter)
+	}
+	if caps.NetHTTPHandler {
+		if _, err := NetHTTPHandler(adapter); err != nil {
+			return fmt.Errorf("%w: declared NetHTTPHandler: %w", ErrInvalidAdapter, err)
+		}
+	}
+	return nil
+}
+
+func validateVersion(caps Capabilities) error {
+	if caps.ContractVersion != ContractVersion {
+		return fmt.Errorf("%w: contract version %q, want %q", ErrInvalidAdapter, caps.ContractVersion, ContractVersion)
+	}
+	return nil
+}
+
+func isNil(value any) bool {
+	if value == nil {
 		return true
 	}
-	value := reflect.ValueOf(factory)
-	switch value.Kind() {
+	v := reflect.ValueOf(value)
+	switch v.Kind() {
 	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return value.IsNil()
+		return v.IsNil()
 	default:
 		return false
 	}

@@ -1,31 +1,34 @@
-name: Publish RC
-run-name: RC ${{ inputs.version }} from ${{ inputs.preview_tag }}
+name: Publish Rc
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: '새 RC 버전 (예: v0.6.6-rc.1)'
+        description: New RC tag to publish
         type: string
         required: true
       preview_tag:
-        description: 검증과 공개를 마친 같은 버전의 Preview 태그
+        description: Preview tag that passed full verification
         type: string
         required: true
       observation_override_reason:
-        description: '긴급 관찰 기간 단축 사유 (평소에는 비움, 20자 이상)'
+        description: Observation period override reason; normally left blank
         type: string
-        required: false
+        default: ''
 permissions:
   contents: write
   actions: read
 concurrency:
-  group: spine-release-publication
+  group: release-publication
   cancel-in-progress: false
 jobs:
   publish:
     uses: ./.github/workflows/release-pipeline.yml
+    secrets:
+      DISCORD_WEBHOOK_PREVIEW: ${{ secrets.DISCORD_WEBHOOK_PREVIEW }}
+      DISCORD_WEBHOOK_RC: ${{ secrets.DISCORD_WEBHOOK_RC }}
+      DISCORD_WEBHOOK_RELEASE: ${{ secrets.DISCORD_WEBHOOK_RELEASE }}
     with:
       channel: rc
-      version: ${{ inputs.version }}
       source: ${{ inputs.preview_tag }}
+      version: ${{ inputs.version }}
       observation_override_reason: ${{ inputs.observation_override_reason }}

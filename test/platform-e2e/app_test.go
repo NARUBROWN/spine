@@ -78,7 +78,7 @@ func server(t *testing.T, c *controller, options ...platform.Option) *httptest.S
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(prepared.Handler())
+	srv := httptest.NewServer(mustHTTPHandler(t, prepared))
 	srv.Client().Timeout = 5 * time.Second
 	t.Cleanup(func() {
 		srv.Close()

@@ -1,0 +1,37 @@
+{
+  "schema_version": "spine.input-names/v1",
+  "fields": [
+    {
+      "go": "Name",
+      "wire": "name"
+    },
+    {
+      "go": "ID",
+      "wire": "id"
+    },
+    {
+      "go": "UserID",
+      "wire": "userId"
+    },
+    {
+      "go": "HTTPCode",
+      "wire": "httpCode"
+    },
+    {
+      "go": "IPAddress",
+      "wire": "ipAddress"
+    },
+    {
+      "go": "UserHTTPCode",
+      "wire": "userHttpCode"
+    },
+    {
+      "go": "URLValue",
+      "wire": "urlValue"
+    },
+    {
+      "go": "User2ID",
+      "wire": "user2Id"
+    }
+  ]
+}

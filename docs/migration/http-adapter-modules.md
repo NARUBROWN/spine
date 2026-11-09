@@ -1,5 +1,7 @@
 # Echo 플랫폼으로 전환하기
 
+> 이 문서는 이전 계약의 전환 기록을 포함합니다. 현재 작업 브랜치의 입력 처리와 준비 API 변경은 [HTTP v3 전환](http-v3.md)을 먼저 확인하세요.
+
 현재 소스에서는 공통 계약을 `contract/http`, `contract/event`, `contract/validator`로 정리합니다. HTTP의 이전 `adapter` 경로에는 같은 타입의 호환 별칭을 유지하므로 아래 v0.6.0 플랫폼 연결 예제는 계속 사용할 수 있습니다. 새 구현은 [공통 계약](../../contract/README.md)을 참고하세요.
 
 Spine `v0.6.0`부터 새 프로젝트의 공식 시작 경로는 Spine CLI의 `spine new`입니다. CLI가 Echo 플랫폼 연결과 의존성을 구성합니다. 이 문서는 기존 앱의 전환과 직접 플랫폼을 연결하는 방법을 설명합니다.
@@ -174,7 +176,7 @@ VscodeProjects/
 
 Spine 저장소의 `test`, `cmd/demo`, `cmd/reference`와 `examples/security-config`는 각각 별도 Go 모듈입니다. 이 개발용 모듈의 `replace`는 위 두 checkout을 검사하기 위한 설정입니다. 공개 플랫폼의 go.mod는 공개 Spine 버전을 사용하고 `replace`를 포함하지 않습니다. 의존 모듈의 `replace`는 소비자 앱에 전파되지 않으므로 공개 버전은 별도 소비자에서 검증합니다. 로컬 `go.work`는 커밋하지 않습니다.
 
-루트의 `go test ./...`는 중첩 모듈을 포함하지 않습니다. 루트와 플랫폼, 위 4개 개발용 모듈을 각각 검사합니다. HTTP/WS E2E는 계속 실제 `cmd/demo`를 기준으로 실행합니다.
+단위 테스트 소스는 루트 `test/unit/`에 모으며 `go run ./scripts/test test ./...`로 실행합니다. 중첩 모듈은 실행기의 `-module` 옵션으로 따로 선택합니다. 플랫폼과 통합 모듈도 각각 검사합니다. [테스트 안내](../../test/README.md)에서 전체 명령을 확인할 수 있습니다. HTTP/WS E2E는 실제 `cmd/demo`를 기준으로 실행합니다.
 
 ```sh
 bash scripts/check-module-boundaries.sh
@@ -182,7 +184,7 @@ spine context --root cmd/demo --json
 spine contract check --root cmd/demo --warnings-as-errors --json
 spine verify --root cmd/demo --warnings-as-errors --json
 spine contract probe --root cmd/demo --json
-go -C cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=90s
+go run ./scripts/test -module cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=90s
 ```
 
 CLI 정적 분석, 부분 runtime probe와 실제 E2E는 별도 검증 결과입니다. Prepare 추가가 CLI probe의 HTTP 실행 분석 범위를 확장하는 것은 아닙니다.

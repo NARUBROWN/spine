@@ -2,7 +2,7 @@
   <a href="README.md">한국어</a> | English | <a href="README.ja.md">日本語</a> | <a href="README.zh-Hans.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a>
 </p>
 
-> **Release channels: Preview → RC → Stable.** This source targets `v0.6.6`. See the [release process](RELEASING.md), [import migration guide](docs/migration/v0.6.6.md), and [published releases](https://github.com/NARUBROWN/spine/releases).
+> **Release channels: Preview → RC → Stable.** This source targets `v0.7.0`. See the [release process](RELEASING.md), [import migration guide](docs/migration/v0.7.0.md), and [published releases](https://github.com/NARUBROWN/spine/releases).
 
 > **v0.6.5** unifies public HTTP, WebSocket, event and validator contracts with independent implementation selection. The core uses only the standard library. See the [v0.6.5 migration guide](docs/migration/v0.6.5.md).
 
@@ -82,6 +82,8 @@ From Spine `v0.6.0`, `spine new` is the official way to create a project. Follow
 
 Create a project and start its development server.
 
+The example below installs the stable CLI with `@latest`; its recipe may target a different core version from this Preview checkout. For HTTP v3 Preview, replace the install command with `go install github.com/NARUBROWN/spine-cli/cmd/spine@preview` and follow the [HTTP v3 migration guide](docs/migration/http-v3.md). `@preview` follows a moving branch. Pin a published CLI tag for reproducible installs, and check `spine version` and the generated `go.mod`.
+
 ```sh
 go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
 spine version
@@ -145,3 +147,30 @@ The FOSS for All logo is copyright © FOSS for All and is not covered by Spine's
 ## License
 
 MIT
+
+## Declare routes inside controllers
+
+The current `v0.7.0-preview.8` source candidate adds `api.Controller.RegisterRoutes` and `input.Path[T]`, `input.Query[T]`, `input.Body[T]`. Register the concrete controller prototype with `app.Constructor(constructor.Controller(&UserController{}))`; a separate route table is unnecessary. This describes the source candidate, not a published tag or CLI release. See the [controller example and description lifecycle](docs/migration/controller-routes.md).
+
+```go
+package controller
+
+import (
+    "github.com/NARUBROWN/spine/pkg/api"
+    "github.com/NARUBROWN/spine/pkg/httpx"
+    "github.com/NARUBROWN/spine/pkg/input"
+)
+
+type UserController struct{}
+type CreateUser struct { Name string `json:"name"` }
+type User struct { Name string `json:"name"` }
+
+func (*UserController) Constructor() *UserController { return &UserController{} }
+
+
+func (c *UserController) RegisterRoutes(r *api.Registry) {
+    r.POST("/users", func(a input.Body[CreateUser]) httpx.Response[User] {
+        return httpx.Response[User]{Body: User{Name: a.Name}}
+    })
+}
+```

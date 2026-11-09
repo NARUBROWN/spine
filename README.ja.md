@@ -2,7 +2,7 @@
   <a href="README.md">한국어</a> | <a href="README.en.md">English</a> | 日本語 | <a href="README.zh-Hans.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a>
 </p>
 
-> **リリースチャネル: Preview → RC → Stable。** このソースの対象バージョンは `v0.6.6` です。[リリース手順](RELEASING.md)、[import の移行ガイド](docs/migration/v0.6.6.md)、[公開済みリリース](https://github.com/NARUBROWN/spine/releases)を参照してください。
+> **リリースチャネル: Preview → RC → Stable。** このソースの対象バージョンは `v0.7.0` です。[リリース手順](RELEASING.md)、[import の移行ガイド](docs/migration/v0.7.0.md)、[公開済みリリース](https://github.com/NARUBROWN/spine/releases)を参照してください。
 
 > **v0.6.5** は HTTP・WebSocket・event・validator の公開契約と独立した実装選択を統合します。コアは標準ライブラリのみを使用します。[v0.6.5 移行ガイド](docs/migration/v0.6.5.md)を参照してください。
 
@@ -82,6 +82,8 @@ Spine `v0.6.0` 以降、公式のプロジェクト作成方法は `spine new` �
 
 プロジェクトを作成し、開発サーバーを起動します。
 
+次の例は `@latest` で正式版 CLI をインストールします。内蔵レシピが、このチェックアウトの Preview コアを生成するとは限りません。HTTP v3 Preview を使う場合はインストールコマンドを `go install github.com/NARUBROWN/spine-cli/cmd/spine@preview` に置き換え、[HTTP v3 移行ガイド](docs/migration/http-v3.md)を参照してください。`@preview` は更新されるブランチを追跡します。再現可能なインストールには公開 CLI タグを指定し、`spine version` と生成された `go.mod` を確認してください。
+
 ```sh
 go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
 spine version
@@ -146,3 +148,30 @@ FOSS for Allロゴの著作権はFOSS for Allに帰属します（© FOSS for Al
 ## ライセンス
 
 MIT
+
+## コントローラー内でルートを宣言する
+
+現在の `v0.7.0-preview.8` ソース候補では、`api.Controller.RegisterRoutes` と `input.Path[T]`、`input.Query[T]`、`input.Body[T]` を使用できます。具象コントローラーのオブジェクトを `app.Constructor(constructor.Controller(&UserController{}))` に登録すると、内部のルートを収集します。別のルート表は不要です。公開タグや CLI のリリース完了を示すものではありません。[コード例と仕様取得の条件](docs/migration/controller-routes.md)を参照してください。
+
+```go
+package controller
+
+import (
+    "github.com/NARUBROWN/spine/pkg/api"
+    "github.com/NARUBROWN/spine/pkg/httpx"
+    "github.com/NARUBROWN/spine/pkg/input"
+)
+
+type UserController struct{}
+type CreateUser struct { Name string `json:"name"` }
+type User struct { Name string `json:"name"` }
+
+func (*UserController) Constructor() *UserController { return &UserController{} }
+
+
+func (c *UserController) RegisterRoutes(r *api.Registry) {
+    r.POST("/users", func(a input.Body[CreateUser]) httpx.Response[User] {
+        return httpx.Response[User]{Body: User{Name: a.Name}}
+    })
+}
+```

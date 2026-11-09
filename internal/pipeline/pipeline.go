@@ -15,7 +15,6 @@ import (
 	"github.com/NARUBROWN/spine/internal/resolver"
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/pkg/httperr"
-	"github.com/NARUBROWN/spine/pkg/path"
 )
 
 type Pipeline struct {
@@ -156,7 +155,7 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 		routeFinalizers = append(routeFinalizers, it)
 	}
 
-	paramMetas := buildParameterMeta(meta.Method, meta.PathKeys)
+	paramMetas := resolver.HandlerParameters(meta, meta.PathKeys)
 
 	// 인자 리졸버 체인 실행
 	args, err := p.resolveArguments(ctx, paramMetas)
@@ -165,11 +164,7 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 	}
 
 	// 컨트롤러 메서드 호출
-	results, err = p.invoker.Invoke(
-		meta.ControllerType,
-		meta.Method,
-		args,
-	)
+	results, err = p.invoker.InvokeHandler(meta, args)
 	if err != nil {
 		return err
 	}
@@ -302,35 +297,7 @@ func callHandleExecutionError(
 }
 
 func buildParameterMeta(method reflect.Method, pathKeys []string) []resolver.ParameterMeta {
-	pathIdx := 0
-	metas := make([]resolver.ParameterMeta, 0, method.Type.NumIn()-1)
-
-	for i := 1; i < method.Type.NumIn(); i++ {
-		pt := method.Type.In(i)
-
-		pm := resolver.ParameterMeta{
-			Index: i - 1,
-			Type:  pt,
-		}
-
-		if isPathType(pt) {
-			if pathIdx >= len(pathKeys) {
-				pm.PathKey = ""
-			} else {
-				pm.PathKey = pathKeys[pathIdx]
-			}
-			pathIdx++
-		}
-
-		metas = append(metas, pm)
-	}
-
-	return metas
-}
-
-func isPathType(pt reflect.Type) bool {
-	pathPkg := reflect.TypeFor[path.Int]().PkgPath()
-	return pt.PkgPath() == pathPkg
+	return resolver.Parameters(method, pathKeys)
 }
 
 // isNilResult는 명시적으로 nil을 검사합니다. error 인터페이스에 nil이 담긴 경우처럼
@@ -469,7 +436,7 @@ func (p *Pipeline) handleExecutionError(ctx core.ExecutionContext, err error) er
 	}
 
 	if body == nil {
-		body = handler.ErrorJSON(message)
+		body = handler.InputErrorJSON(err, status, message)
 	}
 	if writeErr := rw.WriteJSON(status, body); writeErr != nil {
 		responseErr = errors.Join(responseErr, fmt.Errorf("write execution error response: %w", writeErr))
