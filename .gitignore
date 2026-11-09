@@ -57,3 +57,5 @@ __pycache__/
 !docs/migration/controller-routes.md
 
 !docs/migration/component-contracts.md
+
+!docs/migration/v0.7.1.md
