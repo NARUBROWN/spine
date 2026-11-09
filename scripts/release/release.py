@@ -85,8 +85,9 @@ def validate_policy(policy):
         if kind == "platform" and modules:
             raise ReleaseError("Platform releases specify only the core dependency")
         for module, version in modules.items():
-            if module not in PLATFORMS or parse_tag(version)[1] != channel:
-                raise ReleaseError("Integration verification requires official platform tags from the same channel")
+            if module not in PLATFORMS:
+                raise ReleaseError("Integration verification requires official platform modules")
+            parse_tag(version)
     if policy.get("approval_environment") != "release-stable" or not policy.get("reviewer_login"):
         raise ReleaseError("A stable release approval environment and designated reviewers are required")
     if policy.get("branches") != {"preview": "preview", "rc": "rc", "stable": "main"}:
@@ -324,14 +325,7 @@ def complete_plan(github, policy, version, dependency_factory=GitHub):
         sha = dependency.tag_sha(tag)
         if not SHA.fullmatch(sha or ""):
             raise ReleaseError("Platform candidate tag is not available yet: " + module)
-        raw_policy = dependency.api(f"contents/.github/release-policy.json?ref={sha}")
-        peer_policy = json.loads(base64.b64decode(raw_policy["content"]))
-        validate_policy(peer_policy)
-        proof, manifest = verify_source_candidate(dependency, tag, channel, peer_policy)
-        if (peer_policy["module"] != module or manifest["kind"] != "platform" or
-                manifest["components"]["core_version"] != version):
-            raise ReleaseError("Platform verification used a different core candidate: " + module)
-        peers[module] = {"version": tag, "source_sha": sha, "artifact_id": proof["id"], "digest": proof["digest"]}
+        peers[module] = {"version": tag, "source_sha": sha}
     return dict(candidate, bootstrap_evidence={"artifact_id": artifact["id"], "digest": artifact["digest"]},
                 platform_evidence=peers, workflow_run_id=os.environ.get("GITHUB_RUN_ID", ""),
                 workflow_run_attempt=os.environ.get("GITHUB_RUN_ATTEMPT", "1"))
@@ -417,9 +411,8 @@ def make_plan(github, policy, channel, version, source, reason="", now=None):
         promotion_pr = promotion(github, source_sha, upstream_sha, branch, policy["branches"][expected], version)
         previous = manifest.get("components", {})
         if (parse_tag(previous.get("core_version", ""))[0] != parse_tag(components(policy, channel)["core_version"])[0] or
-                {name: parse_tag(version)[0] for name, version in previous.get("modules", {}).items()} !=
-                {name: parse_tag(version)[0] for name, version in components(policy, channel).get("modules", {}).items()}):
-            raise ReleaseError("Base dependency versions cannot change during promotion. Publish a new Preview.")
+                previous.get("modules", {}) != components(policy, channel).get("modules", {})):
+            raise ReleaseError("Platform tags cannot change during core promotion. Publish a new Preview.")
         require_age(artifact["created_at"], policy[f"{expected}_hours"], now, reason)
     tree = github.api(f"git/commits/{source_sha}")["tree"]["sha"]
     source_policy = github.api(f"contents/.github/release-policy.json?ref={source_sha}")

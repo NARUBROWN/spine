@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Check core candidate and all platform manifests
+      - name: Check core candidate and selected platform tags
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
