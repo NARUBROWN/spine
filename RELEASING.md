@@ -1,26 +1,27 @@
 # Spine 릴리스 운영
 
-코어는 v0.7.0, 기존 다섯 플랫폼은 v0.2.0, net/http는 v0.1.0을 대상으로 Preview, RC, 정식 채널을 발행합니다. 같은 채널의 코어와 플랫폼 태그를 하나의 검증 조합으로 고정합니다. 패키지 버전 번호는 독립적입니다.
+코어는 v0.7.0, 기존 다섯 플랫폼은 v0.2.0, net/http와 NATS는 v0.1.0을 대상으로 Preview, RC, 정식 채널을 발행합니다. 같은 채널의 코어와 플랫폼 태그를 하나의 검증 조합으로 고정합니다. 패키지 버전 번호는 독립적입니다.
 
 모든 단계에서 태그를 발행하며 GitHub Release는 정식에서만 만듭니다. 예제 앱은 정식 태그를 사용하고 정식 발행 후 갱신합니다. 예제나 CLI 생성 레시피 갱신을 코어 후보 발행의 선행 조건으로 사용하지 않습니다.
 
 ## 정책과 소스 CI
 
-`.github/release-policy.json`의 `channels`에 각 채널의 코어와 여섯 플랫폼 태그를 고정합니다. 현재 Preview 코어 후보와 플랫폼 검증 대상은 다음과 같습니다.
+`.github/release-policy.json`의 `channels`에 각 채널의 코어와 일곱 플랫폼 태그를 고정합니다. 현재 Preview 코어 후보와 플랫폼 검증 대상은 다음과 같습니다.
 
 | 모듈 | Preview 버전 |
 | --- | --- |
-| Spine 코어 | `v0.7.0-preview.11` |
-| Echo | `v0.2.0-preview.3` |
-| Gorilla | `v0.2.0-preview.2` |
-| Kafka | `v0.2.0-preview.2` |
-| RabbitMQ | `v0.2.0-preview.2` |
-| playground validator | `v0.2.0-preview.6` |
-| net/http | `v0.1.0-preview.2` |
+| Spine 코어 | `v0.7.0-preview.12` |
+| Echo | `v0.2.0-preview.5` |
+| Gorilla | `v0.2.0-preview.3` |
+| Kafka | `v0.2.0-preview.3` |
+| RabbitMQ | `v0.2.0-preview.3` |
+| playground validator | `v0.2.0-preview.7` |
+| net/http | `v0.1.0-preview.3` |
+| NATS | `v0.1.0-preview.2` |
 
-코어 `v0.7.0-preview.11`은 이번 수정의 후보 버전입니다. 표는 소스 CI의 검증 조합이며 아직 발행하지 않은 playground 후보도 포함합니다. Echo, Gorilla, Kafka, RabbitMQ와 net/http의 기존 태그는 코어 `v0.7.0-preview.4`를 기준으로 발행됐으며, 이 표만으로 새 코어의 공개 조합이 완료된 것은 아닙니다. 새 코어의 전체 조합을 발행하려면 코어 후보 태그 생성 전에 새 플랫폼 후보 버전을 정책에 고정하고, 코어 후보 발행 후 각 플랫폼을 그 코어 태그로 발행해야 합니다. 발행과 전체 조합 완료 여부는 해당 태그의 Actions manifest에서 확인합니다. 이미 발행한 태그는 이동하거나 재사용하지 않습니다.
+코어 `v0.7.0-preview.12`와 표의 플랫폼 버전은 새 후보입니다. 기존 태그의 플랫폼별 코어 버전은 서로 다르므로 이 표만으로 공개 조합이 완료된 것은 아닙니다. 코어 후보를 먼저 발행한 후 각 플랫폼을 그 코어 태그로 발행하고, 모든 manifest와 공개 설치를 확인해야 합니다. 이미 발행한 태그는 이동하거나 재사용하지 않습니다.
 
-RC는 코어 `v0.7.0-rc.1`, 기존 다섯 플랫폼 `v0.2.0-rc.1`, net/http `v0.1.0-rc.1`을 대상으로 합니다. 정식 대상은 코어 `v0.7.0`, 기존 다섯 플랫폼 `v0.2.0`, net/http `v0.1.0`입니다.
+RC는 코어 `v0.7.0-rc.1`, 기존 다섯 플랫폼 `v0.2.0-rc.1`, net/http와 NATS `v0.1.0-rc.1`을 대상으로 합니다. 정식 대상은 코어 `v0.7.0`, 기존 다섯 플랫폼 `v0.2.0`, net/http와 NATS `v0.1.0`입니다.
 
 HTTP v3의 net/http 플랫폼을 독립 저장소와 여섯 번째 발행 모듈로 편입합니다. 소스 CI는 고정한 net/http 커밋을 사용하고 HTTP/TLS 비교 E2E를 실행합니다. 공개 조합 완료에는 net/http 태그와 manifest도 필요합니다. 원격 저장소 준비와 PR 게시는 후보 태그 발행을 뜻하지 않습니다.
 
@@ -33,9 +34,9 @@ HTTP v3의 net/http 플랫폼을 독립 저장소와 여섯 번째 발행 모듈
 코어의 go.mod는 플랫폼에 의존하지 않습니다. 코어가 플랫폼의 완성 태그를 기다리는 순환을 피하도록 다음 두 단계를 분리합니다.
 
 1. **코어 후보 태그 발행:** 코어 자체의 race, vet, 정책과 발행 코드 검사와 공개 SHA로 소비자 빌드를 마친 뒤 태그를 생성합니다. 생성한 태그로 공개 코어를 다시 빌드하고 `core-candidate-<태그>` artifact를 남깁니다. 이 상태는 아직 승격 가능한 후보가 아닙니다.
-2. **전체 조합 완료:** 여섯 플랫폼이 정확히 그 코어 태그로 발행된 후 각 플랫폼의 manifest와 공개 설치를 확인합니다. 전체 CI, HTTP, WebSocket, 실제 Kafka와 RabbitMQ, validator와 OpenAPI 검증을 마친 뒤 `release-manifest-<태그>` artifact를 남깁니다. 이 기록이 있어야 다음 채널로 승격할 수 있습니다. manifest의 `validation.scope` 값 `cohort`는 이 전체 릴리스 조합 검증을 뜻하는 고정 식별자입니다.
+2. **전체 조합 완료:** 일곱 플랫폼이 정확히 그 코어 태그로 발행된 후 각 플랫폼의 manifest와 공개 설치를 확인합니다. 전체 CI, HTTP, WebSocket, 실제 Kafka, RabbitMQ와 NATS JetStream, validator와 OpenAPI 검증을 마친 뒤 `release-manifest-<태그>` artifact를 남깁니다. 이 기록이 있어야 다음 채널로 승격할 수 있습니다. manifest의 `validation.scope` 값 `cohort`는 이 전체 릴리스 조합 검증을 뜻하는 고정 식별자입니다.
 
-실행 순서는 **코어 후보 → 플랫폼 여섯 개 → 코어 전체 조합 완료**입니다. Preview, RC, 정식 모두 같은 순서입니다. 코어의 정식 GitHub Release는 전체 조합 완료 후에만 생성합니다. 각 플랫폼의 정식 GitHub Release는 해당 플랫폼의 공개 검증 후 생성합니다.
+실행 순서는 **코어 후보 → 플랫폼 일곱 개 → 코어 전체 조합 완료**입니다. Preview, RC, 정식 모두 같은 순서입니다. 코어의 정식 GitHub Release는 전체 조합 완료 후에만 생성합니다. 각 플랫폼의 정식 GitHub Release는 해당 플랫폼의 공개 검증 후 생성합니다.
 
 태그는 생성되면 Go 모듈로 조회될 수 있습니다. 여러 저장소의 태그가 원자적으로 생성되는 것은 아닙니다. 실패한 태그를 이동하거나 덮어쓰지 않고 다음 후보 번호를 사용합니다.
 
@@ -66,7 +67,7 @@ python3 scripts/release/pin_channel.py --channel preview --apply --tidy
 
 이 변경을 커밋해 preview에 반영하고 각 플랫폼의 Publish Preview를 실행합니다. 플랫폼은 go.mod의 코어 태그가 해당 채널과 정확히 일치하는지 확인하며, 공개 의존성만으로 CI와 실제 발행 모듈 검증을 수행합니다.
 
-여섯 플랫폼의 manifest가 준비되면 코어의 **Complete Core Release Combination**에서 같은 코어 태그를 지정합니다. 코어 채널 HEAD는 후보 발행 시점과 같아야 합니다. 문서와 버전 정책도 후보 발행 전에 확정하세요. 발행 후 이 파일들을 수정해야 하면 기존 태그를 바꾸지 않고 새 Preview 후보와 플랫폼 조합을 준비합니다. 다른 코어를 사용한 플랫폼, 누락된 태그나 manifest, 실패하거나 skip된 공개 테스트는 완료로 처리하지 않습니다.
+일곱 플랫폼의 manifest가 준비되면 코어의 **Complete Core Release Combination**에서 같은 코어 태그를 지정합니다. 코어 채널 HEAD는 후보 발행 시점과 같아야 합니다. 문서와 버전 정책도 후보 발행 전에 확정하세요. 발행 후 이 파일들을 수정해야 하면 기존 태그를 바꾸지 않고 새 Preview 후보와 플랫폼 조합을 준비합니다. 다른 코어를 사용한 플랫폼, 누락된 태그나 manifest, 실패하거나 skip된 공개 테스트는 완료로 처리하지 않습니다.
 
 ## RC와 정식 승격
 

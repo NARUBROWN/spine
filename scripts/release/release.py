@@ -20,7 +20,7 @@ SHA = re.compile(r"[0-9a-f]{40}\Z")
 WORKFLOWS = {"preview": "preview.yml", "rc": "rc.yml", "stable": "release.yml"}
 CORE = "github.com/NARUBROWN/spine"
 PLATFORMS = {CORE + suffix for suffix in (
-    "-echo-platform", "-nethttp-platform", "-gorilla-platform", "-kafka-platform", "-rabbitmq-platform", "-validator-playground")}
+    "-echo-platform", "-nethttp-platform", "-gorilla-platform", "-kafka-platform", "-rabbitmq-platform", "-nats-platform", "-validator-playground")}
 MANAGED = {CORE, *PLATFORMS}
 
 
@@ -176,7 +176,7 @@ def check_module(policy, channel, root):
         raise ReleaseError("The core module must not depend on platform modules")
     if policy["kind"] == "core":
         expected = {CORE: components(policy, channel)["core_version"], **components(policy, channel)["modules"]}
-        for name in ("test", "test/openapi", "test/platform-e2e", "test/http-platform", "cmd/demo", "cmd/reference", "examples/security-config"):
+        for name in ("test", "test/openapi", "test/platform-e2e", "test/nats-e2e", "test/http-platform", "cmd/demo", "cmd/reference", "examples/security-config"):
             child = json.loads(run("go", "mod", "edit", "-json", cwd=root / name, env=dict(os.environ, GOWORK="off")))
             for item in (child.get("Require") or []):
                 if item["Path"] in MANAGED and item["Version"] != expected[item["Path"]]:

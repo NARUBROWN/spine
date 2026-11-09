@@ -54,6 +54,26 @@ class ChannelPolicyTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(release.ReleaseError):
                 release.validate_policy(missing)
 
+    def test_nats_is_required_in_every_channel_and_source_ci(self):
+        policy = core_policy()
+        module = release.CORE + "-nats-platform"
+        for channel, suffix in (("preview", "-preview.1"), ("rc", "-rc.1"), ("stable", "")):
+            policy["channels"][channel]["modules"][module] = "v0.1.0" + suffix
+        release.validate_policy(policy)
+        for channel in policy["channels"]:
+            missing = copy.deepcopy(policy)
+            del missing["channels"][channel]["modules"][module]
+            with self.subTest(channel=channel), self.assertRaises(release.ReleaseError):
+                release.validate_policy(missing)
+        del policy["ci_sources"][module]
+        with self.assertRaises(release.ReleaseError):
+            release.validate_policy(policy)
+
+    def test_cohort_requires_nats_broker(self):
+        env = {"SPINE_TEST_KAFKA_BROKER": "localhost:19092", "SPINE_TEST_RABBITMQ_URL": "amqp://localhost"}
+        with self.assertRaisesRegex(release.ReleaseError, "SPINE_TEST_NATS_URL"):
+            verify_public.verify({}, Path("."), Path("."), env, "v0.7.0-preview.12", "cohort")
+
     def test_channel_selection_distinguishes_branches_from_complete_tags(self):
         expected = {"preview": "preview", "rc": "rc", "main": "stable",
                     "v0.7.0-preview.1": "preview", "v0.7.0-rc.1": "rc", "v0.7.0": "stable",
@@ -153,7 +173,7 @@ class ChannelPolicyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "go.mod").write_text("module " + release.CORE + "\n\ngo 1.26.0\n")
-            for name in ("test", "test/openapi", "test/platform-e2e", "test/http-platform", "cmd/demo", "cmd/reference", "examples/security-config"):
+            for name in ("test", "test/openapi", "test/platform-e2e", "test/nats-e2e", "test/http-platform", "cmd/demo", "cmd/reference", "examples/security-config"):
                 child = root / name
                 child.mkdir(parents=True, exist_ok=True)
                 (child / "go.mod").write_text("module example.com/child\n\ngo 1.26.0\n")

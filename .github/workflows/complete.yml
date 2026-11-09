@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Tag for completing public verification of the core candidate and six platforms
+        description: Tag for completing public verification of the core candidate and seven platforms
         type: string
         required: true
 permissions:

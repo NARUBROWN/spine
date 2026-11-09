@@ -104,6 +104,8 @@ def verify(plan, source, work, env, query, scope="cohort"):
         for key in ("SPINE_TEST_KAFKA_BROKER", "SPINE_TEST_RABBITMQ_URL"):
             if not env.get(key):
                 raise ReleaseError(f"{key} is required for broker E2E verification")
+    if scope == "cohort" and not env.get("SPINE_TEST_NATS_URL"):
+        raise ReleaseError("SPINE_TEST_NATS_URL is required for NATS cohort E2E verification")
     module = plan["module"]
     resolved = json.loads(subprocess.check_output(["go", "list", "-m", "-json", module + "@" + query], cwd=work, env=env, text=True))["Version"]
     selected_components = plan["components"]
@@ -130,7 +132,7 @@ def verify(plan, source, work, env, query, scope="cohort"):
         execute(["go", "vet", "-mod=readonly", "./..."], tests, env)
         modules(tests, env, {CORE: selected_components["core_version"]})
     elif scope == "cohort":
-        for name in ("platform-e2e", "openapi", "http-platform"):
+        for name in ("platform-e2e", "nats-e2e", "openapi", "http-platform"):
             tests = work / name
             shutil.copytree(source / "test" / name, tests)
             selected.update(pin(tests, env, expected))
