@@ -1,0 +1,27 @@
+{
+  "version": "5.34.1",
+  "replacements": [
+    {
+      "issue": "base64url sample encoder",
+      "before": "const base64url=s=>xD.from(s).toString(\"base64url\")",
+      "after": "const base64url=s=>xD.from(s).toString(\"base64\").replace(/\\+/g,\"-\").replace(/\\//g,\"_\").replace(/=+$/g,\"\")"
+    },
+    {
+      "issue": "multipleOf exponent notation",
+      "before": "if(Number.isInteger(o))return`multiple of ${o}`;const i=10**o.toString().split(\".\")[1].length",
+      "after": "if(Number.isInteger(o)||o.toString().includes(\"e\"))return`multiple of ${o}`;const i=10**o.toString().split(\".\")[1].length"
+    },
+    {
+      "issue": "contains.anyOf uses its own constraints",
+      "before": "Array.isArray($.anyOf)){const{anyOf:s,...u}=B;",
+      "after": "Array.isArray($.anyOf)){const{anyOf:s,...u}=$;"
+    },
+    {
+      "issue": "contains.oneOf uses its own constraints",
+      "before": "Array.isArray($.oneOf)){const{oneOf:s,...u}=B;",
+      "after": "Array.isArray($.oneOf)){const{oneOf:s,...u}=$;"
+    }
+  ],
+  "upstream_sha256": "36eeb4d5640b9c036b1d0f854499af1cceebbdb260b790a03a18be5e8488fbf5",
+  "notice": "/*! Modified by Spine: base64url, multipleOf and contains fixes. See scripts/openapi-ui/swagger-ui-fixes.json. */\n"
+}

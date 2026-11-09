@@ -1,0 +1,12 @@
+--- a/streaming.go
++++ b/streaming.go
+@@ -74,0 +75,3 @@
++				if err == io.EOF {
++					err = io.ErrUnexpectedEOF
++				}
+@@ -79 +82,4 @@
+-				if err != nil && err != io.EOF {
++				if err != nil {
++					if err == io.EOF {
++						err = io.ErrUnexpectedEOF
++					}

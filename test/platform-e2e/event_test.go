@@ -20,9 +20,11 @@ import (
 	rabbitPlatform "github.com/NARUBROWN/spine-rabbitmq-platform"
 	event "github.com/NARUBROWN/spine/contract/event"
 	validation "github.com/NARUBROWN/spine/contract/validator"
+	"github.com/NARUBROWN/spine/pkg/api"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/NARUBROWN/spine/pkg/httpx"
+	"github.com/NARUBROWN/spine/pkg/input"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/segmentio/kafka-go"
 )
@@ -218,13 +220,12 @@ func TestFinalE2EHTTPValidatorBrokerConsumer(t *testing.T) {
 			senderCtrl := &senderController{topic: input}
 			sender := spine.New(echo.Option(), spine.WithValidator(newRealValidator(t)), spine.WithEventAdapter("events", factory(false, true, "")))
 			sender.Constructor(func() *senderController { return senderCtrl })
-			sender.Route(http.MethodPost, "/events", (*senderController).Emit)
 			prepared, err := sender.Prepare(ctx, boot.Options{HTTP: &boot.HTTPOptions{}})
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer prepared.Close(context.Background())
-			srv := httptest.NewServer(prepared.Handler())
+			srv := httptest.NewServer(mustHTTPHandler(t, prepared))
 			defer srv.Close()
 			send := func(body string) int {
 				req, err := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+"/events", bytes.NewBufferString(body))
@@ -302,4 +303,11 @@ func TestFinalE2EHTTPValidatorBrokerConsumer(t *testing.T) {
 			}
 		})
 	}
+}
+
+// RegisterRoutes는 새 HTTP 콜백에서 기존 이벤트 Pipeline까지 실제 전달을 검증합니다.
+func (c *senderController) RegisterRoutes(r *api.Registry) {
+	r.POST("/events", func(ctx context.Context, a input.Body[validatedInput]) httpx.Response[string] {
+		return c.Emit(ctx, (*validatedInput)(a))
+	})
 }

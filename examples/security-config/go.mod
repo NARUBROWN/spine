@@ -3,10 +3,10 @@ module github.com/NARUBROWN/spine/examples/security-config
 go 1.25.5
 
 require (
-	github.com/NARUBROWN/spine v0.6.1-0.20261103040400-9b1321410211
-	github.com/NARUBROWN/spine-echo-platform v0.1.0
-	github.com/NARUBROWN/spine-kafka-platform v0.0.0-20261102223502-7b4626c6f222
-	github.com/NARUBROWN/spine-rabbitmq-platform v0.0.0-20261102223515-967e684aff1c
+	github.com/NARUBROWN/spine v0.7.0
+	github.com/NARUBROWN/spine-echo-platform v0.2.0-preview.4
+	github.com/NARUBROWN/spine-kafka-platform v0.2.0-preview.2
+	github.com/NARUBROWN/spine-rabbitmq-platform v0.2.0-preview.2
 )
 
 require (

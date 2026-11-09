@@ -20,7 +20,7 @@ func newApplication(engine validation.Validator) spine.App {
 
 옵션을 생략하면 기존처럼 DTO 바인딩만 수행합니다. `WithValidator(nil)`이나 타입 정보가 있는 nil을 등록하면 `App.Validate`, `Prepare`, `Run`에서 `ErrInvalidValidator`로 실패합니다. 사전 검사는 `CheckValidator`로 등록 여부만 확인하며 DTO 검증을 실행하지 않습니다. 준비 결과는 같은 검증기 인스턴스를 공유합니다.
 
-HTTP는 JSON·폼 DTO의 포인터를, WebSocket과 컨슈머는 핸들러에 전달할 구조체 값을 검증기에 전달합니다. 바인딩 실패 시 검증기를 호출하지 않으며, DTO가 아닌 컨텍스트·경로·쿼리 래퍼 등도 검증하지 않습니다. 기존 인증 인터셉터는 바인딩과 검증보다 먼저 실행합니다.
+HTTP는 JSON, 폼, 별도 쿼리와 헤더 DTO의 포인터를, WebSocket과 컨슈머는 핸들러에 전달할 구조체 값을 검증기에 전달합니다. 바인딩 실패 시 검증기를 호출하지 않으며 DTO가 아닌 컨텍스트, 기존 경로 래퍼와 Deprecated query.Pagination 등은 검증하지 않습니다. 기존 인증 인터셉터는 바인딩과 검증보다 먼저 실행합니다.
 
 | 경로 | 규칙 위반 처리 | 검증기 처리 오류 |
 | --- | --- | --- |
@@ -87,13 +87,19 @@ if errors.As(err, &failure) {
 }
 ```
 
-위 코드는 `errors`와 `validation "github.com/NARUBROWN/spine/contract/validator"`를 import한 함수 내부의 예입니다. 외부 구현이 공개 계약만으로 동작하는 전체 예는 [contract_test.go](contract_test.go)의 `ExampleValidator`에서 확인할 수 있습니다.
+위 코드는 `errors`와 `validation "github.com/NARUBROWN/spine/contract/validator"`를 import한 함수 내부의 예입니다. 외부 구현이 공개 계약만으로 동작하는 전체 예는 [contract_test.go](../../test/unit/contract/validator/contract_test.go)의 `ExampleValidator`에서 확인할 수 있습니다.
 
 ```sh
-go test ./contract/validator -count=1
+go run ./scripts/test test ./contract/validator -count=1
 bash scripts/check-module-boundaries.sh
 ```
 
 [spine-validator-playground](https://github.com/NARUBROWN/spine-validator-playground)는 이 계약의 실제 go-playground 구현입니다. `playground.New()`로 생성한 검증기를 `spine.WithValidator`에 전달합니다. 현재 구현의 go-playground v10.30.6은 Go 1.26 이상이 필요하며 Spine 코어의 최소 버전과 별도로 관리됩니다.
 
 새 구현은 이 패키지를 import하고 라이브러리 오류를 공통 `FieldError`로 변환하면 됩니다. 공통 계약을 위한 별도 Go 모듈은 필요하지 않습니다. [플랫폼 계약 E2E](../../test/platform-e2e/README.md)에서 실제 요청과 브로커 메시지의 처리 결과를 확인할 수 있습니다.
+
+## 요청별 외부 필드명
+
+`WithFieldTags(ctx, tags...)`와 `FieldTags(ctx)`는 한 번의 검증에서 외부 필드명에 사용할 태그 우선순위를 전달합니다. 규칙 태그와 공유 검증기 설정은 바꾸지 않습니다. 구현체는 요청에 지정된 태그를 우선하고, 지정되지 않았으면 자신의 기본 필드명 설정을 사용합니다.
+
+HTTP는 실제 바인딩에 따라 json, form, xml, path, query 또는 header를 선택합니다. 이 계약에는 HTTP 출처나 상태 코드를 넣지 않습니다. 코어가 HTTP 응답을 만들 때만 오류에 body, path, query, header 출처를 덧붙이며 WebSocket과 소비자의 공통 검증 오류 형식은 유지합니다.

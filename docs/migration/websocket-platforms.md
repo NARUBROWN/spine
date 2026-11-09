@@ -36,10 +36,10 @@ CLI PR #28의 새 생성기는 `--websocket-platform none|gorilla`를 제공합�
 ## 검증
 
 ```sh
-go test -race ./... -count=1
+go run ./scripts/test test -race ./... -count=1
 bash scripts/check-module-boundaries.sh
 go -C test test -race ./... -count=1
-go -C cmd/demo test -race ./... -count=1
+go run ./scripts/test -module cmd/demo test -race ./... -count=1
 ```
 
 실제 브로커 조합은 [공개 플랫폼 E2E](../../test/platform-e2e/README.md)에서 별도로 실행합니다. CLI 생성 결과의 HTTP·WS·이벤트·검증기 조합은 CLI 저장소의 `test/assembly-e2e/README.md`에 재현 절차가 있습니다. 정적 검사, 로컬 소스 테스트, 공개 버전 설치와 실제 브로커 실행은 각각 구분해 확인합니다.

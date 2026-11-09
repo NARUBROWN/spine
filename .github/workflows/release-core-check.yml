@@ -1,0 +1,42 @@
+name: Core Candidate Checks
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+    outputs:
+      verified_sha:
+        value: ${{ jobs.core.outputs.sha }}
+permissions:
+  contents: read
+jobs:
+  core:
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.0'
+      - name: Run kernel checks without unpublished platforms
+        env:
+          GOWORK: 'off'
+        run: |
+          test -z "$(gofmt -l .)"
+          go run ./scripts/test test -race ./... -count=1 -shuffle=on
+          go run ./scripts/test vet ./...
+          python3 scripts/release/release.py validate-policy
+          python3 -m unittest discover -s scripts/release -p 'test_*.py'
+          node --test scripts/release/branch_flow.test.cjs
+      - name: Record verified source
+        id: source
+        env:
+          SOURCE_SHA: ${{ inputs.ref }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"

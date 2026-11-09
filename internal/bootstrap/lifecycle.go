@@ -2,10 +2,12 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/NARUBROWN/spine/contract/description"
+	"github.com/NARUBROWN/spine/internal/endpoint"
 	"log"
-	"net/http"
 	"sync"
 	"time"
 
@@ -29,25 +31,22 @@ type publisherCloser struct {
 
 // Application은 준비가 성공한 자원만 보관하고 공통 정리 순서를 관리합니다.
 type Application struct {
-	config     Config
-	server     adapter.HTTPAdapter
-	handler    *preparedHandler
-	listener   *managedHTTPListener
-	wsRuntime  *ws.Runtime
-	consumers  []consumerRuntime
-	transports []core.CustomTransport
-	publishers []publisherCloser
-	closeOnce  sync.Once
-	closeDone  chan struct{}
-	closeErr   error
+	config          Config
+	description     description.HTTP
+	descriptionOnce sync.Once
+	descriptionErr  error
+	server          adapter.HTTPAdapter
+	listener        *managedHTTPListener
+	wsRuntime       *ws.Runtime
+	consumers       []consumerRuntime
+	transports      []core.CustomTransport
+	publishers      []publisherCloser
+	closeOnce       sync.Once
+	closeDone       chan struct{}
+	closeErr        error
 }
 
-func (a *Application) Handler() http.Handler {
-	if a.handler == nil {
-		return nil
-	}
-	return a.handler
-}
+func (a *Application) HTTPAdapter() adapter.HTTPAdapter { return a.server }
 
 func (a *Application) shutdownTimeout() time.Duration {
 	if a.config.ShutdownTimeout > 0 {
@@ -69,8 +68,8 @@ func (a *Application) Close(ctx context.Context) error {
 		return ErrInvalidContext
 	}
 	a.closeOnce.Do(func() {
-		if a.handler != nil {
-			a.handler.stop()
+		if a.server != nil {
+			a.server.StopAccepting()
 		}
 		go a.closeResources()
 	})
@@ -104,9 +103,6 @@ func (a *Application) closeResources() {
 	if a.listener != nil {
 		step("HTTP listener", a.listener.Close)
 	}
-	if a.handler != nil {
-		<-a.handler.drained
-	}
 	for i := len(a.consumers) - 1; i >= 0; i-- {
 		runtime := a.consumers[i]
 		step(runtime.name+" consumer", runtime.runtime.Stop)
@@ -136,45 +132,19 @@ func closeResource(name string, close func() error) (err error) {
 	return nil
 }
 
-// preparedHandler는 외부 서버에서 실행하는 요청도 자원 정리 전에 끝나도록 추적합니다.
-// ResponseWriter를 그대로 전달하여 업그레이드에 필요한 native 인터페이스를 보존합니다.
-type preparedHandler struct {
-	native  http.Handler
-	mu      sync.Mutex
-	closing bool
-	active  int
-	drained chan struct{}
-}
-
-func newPreparedHandler(native http.Handler) *preparedHandler {
-	return &preparedHandler{native: native, drained: make(chan struct{})}
-}
-
-func (h *preparedHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	h.mu.Lock()
-	if h.closing {
-		h.mu.Unlock()
-		http.Error(w, "application is closing", http.StatusServiceUnavailable)
-		return
+// DescribeHTTP는 준비 시 고정한 등록에서 명세를 한 번 만들고 독립 복사본을 반환합니다.
+func (a *Application) DescribeHTTP() (description.HTTP, error) {
+	a.descriptionOnce.Do(func() {
+		a.description, a.descriptionErr = endpoint.Describe(a.config.Routes, a.config.HTTP, a.config.Validator)
+	})
+	if a.descriptionErr != nil {
+		return description.HTTP{}, a.descriptionErr
 	}
-	h.active++
-	h.mu.Unlock()
-	defer func() {
-		h.mu.Lock()
-		h.active--
-		if h.closing && h.active == 0 {
-			close(h.drained)
-		}
-		h.mu.Unlock()
-	}()
-	h.native.ServeHTTP(w, r)
-}
-
-func (h *preparedHandler) stop() {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.closing = true
-	if h.active == 0 {
-		close(h.drained)
+	data, err := json.Marshal(a.description)
+	if err != nil {
+		return description.HTTP{}, err
 	}
+	var result description.HTTP
+	err = json.Unmarshal(data, &result)
+	return result, err
 }

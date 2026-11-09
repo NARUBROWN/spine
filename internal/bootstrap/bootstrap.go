@@ -14,6 +14,7 @@ import (
 	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
+	"github.com/NARUBROWN/spine/internal/endpoint"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	eventResolver "github.com/NARUBROWN/spine/internal/event/consumer/resolver"
 	"github.com/NARUBROWN/spine/internal/event/hook"
@@ -29,6 +30,9 @@ import (
 type Config struct {
 	Address                 string
 	Constructors            []any
+	ControllerConstructors  []any
+	ComponentIssues         []boot.ConfigIssue
+	TypedComponents         bool
 	Routes                  []spineRouter.RouteSpec
 	Interceptors            []core.Interceptor
 	ScopedInterceptors      []InterceptorBinding
@@ -43,6 +47,7 @@ type Config struct {
 	WebSocketRegistry       *ws.Registry
 	Validator               validation.Validator
 	ValidatorConfigured     bool
+	RoutesCollected         bool
 }
 
 // EventAdapterBinding은 구현과 공통 실행 정책을 연결하는 준비 설정입니다.
@@ -100,7 +105,15 @@ func requiresShutdownSignal(config Config) bool {
 // Validate는 네트워크에 접근하지 않고 사전 검증을 수행하며,
 // 사용자가 조치할 수 있는 모든 설정 문제를 하나의 오류로 반환합니다.
 func Validate(config Config) error {
-	var issues []boot.ConfigIssue
+	_, err := validate(config)
+	return err
+}
+
+// validate는 사전 검사에 사용한 UI 리소스를 준비 단계에도 전달합니다.
+func validate(config Config) ([]boot.OpenAPIResource, error) {
+	issues := controllerProviderIssues(config)
+	issues = append(issues, componentValidationIssues(config)...)
+	var openAPIResources []boot.OpenAPIResource
 	if config.ShutdownTimeout < 0 {
 		issues = append(issues, boot.ConfigIssue{
 			Path:    "ShutdownTimeout",
@@ -118,6 +131,8 @@ func Validate(config Config) error {
 		}
 		names[binding.Name] = true
 		issues = append(issues, binding.Options.ConsumerRetry.ValidateIssues(path+".ConsumerRetry")...)
+		issues = append(issues, binding.Options.PublisherErrorHistory.ValidateIssues(path+".PublisherErrorHistory")...)
+		issues = append(issues, binding.Options.ConsumerErrorHistory.ValidateIssues(path+".ConsumerErrorHistory")...)
 		if binding.Options.SettlementTimeout < 0 {
 			issues = append(issues, boot.ConfigIssue{Path: path + ".SettlementTimeout", Code: "EVENT_SETTLEMENT_TIMEOUT_INVALID", Message: "Settlement timeout cannot be negative.", Hint: "Use zero for the default or a positive duration."})
 		}
@@ -144,9 +159,16 @@ func Validate(config Config) error {
 			})
 		}
 		issues = append(issues, config.HTTP.ValidateIssues("HTTP")...)
+		resources, resourceIssues := openAPIUIResources(config.HTTP.OpenAPI)
+		openAPIResources = resources
+		issues = append(issues, resourceIssues...)
+		issues = append(issues, openAPICollisionIssues(config, resources)...)
 	}
 	for i, route := range config.Routes {
-		if _, err := spineRouter.NewHandlerMeta(route.Handler); err != nil {
+		if meta, err := spineRouter.Meta(route); err == nil {
+			issues = append(issues, endpoint.HandlerDTOParameterIssues(meta, fmt.Sprintf("Routes[%d]", i), route.Path)...)
+		}
+		if _, err := spineRouter.Meta(route); err != nil {
 			issues = append(issues, boot.ConfigIssue{
 				Path:    fmt.Sprintf("Routes[%d].Handler", i),
 				Code:    "HTTP_ROUTE_HANDLER_INVALID",
@@ -171,16 +193,25 @@ func Validate(config Config) error {
 		}
 	}
 	if err := boot.ValidationError(issues...); err != nil {
-		return err
+		return nil, err
 	}
 	if config.ValidatorConfigured || config.Validator != nil {
 		if err := validation.CheckValidator(config.Validator); err != nil {
-			return err
+			return nil, err
 		}
+	}
+	for i, route := range config.Routes {
+		meta, _ := spineRouter.Meta(route)
+		issues = append(issues, endpoint.HandlerValidationParameterIssues(meta, fmt.Sprintf("Routes[%d]", i), config.Validator)...)
+	}
+	if err := boot.ValidationError(issues...); err != nil {
+		return nil, err
 	}
 	if config.HTTP != nil {
 		hasWebSocketRoutes := config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0
-		if err := adapter.ValidateFactory(config.HTTPAdapterFactory, adapter.Requirements{WebSocketUpgrade: hasWebSocketRoutes}); err != nil {
+		if err := adapter.ValidateFactory(config.HTTPAdapterFactory, adapter.Requirements{TLS: config.HTTP.TLS != nil, NetHTTPUpgrade: hasWebSocketRoutes}); err != nil {
+			adapterErrors = append(adapterErrors, err)
+		} else if err := (adapter.Config{Options: serverOptions(*config.HTTP), Serve: adapter.ServeOptions{TLS: config.HTTP.TLS}, Execute: func(adapter.HTTPContext) error { return nil }}).Validate(config.HTTPAdapterFactory.Capabilities()); err != nil {
 			adapterErrors = append(adapterErrors, err)
 		}
 		if hasWebSocketRoutes {
@@ -189,10 +220,13 @@ func Validate(config Config) error {
 			}
 		}
 	}
-	return errors.Join(adapterErrors...)
+	return openAPIResources, errors.Join(adapterErrors...)
 }
 
 func serverOptions(options boot.HTTPOptions) adapter.ServerOptions {
+	if options.MaxBodyBytes == 0 {
+		options.MaxBodyBytes = 32 << 20
+	}
 	return adapter.ServerOptions{
 		DisableRecover:    options.DisableRecover,
 		ReadHeaderTimeout: options.ReadHeaderTimeout,
@@ -296,19 +330,7 @@ func globalInterceptorIdentity(interceptor core.Interceptor) (interceptorIdentit
 }
 
 func joinPath(prefix, path string) (string, error) {
-	if path == "" {
-		return "", fmt.Errorf("route path cannot be empty")
-	}
-
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-
-	if prefix == "" {
-		return path, nil
-	}
-
-	return prefix + path, nil
+	return endpoint.Path(prefix, path)
 }
 
 func assertNoAmbiguousRoute(method, newPath string, existing []string) error {
@@ -400,7 +422,7 @@ func waitConsumerError(errors <-chan error, done <-chan struct{}) error {
 }
 
 const (
-	spineVersion = "v0.6.6"
+	spineVersion = "v0.7.0"
 	spineBanner  = `
 ________       _____             
 __  ___/__________(_)___________ 

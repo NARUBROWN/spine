@@ -33,11 +33,11 @@ func (r *PathIntResolver) Resolve(ctx core.ExecutionContext, parameterMeta Param
 
 	value, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil {
-		return nil, &httperr.HTTPError{
+		return nil, &httperr.InputError{Source: "path", Cause: &httperr.HTTPError{
 			Status:  http.StatusBadRequest,
 			Message: fmt.Sprintf("Invalid path parameter: %s", parameterMeta.PathKey),
 			Cause:   err,
-		}
+		}}
 	}
 
 	return path.Int{Value: value}, nil

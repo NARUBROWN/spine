@@ -1,13 +1,13 @@
 package resolver
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/resolver"
+	"github.com/NARUBROWN/spine/pkg/jsonx"
 )
 
 type DTOResolver struct {
@@ -32,7 +32,7 @@ func (r *DTOResolver) Resolve(ctx core.ExecutionContext, meta resolver.Parameter
 	// DTO 인스턴스 생성
 	dtoPtr := reflect.New(meta.Type)
 
-	if err := json.Unmarshal(payload, dtoPtr.Interface()); err != nil {
+	if err := jsonx.Unmarshal(payload, dtoPtr.Interface()); err != nil {
 		return nil, fmt.Errorf("DTO deserialization failed: %w", err)
 	}
 

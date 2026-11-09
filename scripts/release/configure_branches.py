@@ -6,10 +6,20 @@ import json
 import os
 from pathlib import Path
 
-from release import GitHub, ReleaseError, run
+from release import GitHub, ReleaseError, run, approval_environment
 
 
 BRANCHES = ("preview", "rc", "main")
+
+
+def bootstrap(github, apply=False):
+    source = github.api("git/ref/heads/main")["object"]["sha"]
+    for branch in ("preview", "rc"):
+        if github.api("git/ref/heads/" + branch, missing=True) is None:
+            print(f"Initial channel creation plan: {github.repository} / {branch} / {source}")
+            if apply:
+                github.api("git/refs", method="POST", data={"ref": "refs/heads/" + branch, "sha": source})
+    print("Existing branches will not be moved. Merge the first work PR into preview before applying protection rules.")
 
 
 def specification(branch):
@@ -44,18 +54,18 @@ def specification(branch):
 def verify_rule(actual, expected):
     for key in ("name", "target", "enforcement", "bypass_actors", "conditions"):
         if actual.get(key) != expected[key]:
-            raise ReleaseError(f"브랜치 보호 규칙 불일치: {expected['name']} / {key}")
+            raise ReleaseError(f"Branch protection rules do not match: {expected['name']} / {key}")
     rules = {rule["type"]: rule for rule in actual["rules"]}
     for rule in expected["rules"]:
         if rule["type"] not in rules:
-            raise ReleaseError("필수 브랜치 보호 규칙이 없습니다: " + rule["type"])
+            raise ReleaseError("Required branch protection rule is missing: " + rule["type"])
         params = rules[rule["type"]].get("parameters", {})
         for key, value in rule.get("parameters", {}).items():
             if params.get(key) != value:
-                raise ReleaseError("브랜치 보호 매개변수가 다릅니다: " + key)
+                raise ReleaseError("Branch protection parameters do not match: " + key)
 
 
-def configure(github, apply=False):
+def configure(github, apply=False, policy=None):
     # 기본 브랜치를 바꾸기 전에 신뢰할 PR 방향 검사 코드가 preview에 있어야 합니다.
     github.api("contents/.github/workflows/branch-flow.yml?ref=preview")
     for branch in BRANCHES:
@@ -70,9 +80,9 @@ def configure(github, apply=False):
             else:
                 previous = github.api("rulesets", method="POST", data=expected)
         if not previous:
-            raise ReleaseError("브랜치 보호 규칙을 먼저 적용해야 합니다: " + branch)
+            raise ReleaseError("Apply branch protection rules first: " + branch)
         verify_rule(github.api(f"rulesets/{previous['id']}"), expected)
-        print("채널 보호 확인:", branch)
+        print("Channel protection verified:", branch)
     if apply:
         # 새 규칙이 활성화된 다음에만 merge commit을 금지하던 이전 main 보호를 제거합니다.
         legacy = github.api("branches/main/protection", missing=True)
@@ -95,16 +105,45 @@ def configure(github, apply=False):
             if not any(p["name"] == branch and p.get("type", "branch") == "branch" for p in policies):
                 github.api(f"environments/{environment}/deployment-branch-policies", method="POST",
                            data={"name": branch, "type": "branch"})
+        # 하위 저장소에도 정식 발행 전 지정 리뷰어 승인이 있어야 합니다.
+        if policy is not None and github.api("environments/release-stable", missing=True) is None:
+            reviewer = json.loads(run("gh", "api", "users/" + policy["reviewer_login"]))
+            github.api("environments/release-stable", method="PUT", data={
+                "can_admins_bypass": False, "prevent_self_review": False,
+                "reviewers": [{"type": "User", "id": reviewer["id"]}],
+                "deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True}})
+            github.api("environments/release-stable/deployment-branch-policies", method="POST",
+                       data={"name": "main", "type": "branch"})
+    expected_tags = {"name": "Spine immutable tags", "target": "tag", "enforcement": "active", "bypass_actors": [],
+                     "conditions": {"ref_name": {"include": ["refs/tags/v*"], "exclude": []}},
+                     "rules": [{"type": "deletion"}, {"type": "update"}]}
+    tags = listed.get(expected_tags["name"])
+    if apply:
+        tags = github.api("rulesets" + ("/" + str(tags["id"]) if tags else ""),
+                          method="PUT" if tags else "POST", data=expected_tags)
+    if not tags:
+        raise ReleaseError("A rule blocking version tag updates and deletion is required")
+    verify_rule(github.api(f"rulesets/{tags['id']}"), expected_tags)
+    if policy is not None:
+        approval_environment(github, policy)
     repo = github.api("")
     if repo["default_branch"] != "preview":
-        raise ReleaseError("저장소 기본 브랜치는 preview여야 합니다")
+        raise ReleaseError("The repository default branch must be preview")
     if github.api("branches/main/protection", missing=True) is not None:
-        raise ReleaseError("이전 main 보호가 남아 승격 merge를 막을 수 있습니다")
-    print("기본 브랜치와 preview → rc → main 보호 확인 완료")
+        raise ReleaseError("Legacy main protection remains and may block promotion merges")
+    print("Default branch and preview → rc → main protection verified")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='Configure and verify release channel branch protection.')
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--bootstrap", action="store_true")
     args = parser.parse_args()
-    configure(GitHub(os.environ.get("GITHUB_REPOSITORY", "NARUBROWN/spine")), args.apply)
+    policy = json.loads(Path(".github/release-policy.json").read_text())
+    repository = policy["module"].removeprefix("github.com/")
+    if os.environ.get("GITHUB_REPOSITORY", repository) != repository:
+        raise ReleaseError("The policy repository does not match the current repository")
+    if args.bootstrap:
+        bootstrap(GitHub(repository), args.apply)
+    else:
+        configure(GitHub(repository), args.apply, policy)

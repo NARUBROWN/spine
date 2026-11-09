@@ -1,4 +1,4 @@
-name: Release Pipeline
+name: Core Release Pipeline
 on:
   workflow_call:
     inputs:
@@ -14,6 +14,13 @@ on:
       observation_override_reason:
         type: string
         default: ''
+    secrets:
+      DISCORD_WEBHOOK_PREVIEW:
+        required: false
+      DISCORD_WEBHOOK_RC:
+        required: false
+      DISCORD_WEBHOOK_RELEASE:
+        required: false
 permissions:
   contents: read
   actions: read
@@ -28,7 +35,10 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Validate release policy and source
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.0'
+      - name: Validate exact source, channel and dependency pins
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
@@ -42,9 +52,9 @@ jobs:
           name: release-plan
           path: release-plan.json
           if-no-files-found: error
-  ci:
+  core-ci:
     needs: plan
-    uses: ./.github/workflows/ci.yml
+    uses: ./.github/workflows/release-core-check.yml
     with:
       ref: ${{ needs.plan.outputs.sha }}
   public-before-tag:
@@ -54,8 +64,10 @@ jobs:
       source_sha: ${{ needs.plan.outputs.sha }}
       query: ${{ needs.plan.outputs.sha }}
       artifact: public-before-tag
+      scope: core
   tag:
-    needs: [plan, ci, public-before-tag]
+    needs: [plan, core-ci, public-before-tag]
+    if: ${{ always() && needs.plan.result == 'success' && needs.core-ci.result == 'success' && needs.public-before-tag.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -69,20 +81,30 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: release-plan
-      - name: Create immutable tag after verification and approval
+      - name: Create immutable tag after source verification
         env:
           GH_TOKEN: ${{ github.token }}
-          VERIFIED_SHA: ${{ needs.ci.outputs.verified_sha }}
+          VERIFIED_SHA: ${{ needs.core-ci.outputs.verified_sha }}
         run: python3 scripts/release/release.py tag
-  public-after-tag:
+      - name: Notify Discord of the new tag
+        uses: ./.github/actions/discord-tag
+        continue-on-error: true
+        timeout-minutes: 1
+        with:
+          plan: release-plan.json
+          webhook_preview: ${{ secrets.DISCORD_WEBHOOK_PREVIEW }}
+          webhook_rc: ${{ secrets.DISCORD_WEBHOOK_RC }}
+          webhook_release: ${{ secrets.DISCORD_WEBHOOK_RELEASE }}
+  public:
     needs: [plan, tag]
     uses: ./.github/workflows/release-public-check.yml
     with:
       source_sha: ${{ needs.plan.outputs.sha }}
       query: ${{ needs.plan.outputs.version }}
       artifact: public-after-tag
+      scope: core
   finish:
-    needs: [plan, tag, public-after-tag]
+    needs: [plan, tag, public]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -98,7 +120,13 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: public-after-tag
-      - name: Publish release with verified manifest
+      - name: Record core candidate
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/release/release.py finish
+        run: python3 scripts/release/release.py record-core
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core-candidate-${{ needs.plan.outputs.version }}
+          path: release-manifest.json
+          if-no-files-found: error
+          retention-days: 90

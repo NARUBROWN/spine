@@ -2,9 +2,12 @@ package spine
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"strings"
 	"time"
 
+	"github.com/NARUBROWN/spine/contract/description"
 	eventadapter "github.com/NARUBROWN/spine/contract/event"
 	adapter "github.com/NARUBROWN/spine/contract/http"
 	validation "github.com/NARUBROWN/spine/contract/validator"
@@ -15,12 +18,16 @@ import (
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/ws"
 	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/NARUBROWN/spine/pkg/constructor"
 )
 
 type App interface {
-	// 생성자 선언
+	// Constructor는 constructor의 역할 표식 또는 기존 생성자 함수를 등록합니다.
 	Constructor(constructors ...any)
-	// 라우트 선언
+	// Route는 메서드 표현식으로 HTTP 경로를 등록합니다.
+	//
+	// Deprecated: 새 HTTP 경로는 api.Controller의 RegisterRoutes 메서드에 등록하세요.
+	// 기존 등록은 전환 기간에 계속 사용할 수 있습니다.
 	Route(method string, path string, handler any, opts ...router.RouteOption)
 	// 인터셉터 선언
 	Interceptor(interceptors ...core.Interceptor)
@@ -44,6 +51,10 @@ type App interface {
 
 type app struct {
 	constructors            []any
+	controllerConstructors  []any
+	componentIssues         []boot.ConfigIssue
+	componentCounts         map[string]int
+	typedComponents         bool
 	routes                  []router.RouteSpec
 	interceptors            []bootstrap.InterceptorBinding
 	customTransports        []core.CustomTransport
@@ -97,6 +108,16 @@ func WithEventSettlementTimeout(timeout time.Duration) EventAdapterOption {
 	return func(options *boot.EventOptions) { options.SettlementTimeout = timeout }
 }
 
+// WithEventPublisherErrorHistory는 발행기 정리 실패의 보관 건수와 기간을 설정합니다.
+func WithEventPublisherErrorHistory(policy boot.CleanupErrorHistoryOptions) EventAdapterOption {
+	return func(options *boot.EventOptions) { options.PublisherErrorHistory = policy }
+}
+
+// WithEventConsumerErrorHistory는 Reader 정리 실패의 보관 건수와 기간을 설정합니다.
+func WithEventConsumerErrorHistory(policy boot.CleanupErrorHistoryOptions) EventAdapterOption {
+	return func(options *boot.EventOptions) { options.ConsumerErrorHistory = policy }
+}
+
 // WithValidator는 모든 기본 DTO 리졸버가 사용할 검증기를 등록합니다.
 // 생략하면 검증하지 않으며, 명시적으로 등록한 nil은 앱 사전 검사에서 거부합니다.
 func WithValidator(validator validation.Validator) Option {
@@ -120,7 +141,18 @@ func New(options ...Option) App {
 }
 
 func (a *app) Constructor(constructors ...any) {
-	a.constructors = append(a.constructors, constructors...)
+	for _, value := range constructors {
+		if registration, ok := value.(constructor.Registration); ok {
+			a.componentRegistration(registration)
+		} else if t := reflect.TypeOf(value); t != nil && t.Kind() == reflect.Func {
+			a.constructors = append(a.constructors, value)
+			if a.controllerConstructors != nil {
+				a.controllerConstructors = append(a.controllerConstructors, value)
+			}
+		} else {
+			a.componentConstructors("Custom", nil, []any{value})
+		}
+	}
 }
 
 func (a *app) Route(method string, path string, handler any, opts ...router.RouteOption) {
@@ -161,6 +193,9 @@ func (a *app) bootstrapConfig(opts boot.Options) bootstrap.Config {
 	return bootstrap.Config{
 		Address:                 opts.Address,
 		Constructors:            a.constructors,
+		ControllerConstructors:  a.controllerConstructors,
+		ComponentIssues:         a.componentIssues,
+		TypedComponents:         a.typedComponents,
 		Routes:                  a.routes,
 		ScopedInterceptors:      a.interceptors,
 		CustomTransports:        a.customTransports,
@@ -179,6 +214,26 @@ func (a *app) bootstrapConfig(opts boot.Options) bootstrap.Config {
 
 func (a *app) Validate(opts boot.Options) error {
 	return bootstrap.Validate(a.bootstrapConfig(opts))
+}
+
+// HTTPDescriber는 기존 App 구현을 확장하지 않는 선택적 HTTP 설명 기능입니다.
+type HTTPDescriber interface {
+	DescribeHTTP(boot.Options) (description.HTTP, error)
+}
+
+// ErrHTTPDescriptionUnavailable는 선택적 HTTP 설명 기능이 없는 앱을 나타냅니다.
+var ErrHTTPDescriptionUnavailable = errors.New("application does not provide HTTP descriptions")
+
+// DescribeHTTP는 생성자나 네트워크를 실행하지 않고 현재 HTTP 등록을 설명합니다.
+func DescribeHTTP(application App, opts boot.Options) (description.HTTP, error) {
+	if describer, ok := application.(HTTPDescriber); ok {
+		return describer.DescribeHTTP(opts)
+	}
+	return description.HTTP{}, ErrHTTPDescriptionUnavailable
+}
+
+func (a *app) DescribeHTTP(opts boot.Options) (description.HTTP, error) {
+	return bootstrap.DescribeHTTP(a.bootstrapConfig(opts))
 }
 
 func (a *app) Run(opts boot.Options) error {

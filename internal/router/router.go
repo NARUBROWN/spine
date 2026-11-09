@@ -1,6 +1,7 @@
 package router
 
 import (
+	"net/url"
 	"reflect"
 	"strings"
 
@@ -11,10 +12,14 @@ import (
 type RouteOption func(*RouteSpec)
 
 type RouteSpec struct {
-	Method       string
-	Path         string
-	Handler      any
-	Interceptors []core.Interceptor
+	Method         string
+	Path           string
+	Handler        any
+	ControllerType reflect.Type
+	Interceptors   []core.Interceptor
+	Tags           []string
+	Summary        string
+	Description    string
 }
 
 type Router interface {
@@ -24,7 +29,6 @@ type Router interface {
 type routeNode struct {
 	staticChildren map[string]*routeNode
 	paramChild     *routeNode
-	paramKey       string
 	meta           *core.HandlerMeta
 }
 
@@ -57,7 +61,7 @@ func (r *DefaultRouter) Register(method string, path string, meta core.HandlerMe
 	for _, seg := range splitPath(path) {
 		if isParamSegment(seg) {
 			if node.paramChild == nil {
-				node.paramChild = &routeNode{paramKey: seg[1:]}
+				node.paramChild = &routeNode{}
 			}
 			node = node.paramChild
 			continue
@@ -90,31 +94,45 @@ func (r *DefaultRouter) Route(ctx core.ExecutionContext) (core.HandlerMeta, erro
 	}
 
 	pathSegs := splitPath(ctx.Path())
-	node, params, ok := findRoute(root, pathSegs, 0, nil)
+	if raw, ok := ctx.(interface{ RawPath() string }); ok {
+		pathSegs = splitPath(raw.RawPath())
+		for i, segment := range pathSegs {
+			decoded, err := url.PathUnescape(segment)
+			if err != nil {
+				return core.HandlerMeta{}, httperr.BadRequest("invalid path encoding")
+			}
+			pathSegs[i] = decoded
+		}
+	}
+	node, values, ok := findRoute(root, pathSegs, 0, nil)
 	if !ok {
 		return core.HandlerMeta{}, httperr.NotFound("handler not found")
 	}
 
-	if params != nil {
+	if len(node.meta.PathKeys) > 0 {
+		params := make(map[string]string, len(node.meta.PathKeys))
+		for i, key := range node.meta.PathKeys {
+			params[key] = values[i]
+		}
 		ctx.SetRoute(params, append([]string(nil), node.meta.PathKeys...))
 	}
 
 	return *node.meta, nil
 }
 
-func findRoute(node *routeNode, segments []string, index int, params map[string]string) (*routeNode, map[string]string, bool) {
+func findRoute(node *routeNode, segments []string, index int, values []string) (*routeNode, []string, bool) {
 	if index == len(segments) {
 		if node.meta == nil {
 			return nil, nil, false
 		}
-		return node, params, true
+		return node, values, true
 	}
 
 	segment := segments[index]
 	if node.staticChildren != nil {
 		if child := node.staticChildren[segment]; child != nil {
-			if matched, matchedParams, ok := findRoute(child, segments, index+1, params); ok {
-				return matched, matchedParams, true
+			if matched, matchedValues, ok := findRoute(child, segments, index+1, values); ok {
+				return matched, matchedValues, true
 			}
 		}
 	}
@@ -123,17 +141,7 @@ func findRoute(node *routeNode, segments []string, index int, params map[string]
 		return nil, nil, false
 	}
 
-	branchParams := cloneParams(params, len(segments))
-	branchParams[node.paramChild.paramKey] = segment
-	return findRoute(node.paramChild, segments, index+1, branchParams)
-}
-
-func cloneParams(params map[string]string, capacity int) map[string]string {
-	cloned := make(map[string]string, capacity)
-	for key, value := range params {
-		cloned[key] = value
-	}
-	return cloned
+	return findRoute(node.paramChild, segments, index+1, append(values, segment))
 }
 
 func splitPath(path string) []string {

@@ -93,6 +93,9 @@ func (h *JSONReturnHandler) Handle(value any, ctx core.ExecutionContext) error {
 	if err := ValidateStatus(status); err != nil {
 		return err
 	}
+	if status == http.StatusNoContent {
+		return rw.WriteStatus(status)
+	}
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("serialize JSON response: %w", err)

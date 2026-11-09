@@ -5,12 +5,15 @@ on:
   workflow_call:
     inputs:
       ref:
-        description: 검증할 커밋 SHA
+        description: Commit SHA to verify
         type: string
         required: true
+      public_dependencies:
+        type: boolean
+        default: false
     outputs:
       verified_sha:
-        description: 모든 검사를 통과한 커밋
+        description: Commit that passed all checks
         value: ${{ jobs.verified.outputs.sha }}
   push:
     branches: [preview, rc, main]
@@ -25,6 +28,7 @@ permissions:
   actions: read
 
 env:
+  PYTHONUTF8: '1'
   GOWORK: "off"
 
 concurrency:
@@ -62,12 +66,11 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
 
-      - name: Checkout Echo integration
-        uses: actions/checkout@v4
+      - name: Prepare pinned contract sources
+        uses: ./spine/.github/actions/setup-sources
         with:
-          repository: NARUBROWN/spine-echo-platform
-          ref: v0.1.0
-          path: spine-echo-platform
+          published: ${{ inputs.public_dependencies && 'true' || 'false' }}
+          ref: ${{ github.base_ref || github.ref_name }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -87,33 +90,23 @@ jobs:
             exit 1
           fi
 
-      - name: Prepare platform workspace
-        shell: bash
+      - name: Verify embedded documentation assets and notices
         run: |
-          platform_workspace="$RUNNER_TEMP/spine-platform"
-          mkdir -p "$platform_workspace"
-          go -C "$platform_workspace" work init "$GITHUB_WORKSPACE/spine" "$GITHUB_WORKSPACE/spine-echo-platform"
-          local_spine=$(GOWORK="$platform_workspace/go.work" go -C ../spine-echo-platform list -m -f '{{.Main}}' github.com/NARUBROWN/spine)
-          test "$local_spine" = true
+          python3 scripts/update-openapi-ui.py --check
+          python3 -m unittest discover -s scripts/openapi-ui -p 'test_*.py' -v
+          node --test scripts/openapi-ui/test_bundle.cjs
+          python3 -m unittest discover -s scripts -p 'test_verifiers.py' -v
 
       - name: Run go vet
         run: |
-          for module in . test test/platform-e2e cmd/demo cmd/reference examples/security-config; do
-            go -C "$module" vet ./...
+          for module in . test test/platform-e2e test/openapi cmd/demo cmd/reference examples/security-config; do
+            go run ./scripts/test -module "$module" vet ./...
           done
-          GOWORK="$RUNNER_TEMP/spine-platform/go.work" go -C ../spine-echo-platform vet ./...
+          go -C ../spine-echo-platform vet ./...
           bash scripts/check-module-boundaries.sh
 
-      - name: Check module files
-        run: |
-          for module in . ../spine-echo-platform test test/platform-e2e cmd/demo cmd/reference examples/security-config; do
-            go -C "$module" mod verify
-            go -C "$module" mod tidy
-          done
-          git diff --exit-code -- go.mod go.sum ':(glob)**/go.mod' ':(glob)**/go.sum'
-          git -C ../spine-echo-platform diff --exit-code -- go.mod go.sum
-          test "$(go -C ../spine-echo-platform list -m -f '{{.Main}}' github.com/NARUBROWN/spine)" = false
-          test -z "$(go -C ../spine-echo-platform list -m -f '{{if .Replace}}{{.Path}}{{end}}' all)"
+      - name: Verify source workspace boundaries
+        run: python3 scripts/release/ci_workspace.py check --root .
 
   unit:
     needs: branch-direction
@@ -134,12 +127,11 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
 
-      - name: Checkout Echo integration
-        uses: actions/checkout@v4
+      - name: Prepare pinned contract sources
+        uses: ./spine/.github/actions/setup-sources
         with:
-          repository: NARUBROWN/spine-echo-platform
-          ref: v0.1.0
-          path: spine-echo-platform
+          published: ${{ inputs.public_dependencies && 'true' || 'false' }}
+          ref: ${{ github.base_ref || github.ref_name }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -150,23 +142,14 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
-      - name: Prepare platform workspace
-        shell: bash
-        run: |
-          platform_workspace="$RUNNER_TEMP/spine-platform"
-          mkdir -p "$platform_workspace"
-          go -C "$platform_workspace" work init "$GITHUB_WORKSPACE/spine" "$GITHUB_WORKSPACE/spine-echo-platform"
-          local_spine=$(GOWORK="$platform_workspace/go.work" go -C ../spine-echo-platform list -m -f '{{.Main}}' github.com/NARUBROWN/spine)
-          test "$local_spine" = true
-
       - name: Run unit tests
         shell: bash
         run: |
           for module in . cmd/reference examples/security-config; do
-            go -C "$module" test ./... -count=1 -shuffle=on -timeout=8m
+            go run ./scripts/test -module "$module" test ./... -count=1 -shuffle=on -timeout=8m
           done
-          GOWORK="$RUNNER_TEMP/spine-platform/go.work" go -C ../spine-echo-platform test ./... -count=1 -shuffle=on -timeout=8m
-          go -C cmd/demo test ./... -run '^TestBuildApplication$' -count=1 -shuffle=on -timeout=8m
+          go -C ../spine-echo-platform test ./... -count=1 -shuffle=on -timeout=8m
+          go run ./scripts/test -module cmd/demo test ./... -run '^TestBuildApplication$' -count=1 -shuffle=on -timeout=8m
 
   integration:
     needs: branch-direction
@@ -187,12 +170,11 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
 
-      - name: Checkout Echo integration
-        uses: actions/checkout@v4
+      - name: Prepare pinned contract sources
+        uses: ./spine/.github/actions/setup-sources
         with:
-          repository: NARUBROWN/spine-echo-platform
-          ref: v0.1.0
-          path: spine-echo-platform
+          published: ${{ inputs.public_dependencies && 'true' || 'false' }}
+          ref: ${{ github.base_ref || github.ref_name }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -225,12 +207,11 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
 
-      - name: Checkout Echo integration
-        uses: actions/checkout@v4
+      - name: Prepare pinned contract sources
+        uses: ./spine/.github/actions/setup-sources
         with:
-          repository: NARUBROWN/spine-echo-platform
-          ref: v0.1.0
-          path: spine-echo-platform
+          published: ${{ inputs.public_dependencies && 'true' || 'false' }}
+          ref: ${{ github.base_ref || github.ref_name }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -244,18 +225,9 @@ jobs:
       - name: Download demo dependencies
         run: go -C cmd/demo mod download all
 
-      - name: Install pinned Spine CLI
-        run: go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.2-0.20261103042116-77419ec0a2d2
-
-      - name: Verify demo CLI contract
-        run: |
-          spine context --root cmd/demo --json
-          spine contract check --root cmd/demo --warnings-as-errors --json
-          spine verify --root cmd/demo --warnings-as-errors --json
-          spine contract probe --root cmd/demo --json
-
+      # CLI 명세 분석 연동은 후속 범위이며 여기서는 코어의 실제 앱 실행을 검증합니다.
       - name: Run real-network demo E2E tests
-        run: go -C cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=8m
+        run: go run ./scripts/test -module cmd/demo test . -run '^TestDemoE2E_' -count=1 -timeout=8m
 
   race:
     needs: branch-direction
@@ -272,12 +244,11 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
 
-      - name: Checkout Echo integration
-        uses: actions/checkout@v4
+      - name: Prepare pinned contract sources
+        uses: ./spine/.github/actions/setup-sources
         with:
-          repository: NARUBROWN/spine-echo-platform
-          ref: v0.1.0
-          path: spine-echo-platform
+          published: ${{ inputs.public_dependencies && 'true' || 'false' }}
+          ref: ${{ github.base_ref || github.ref_name }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -288,21 +259,12 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
-      - name: Prepare platform workspace
-        shell: bash
-        run: |
-          platform_workspace="$RUNNER_TEMP/spine-platform"
-          mkdir -p "$platform_workspace"
-          go -C "$platform_workspace" work init "$GITHUB_WORKSPACE/spine" "$GITHUB_WORKSPACE/spine-echo-platform"
-          local_spine=$(GOWORK="$platform_workspace/go.work" go -C ../spine-echo-platform list -m -f '{{.Main}}' github.com/NARUBROWN/spine)
-          test "$local_spine" = true
-
       - name: Run race detector
         run: |
           for module in . test cmd/demo cmd/reference examples/security-config; do
-            go -C "$module" test -race ./... -count=1 -shuffle=on -timeout=12m
+            go run ./scripts/test -module "$module" test -race ./... -count=1 -shuffle=on -timeout=12m
           done
-          GOWORK="$RUNNER_TEMP/spine-platform/go.work" go -C ../spine-echo-platform test -race ./... -count=1 -shuffle=on -timeout=12m
+          go -C ../spine-echo-platform test -race ./... -count=1 -shuffle=on -timeout=12m
 
   event-platform-e2e:
     needs: branch-direction
@@ -326,12 +288,11 @@ jobs:
           path: spine
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
-      - name: Checkout Echo integration
-        uses: actions/checkout@v4
+      - name: Prepare pinned contract sources
+        uses: ./spine/.github/actions/setup-sources
         with:
-          repository: NARUBROWN/spine-echo-platform
-          ref: v0.1.0
-          path: spine-echo-platform
+          published: ${{ inputs.public_dependencies && 'true' || 'false' }}
+          ref: ${{ github.base_ref || github.ref_name }}
       - uses: actions/setup-go@v5
         with:
           go-version: '1.27.3'
@@ -345,6 +306,16 @@ jobs:
           done
           docker logs event-kafka
           exit 1
+      - name: Start NATS JetStream
+        shell: bash
+        run: |
+          docker run -d --name event-nats -p 127.0.0.1:4222:4222 nats:2.11 -js
+          for attempt in $(seq 1 30); do
+            if (echo > /dev/tcp/127.0.0.1/4222) 2>/dev/null; then exit 0; fi
+            sleep 1
+          done
+          docker logs event-nats
+          exit 1
       - name: HTTP publication, worker redelivery and result events
         env:
           SPINE_TEST_KAFKA_BROKER: 127.0.0.1:19092
@@ -355,6 +326,40 @@ jobs:
           SPINE_TEST_KAFKA_BROKER: 127.0.0.1:19092
           SPINE_TEST_RABBITMQ_URL: amqp://guest:guest@127.0.0.1:5672/
         run: go -C test/platform-e2e test -race -v ./... -count=1 -timeout=3m
+
+      - name: NATS JetStream HTTP and worker event flow
+        env:
+          SPINE_TEST_NATS_URL: nats://127.0.0.1:4222
+        run: go -C test/nats-e2e test -race -v ./... -count=1 -timeout=3m
+
+      - name: OpenAPI schemas and actual HTTP behavior
+        run: go -C test/openapi test -race -v ./... -count=1 -timeout=3m
+
+  http-platforms:
+    needs: branch-direction
+    name: HTTP and TLS Platform E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: spine
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: ./spine/.github/actions/setup-sources
+        with:
+          published: ${{ inputs.public_dependencies && 'true' || 'false' }}
+          ref: ${{ github.base_ref || github.ref_name }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.0'
+          cache-dependency-path: "**/go.sum"
+      - name: Verify net/http and shared HTTP and TLS behavior
+        run: |
+          go -C ../spine-nethttp-platform vet ./...
+          go -C ../spine-nethttp-platform test -race ./... -count=1 -timeout=2m
+          go -C test/http-platform vet ./...
+          go -C test/http-platform test -race ./... -count=1 -timeout=2m
 
   release-policy:
     needs: branch-direction
@@ -374,6 +379,13 @@ jobs:
         working-directory: .
       - run: python3 scripts/release/release.py validate-policy
         working-directory: .
+      - name: Verify source dependency channel
+        working-directory: .
+        env:
+          CHANNEL_REF: ${{ github.base_ref || github.ref_name }}
+        run: |
+          channel=$(python3 -c "import sys; sys.path.insert(0,'scripts/release'); from ci_workspace import channel_for; import os; print(channel_for(os.environ['CHANNEL_REF']))")
+          python3 scripts/release/release.py check-module --channel "$channel"
       - run: python3 scripts/release/release.py check-environment
         working-directory: .
         env:
@@ -387,7 +399,7 @@ jobs:
     name: ${{ github.event_name == 'pull_request' && format('Verified Source / {0}', github.base_ref) || 'Verified Source' }}
     runs-on: ubuntu-latest
     if: ${{ always() }}
-    needs: [branch-direction, quality, unit, integration, e2e, race, event-platform-e2e, release-policy]
+    needs: [branch-direction, quality, unit, integration, e2e, race, event-platform-e2e, http-platforms, release-policy]
     outputs:
       sha: ${{ steps.source.outputs.sha }}
     steps:
@@ -402,7 +414,7 @@ jobs:
           import json, os
           jobs = json.loads(os.environ['RESULTS'])
           if any(job['result'] != 'success' for job in jobs.values()):
-              raise SystemExit('필수 CI 작업이 모두 성공해야 합니다')
+              raise SystemExit('All required CI jobs must succeed')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('sha=' + os.environ['SOURCE_SHA'] + '\n')
           PYCODE

@@ -365,12 +365,30 @@ func (r *Runtime) Stop() {
 		}
 		r.connMu.Unlock()
 
+		var closing sync.WaitGroup
+		panics := make(chan any, len(conns))
 		for _, conn := range conns {
-			_ = conn.writeClose(
-				wsadapter.CloseNormalClosure, "server shutting down",
-				r.options.WriteTimeout,
-			)
-			_ = conn.conn.Close()
+			closing.Add(1)
+			go func(conn *trackedConn) {
+				defer closing.Done()
+				defer func() {
+					if value := recover(); value != nil {
+						panics <- value
+					}
+				}()
+				// WriteClose가 실패하거나 panic해도 자원 해제는 시도합니다.
+				defer conn.conn.Close()
+				_ = conn.writeClose(
+					wsadapter.CloseNormalClosure, "server shutting down",
+					r.options.WriteTimeout,
+				)
+			}(conn)
+		}
+		closing.Wait()
+		close(panics)
+		// 다른 연결의 정리까지 마친 뒤 기존 앱 cleanup recover 경계로 전달합니다.
+		for value := range panics {
+			panic(value)
 		}
 
 		r.handlers.Wait()

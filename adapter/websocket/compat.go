@@ -1,4 +1,5 @@
 // Package wsadapter는 adapter 아래에서 WebSocket 계약의 호환 별칭을 제공합니다.
+//
 // Deprecated: 새 구현은 github.com/NARUBROWN/spine/contract/websocket을 사용하세요.
 package wsadapter
 

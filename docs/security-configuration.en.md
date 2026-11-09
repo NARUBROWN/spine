@@ -31,3 +31,13 @@ Spine uses secure transport and bounded runtime defaults. Call `App.Validate` in
 See the [v0.5.1 corrective guide](migration/v0.5.1.en.md), [v0.5 migration guide](migration/v0.5.en.md), and [compilable example](../examples/security-config/main.go).
 
 See the [event platform migration guide](migration/event-platforms.en.md) for App registration and removed boot options. Broker transport settings belong to each platform Config.
+
+## CORS policy
+
+Register the CORS interceptor globally for HTTP before authentication so it can handle preflight requests. An allowed preflight returns 204; a denied preflight returns 403. Ordinary OPTIONS requests continue to the handler. CORS does not replace server-side authentication or authorization.
+
+Set `ExposeHeaders` to expose response headers and `MaxAge` to a pointer to the preflight cache time in seconds. A nil `MaxAge` omits the header, zero emits `0`, and negative values are invalid. `AllowOrigin` is called only when the static origin list does not allow the request and returns `(bool, error)`. Callback errors are returned as request errors. An empty list without a callback allows no origins. A wildcard does not include the `null` origin; allow it explicitly or through the callback. Callbacks must match trusted scheme, host, and port boundaries.
+
+Wildcard origins cannot be combined with credentials. Wildcard methods, request headers, and exposed headers do not act as wildcards for credentialed browser requests. Explicitly include `Authorization` in `AllowHeaders` even without credentials. The interceptor preserves existing `Vary` values and adds `Origin` even when the request has no Origin. OPTIONS responses also vary on the requested method and headers.
+
+The added `Config` fields require callers using positional struct literals to switch to named fields. Previously denied preflights also returned 204 and ordinary responses included allow-methods and allow-headers. They now return 403 and the allow-methods and allow-headers are emitted on successful preflights. A CORS interceptor attached only to a GET route does not automatically apply to OPTIONS. Register a global policy or register OPTIONS and its policy explicitly. Automatic precedence between global and per-route policies is not provided. Do not apply both native Echo CORS and the common interceptor to the same request.

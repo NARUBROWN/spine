@@ -1,0 +1,11 @@
+{
+  "name": "spine-openapi-ui-assets",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Embedded UI assets and supplementary runtime dependency license inventory",
+  "dependencies": {
+    "redoc": "2.5.4",
+    "swagger-ui": "5.34.1",
+    "swagger-ui-dist": "5.34.1"
+  }
+}

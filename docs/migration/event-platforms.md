@@ -80,10 +80,35 @@ Kafka의 TopicPrefix는 발행 이름과 논리 구독 키 양쪽에 적용됩�
 `cmd/reference`와 `examples/security-config`는 새 App 구성을 사용합니다. `test/app_event_live_test.go`는 실제 HTTP 요청에서 이벤트를 발행하고, 실패한 전달을 재처리하는 워커가 결과 이벤트를 보내는 흐름을 두 브로커에서 검사합니다.
 
 ```sh
-go test -race ./... -count=1
+go run ./scripts/test test -race ./... -count=1
 bash scripts/check-module-boundaries.sh
 # 테스트용 브로커 주소를 설정한 뒤 실행합니다.
 go -C test test -race . -run '^TestAppEventLive_' -count=1 -timeout=2m
 ```
 
 브로커 환경변수는 `SPINE_TEST_KAFKA_BROKER`, `SPINE_TEST_RABBITMQ_URL`입니다. 설정하지 않은 브로커의 테스트는 건너뜁니다. 최소 HTTP/WS 데모의 CLI 정적 검사와 부분 runtime probe는 브로커 E2E를 대신하지 않습니다.
+
+## 정리 실패 이력
+
+각 이벤트 어댑터의 publisher와 consumer는 실제 자원 정리 실패를 별도로 보관합니다. 기본값은 역할별 최근 32건, 정리 실패 시점부터 최대 1시간입니다. 건수와 기간 중 먼저 도달한 한도를 적용합니다. 새 실패로 건수를 초과하면 가장 오래된 오류를 제외하고, 기간이 지난 오류는 유휴 상태에서도 타이머로 제거합니다. 전체 실패는 로그에 남기며 만료되거나 제외된 오류는 최종 종료 오류에 포함하지 않습니다.
+
+```go
+spine.WithEventAdapter("events", factory,
+    spine.WithEventPublisherErrorHistory(boot.CleanupErrorHistoryOptions{
+        MaxEntries: 64,
+        MaxAge:     30 * time.Minute,
+    }),
+    spine.WithEventConsumerErrorHistory(boot.CleanupErrorHistoryOptions{
+        MaxEntries: 16,
+        MaxAge:     10 * time.Minute,
+    }),
+)
+```
+
+이 옵션은 메모리 이력만 제한하며 로그 저장소의 보관 정책은 별도입니다. 각 필드의 0은 기본값을 사용하고 음수는 앱 사전 검사에서 거부합니다. `Close`와 `Stop`은 정리를 마친 시점에 보관 중인 오류만 합쳐 종료 결과를 고정합니다. 이후 같은 종료를 기다리는 호출에는 같은 결과를 반환합니다. 이 결과는 보관 기간이 지나도 바뀌지 않으며, 이미 반환한 오류를 취소하지 않습니다.
+
+## nil 본문과 Kafka tombstone
+
+raw `[]byte` 및 이름 있는 byte slice 핸들러는 nil을 그대로 받습니다. nil과 길이 0인 nonnil slice를 합치지 않으므로 Kafka tombstone을 구분할 수 있습니다. nil을 받은 핸들러가 성공하면 ACK하고, 핸들러가 실패하면 기존 NACK 정책을 적용합니다.
+
+본문이 필수인 DTO 핸들러는 nil 본문을 거부하고 기존 역직렬화 및 검증 실패 경로를 사용합니다. tombstone이 들어오는 구독은 raw byte 핸들러에서 명시적으로 처리하세요. DTO 핸들러의 실패를 무조건 ACK하거나 건너뛰지 않습니다.

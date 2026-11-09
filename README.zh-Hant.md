@@ -2,7 +2,7 @@
   <a href="README.md">한국어</a> | <a href="README.en.md">English</a> | <a href="README.ja.md">日本語</a> | <a href="README.zh-Hans.md">简体中文</a> | 繁體中文
 </p>
 
-> **發布管道：Preview → RC → Stable。** 此原始碼的目標版本為 `v0.6.6`。請參閱[發布流程](RELEASING.md)、[import 遷移指南](docs/migration/v0.6.6.md)和[已發布版本](https://github.com/NARUBROWN/spine/releases)。
+> **發布管道：Preview → RC → Stable。** 此原始碼的目標版本為 `v0.7.0`。請參閱[發布流程](RELEASING.md)、[import 遷移指南](docs/migration/v0.7.0.md)和[已發布版本](https://github.com/NARUBROWN/spine/releases)。
 
 > **v0.6.5** 整合 HTTP、WebSocket、event、validator 的公開契約與獨立實作選擇。核心僅使用標準函式庫。請參閱 [v0.6.5 遷移指南](docs/migration/v0.6.5.md)。
 
@@ -82,6 +82,8 @@ GitHub Issues 為公開內容。請分享已移除機密資訊的摘要或最小
 
 建立專案並啟動開發伺服器。
 
+以下範例使用 `@latest` 安裝正式版 CLI，其內建配方不一定產生目前簽出的 Preview 核心。使用 HTTP v3 Preview 時，請將安裝命令替換為 `go install github.com/NARUBROWN/spine-cli/cmd/spine@preview`，並參閱 [HTTP v3 遷移指南](docs/migration/http-v3.md)。`@preview` 追蹤持續更新的分支。需要可重現的安裝時，請指定已發布的 CLI 標籤，並檢查 `spine version` 和產生的 `go.mod`。
+
 ```sh
 go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
 spine version
@@ -144,3 +146,30 @@ FOSS for All 標誌的著作權歸 FOSS for All 所有（© FOSS for All），�
 ## 授權
 
 MIT
+
+## 在控制器中宣告路由
+
+目前 `v0.7.0-preview.8` 原始碼候選版本提供 `api.Controller.RegisterRoutes` 和 `input.Path[T]`、`input.Query[T]`、`input.Body[T]`。將具體控制器的物件註冊至 `app.Constructor(constructor.Controller(&UserController{}))` 後，框架會收集控制器中的路由，不需要獨立的路由表。這不代表公開標籤或 CLI 已發布。請參閱[程式碼範例和規格查詢條件](docs/migration/controller-routes.md)。
+
+```go
+package controller
+
+import (
+    "github.com/NARUBROWN/spine/pkg/api"
+    "github.com/NARUBROWN/spine/pkg/httpx"
+    "github.com/NARUBROWN/spine/pkg/input"
+)
+
+type UserController struct{}
+type CreateUser struct { Name string `json:"name"` }
+type User struct { Name string `json:"name"` }
+
+func (*UserController) Constructor() *UserController { return &UserController{} }
+
+
+func (c *UserController) RegisterRoutes(r *api.Registry) {
+    r.POST("/users", func(a input.Body[CreateUser]) httpx.Response[User] {
+        return httpx.Response[User]{Body: User{Name: a.Name}}
+    })
+}
+```
