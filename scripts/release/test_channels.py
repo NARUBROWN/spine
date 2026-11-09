@@ -217,6 +217,19 @@ class ChannelPolicyTests(unittest.TestCase):
         report["selected_modules"][release.CORE] = plan["version"]
         self.assertTrue(release.selected_modules_match(plan, report, "core"))
 
+    def test_core_promotion_rejects_a_different_platform_tag_with_same_base(self):
+        github = FakeGitHub()
+        source = github.candidate()
+        policy = copy.deepcopy(POLICY)
+        module = next(iter(release.PLATFORMS))
+        version = policy["channels"]["preview"]["modules"][module]
+        base, channel, sequence = release.parse_tag(version)
+        policy["channels"]["rc"]["modules"][module] = f"{base}-{channel}.{sequence + 1}"
+        github.policy = policy
+        github.source_policy = POLICY
+        with self.assertRaisesRegex(release.ReleaseError, "Platform tags cannot change"):
+            release.make_plan(github, policy, "rc", POLICY["next_version"] + "-rc.1", source, now=NOW)
+
     def test_metadata_promotion_branch_must_descend_from_verified_source(self):
         github = FakeGitHub()
         source = github.candidate()
@@ -256,7 +269,7 @@ class CohortTests(unittest.TestCase):
         with patch.dict(os.environ, {"GITHUB_REF": "refs/heads/preview"}), patch.object(release, "verify_source_candidate", side_effect=self.verify):
             return release.complete_plan(self.github, self.policy, self.version, self.peers.__getitem__)
 
-    def test_completion_requires_all_exact_platform_manifests(self):
+    def test_completion_requires_all_exact_platform_tags(self):
         plan = self.complete()
         self.assertEqual(len(plan["platform_evidence"]), len(release.PLATFORMS))
         peer = next(iter(self.peers.values()))
@@ -264,10 +277,46 @@ class CohortTests(unittest.TestCase):
         with self.assertRaises(release.ReleaseError):
             self.complete()
 
-    def test_platform_using_another_core_cannot_complete_the_cohort(self):
+    def test_existing_platform_tag_does_not_require_platform_manifest(self):
         self.core_version = "v0.7.0-preview.2"
+        plan = self.complete()
+        for module, evidence in plan["platform_evidence"].items():
+            self.assertEqual(evidence["version"], self.policy["channels"]["preview"]["modules"][module])
+            self.assertEqual(evidence["source_sha"], "b" * 40)
+            self.assertNotIn("artifact_id", evidence)
+
+    def test_platform_manifest_is_never_queried_for_reuse(self):
+        with patch.dict(os.environ, {"GITHUB_REF": "refs/heads/preview"}), \
+                patch.object(release, "verify_source_candidate", side_effect=self.verify) as verify:
+            release.complete_plan(self.github, self.policy, self.version, self.peers.__getitem__)
+        self.assertEqual(verify.call_count, 1)
+        self.assertTrue(verify.call_args.kwargs["bootstrap"])
+
+    def test_changed_platform_tag_blocks_completion(self):
+        plan = self.complete()
+        plan.update(version=self.version, module=release.CORE, channel="preview", source_fingerprint="c" * 64)
+        report = {"result": "passed", "version": self.version, "source_sha": SOURCE,
+                  "components": plan["components"], "scope": "cohort",
+                  "selected_modules": release.expected_modules(plan, "cohort")}
+        self.github.tags[self.version] = SOURCE
+        changed = copy.deepcopy(plan)
+        module = next(iter(changed["platform_evidence"]))
+        changed["platform_evidence"][module]["source_sha"] = "f" * 40
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(release, "complete_plan", return_value=changed):
+            target = Path(directory) / "manifest.json"
+            with self.assertRaises(release.ReleaseError):
+                release.finish(self.github, plan, report, str(target))
+            self.assertFalse(target.exists())
+
+    def test_platform_tags_can_be_reused_across_core_channels(self):
+        policy = core_policy()
+        policy["channels"]["rc"]["modules"] = dict(policy["channels"]["preview"]["modules"])
+        policy["channels"]["stable"]["modules"] = dict(policy["channels"]["preview"]["modules"])
+        release.validate_policy(policy)
+        policy["channels"]["rc"]["modules"][next(iter(release.PLATFORMS))] = "not-a-tag"
         with self.assertRaises(release.ReleaseError):
-            self.complete()
+            release.validate_policy(policy)
 
     def test_moving_core_head_after_candidate_publication_blocks_completion(self):
         self.github.heads["preview"] = "c" * 40

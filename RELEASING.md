@@ -1,6 +1,6 @@
 # Spine 릴리스 운영
 
-코어는 v0.7.0, 기존 다섯 플랫폼은 v0.2.0, net/http와 NATS는 v0.1.0을 대상으로 Preview, RC, 정식 채널을 발행합니다. 같은 채널의 코어와 플랫폼 태그를 하나의 검증 조합으로 고정합니다. 패키지 버전 번호는 독립적입니다.
+코어는 v0.7.0, 기존 다섯 플랫폼은 v0.2.0, net/http와 NATS는 v0.1.0을 대상으로 Preview, RC, 정식 채널을 발행합니다. 코어 후보마다 공개된 플랫폼 태그를 하나의 검증 조합으로 고정합니다. 플랫폼 채널과 버전은 독립적입니다. 패키지 버전 번호는 독립적입니다.
 
 모든 단계에서 태그를 발행하며 GitHub Release는 정식에서만 만듭니다. 예제 앱은 정식 태그를 사용하고 정식 발행 후 갱신합니다. 예제나 CLI 생성 레시피 갱신을 코어 후보 발행의 선행 조건으로 사용하지 않습니다.
 
@@ -10,33 +10,31 @@
 
 | 모듈 | Preview 버전 |
 | --- | --- |
-| Spine 코어 | `v0.7.0-preview.12` |
-| Echo | `v0.2.0-preview.5` |
-| Gorilla | `v0.2.0-preview.3` |
-| Kafka | `v0.2.0-preview.3` |
-| RabbitMQ | `v0.2.0-preview.3` |
-| playground validator | `v0.2.0-preview.7` |
-| net/http | `v0.1.0-preview.3` |
-| NATS | `v0.1.0-preview.2` |
+| Spine 코어 | `v0.7.0-preview.13` |
+| Echo | `v0.2.0-preview.4` |
+| Gorilla | `v0.2.0-preview.2` |
+| Kafka | `v0.2.0-preview.2` |
+| RabbitMQ | `v0.2.0-preview.2` |
+| playground validator | `v0.2.0-preview.6` |
+| net/http | `v0.1.0-preview.2` |
+| NATS | `v0.1.0-preview.1` |
 
-코어 `v0.7.0-preview.12`와 표의 플랫폼 버전은 새 후보입니다. 기존 태그의 플랫폼별 코어 버전은 서로 다르므로 이 표만으로 공개 조합이 완료된 것은 아닙니다. 코어 후보를 먼저 발행한 후 각 플랫폼을 그 코어 태그로 발행하고, 모든 manifest와 공개 설치를 확인해야 합니다. 이미 발행한 태그는 이동하거나 재사용하지 않습니다.
+코어 `v0.7.0-preview.13`은 새 후보이며 플랫폼 태그는 기존 공개 버전입니다. 표의 태그가 있다는 사실만으로 호환성이 확인되는 것은 아닙니다. 코어가 고정한 공개 모듈을 함께 설치하고 전체 조합 검증을 통과해야 합니다. RC와 정식 조합도 독립된 플랫폼 태그를 지정하며 현재 정책은 위 태그를 재사용합니다. 정식 발행 전에는 Preview 플랫폼 태그를 그대로 사용하는 것이 적절한지 검토합니다.
 
-RC는 코어 `v0.7.0-rc.1`, 기존 다섯 플랫폼 `v0.2.0-rc.1`, net/http와 NATS `v0.1.0-rc.1`을 대상으로 합니다. 정식 대상은 코어 `v0.7.0`, 기존 다섯 플랫폼 `v0.2.0`, net/http와 NATS `v0.1.0`입니다.
-
-HTTP v3의 net/http 플랫폼을 독립 저장소와 여섯 번째 발행 모듈로 편입합니다. 소스 CI는 고정한 net/http 커밋을 사용하고 HTTP/TLS 비교 E2E를 실행합니다. 공개 조합 완료에는 net/http 태그와 manifest도 필요합니다. 원격 저장소 준비와 PR 게시는 후보 태그 발행을 뜻하지 않습니다.
+HTTP v3의 net/http 플랫폼을 독립 저장소와 여섯 번째 발행 모듈로 편입합니다. 소스 CI는 고정한 net/http 커밋을 사용하고 HTTP/TLS 비교 E2E를 실행합니다. 공개 조합 완료에는 고정한 net/http 태그의 설치와 조합 검증이 필요합니다. 원격 저장소 준비와 PR 게시는 후보 태그 발행을 뜻하지 않습니다.
 
 새 코어 태그가 아직 없을 때 소스 CI는 `ci_sources`의 전체 커밋 SHA와 현재 코어를 임시 go.work로 연결합니다. 버전별 임시 replace는 미발행 태그의 메타데이터 조회도 로컬 소스로 연결하며 저장소의 go.mod에는 넣지 않습니다. 이 결과를 공개 설치 성공으로 기록하지 않습니다. 플랫폼 소스 CI도 `ci_core`의 전체 커밋 SHA를 사용합니다.
 
-태그 생성 전에는 공개 SHA를 조회해 소비자 빌드를 검사하고, 생성 후에는 태그로 다시 검사합니다. 플랫폼 발행 CI와 공개 검증은 이미 발행한 실제 코어 태그를 사용합니다. 공개 검증은 새로운 모듈 캐시, `GOWORK=off`, go.mod의 로컬 replace가 없는 별도 소비자에서 수행합니다. 정책과 실제 선택된 버전이 다르면 실패합니다.
+태그 생성 전에는 공개 SHA를 조회해 소비자 빌드를 검사하고, 생성 후에는 태그로 다시 검사합니다. 플랫폼은 자체 일정에 따라 발행하며, 코어는 공개된 플랫폼 태그를 선택해 조합을 검증합니다. 공개 검증은 새로운 모듈 캐시, `GOWORK=off`, go.mod의 로컬 replace가 없는 별도 소비자에서 수행합니다. 정책과 실제 선택된 버전이 다르면 실패합니다.
 
 ## 코어 후보와 전체 조합 완료
 
 코어의 go.mod는 플랫폼에 의존하지 않습니다. 코어가 플랫폼의 완성 태그를 기다리는 순환을 피하도록 다음 두 단계를 분리합니다.
 
 1. **코어 후보 태그 발행:** 코어 자체의 race, vet, 정책과 발행 코드 검사와 공개 SHA로 소비자 빌드를 마친 뒤 태그를 생성합니다. 생성한 태그로 공개 코어를 다시 빌드하고 `core-candidate-<태그>` artifact를 남깁니다. 이 상태는 아직 승격 가능한 후보가 아닙니다.
-2. **전체 조합 완료:** 일곱 플랫폼이 정확히 그 코어 태그로 발행된 후 각 플랫폼의 manifest와 공개 설치를 확인합니다. 전체 CI, HTTP, WebSocket, 실제 Kafka, RabbitMQ와 NATS JetStream, validator와 OpenAPI 검증을 마친 뒤 `release-manifest-<태그>` artifact를 남깁니다. 이 기록이 있어야 다음 채널로 승격할 수 있습니다. manifest의 `validation.scope` 값 `cohort`는 이 전체 릴리스 조합 검증을 뜻하는 고정 식별자입니다.
+2. **전체 조합 완료:** 일곱 플랫폼 태그의 정확한 커밋을 기록하고, 플랫폼의 과거 코어 의존 버전과 관계없이 선택한 코어와 공개 모듈을 함께 설치해 검증합니다. 전체 CI, HTTP, WebSocket, 실제 Kafka, RabbitMQ와 NATS JetStream, validator와 OpenAPI 검증을 마친 뒤 `release-manifest-<태그>` artifact를 남깁니다. 이 기록이 있어야 다음 채널로 승격할 수 있습니다. manifest의 `validation.scope` 값 `cohort`는 이 전체 릴리스 조합 검증을 뜻하는 고정 식별자입니다.
 
-실행 순서는 **코어 후보 → 플랫폼 일곱 개 → 코어 전체 조합 완료**입니다. Preview, RC, 정식 모두 같은 순서입니다. 코어의 정식 GitHub Release는 전체 조합 완료 후에만 생성합니다. 각 플랫폼의 정식 GitHub Release는 해당 플랫폼의 공개 검증 후 생성합니다.
+실행 순서는 **코어 후보 → 공개된 플랫폼 태그 선택 → 코어 전체 조합 완료**입니다. 플랫폼 자체 변경이 필요한 경우에만 별도로 새 플랫폼 태그를 발행합니다. Preview, RC, 정식 모두 같은 순서입니다. 코어의 정식 GitHub Release는 전체 조합 완료 후에만 생성합니다. 각 플랫폼의 정식 GitHub Release는 해당 플랫폼의 공개 검증 후 생성합니다.
 
 태그는 생성되면 Go 모듈로 조회될 수 있습니다. 여러 저장소의 태그가 원자적으로 생성되는 것은 아닙니다. 실패한 태그를 이동하거나 덮어쓰지 않고 다음 후보 번호를 사용합니다.
 
@@ -58,16 +56,9 @@ python3 scripts/release/configure_branches.py --bootstrap
 
 작업 PR을 preview에 반영하고 소스 CI를 통과시킵니다. 코어 저장소의 **Actions → Publish Preview**에서 preview 브랜치, 새 버전과 preview HEAD의 전체 SHA를 지정합니다.
 
-코어 후보 artifact가 생성되면 플랫폼 저장소마다 코어 태그의 체크섬을 기록합니다.
+코어 후보 artifact가 생성되면 정책에 기록된 기존 플랫폼 태그와 커밋을 확인하고 **Complete Core Release Combination**에서 코어 태그를 지정합니다. 플랫폼 manifest에 기록된 과거 코어 버전은 조합 완료의 조건이 아닙니다. 코어 저장소는 고정된 태그를 공개 모듈로 설치해 HTTP, WebSocket, validator와 실제 브로커 조합을 검증하고 그 결과와 태그 커밋을 manifest에 남깁니다.
 
-```sh
-python3 scripts/release/pin_channel.py --channel preview
-python3 scripts/release/pin_channel.py --channel preview --apply --tidy
-```
-
-이 변경을 커밋해 preview에 반영하고 각 플랫폼의 Publish Preview를 실행합니다. 플랫폼은 go.mod의 코어 태그가 해당 채널과 정확히 일치하는지 확인하며, 공개 의존성만으로 CI와 실제 발행 모듈 검증을 수행합니다.
-
-일곱 플랫폼의 manifest가 준비되면 코어의 **Complete Core Release Combination**에서 같은 코어 태그를 지정합니다. 코어 채널 HEAD는 후보 발행 시점과 같아야 합니다. 문서와 버전 정책도 후보 발행 전에 확정하세요. 발행 후 이 파일들을 수정해야 하면 기존 태그를 바꾸지 않고 새 Preview 후보와 플랫폼 조합을 준비합니다. 다른 코어를 사용한 플랫폼, 누락된 태그나 manifest, 실패하거나 skip된 공개 테스트는 완료로 처리하지 않습니다.
+코어 채널 HEAD는 후보 발행 시점과 같아야 합니다. 문서와 버전 정책도 후보 발행 전에 확정하세요. 태그가 없거나 바뀌거나 공개 테스트가 실패하거나 생략되면 완료하지 않습니다.
 
 ## RC와 정식 승격
 
@@ -76,14 +67,14 @@ Preview 전체 조합 완료 후 72시간이 지나야 RC를 발행할 수 있�
 채널별 의존 버전 변경은 전용 승격 브랜치에서 준비합니다. RC 예시는 다음과 같습니다.
 
 ```sh
-git switch -c promote/rc/v0.7.0-rc.1 v0.7.0-preview.4
+git switch -c promote/rc/v0.7.0-rc.1 v0.7.0-preview.13
 python3 scripts/release/pin_channel.py --channel rc
 python3 scripts/release/pin_channel.py --channel rc --apply
 ```
 
-이 브랜치의 PR 대상은 rc입니다. 코어는 아직 없는 플랫폼 RC 태그를 기다리지 않도록 이 단계에서 `--tidy`를 사용하지 않습니다. 코어 RC 후보 태그를 먼저 발행한 후 플랫폼별 `promote/rc/v0.2.0-rc.1` 브랜치에서 `pin_channel.py --channel rc --apply --tidy`로 실제 코어 RC의 체크섬을 기록합니다.
+이 브랜치의 PR 대상은 rc입니다. 아직 발행되지 않은 코어 RC 태그를 조회하지 않도록 이 단계에서 `--tidy`를 사용하지 않습니다. 코어 RC 후보 태그를 발행한 후 정책에 고정한 기존 플랫폼 태그로 전체 조합을 다시 검증합니다. 플랫폼이 변경되지 않았다면 별도 플랫폼 승격 PR이나 태그는 필요하지 않습니다.
 
-정식은 `promote/stable/v0.7.0`과 플랫폼별 `promote/stable/v0.2.0` 브랜치에서 같은 방식으로 stable 핀을 준비하고 main을 대상으로 PR을 만듭니다. 일반 작업 PR은 preview만 대상으로 합니다. 승격 PR은 merge commit으로 병합합니다.
+정식은 코어 `promote/stable/v0.7.0` 브랜치에서 stable 핀을 준비하고 main을 대상으로 PR을 만듭니다. 플랫폼은 선택한 기존 태그를 재사용하거나 독립적으로 발행합니다. 일반 작업 PR은 preview만 대상으로 합니다. 승격 PR은 merge commit으로 병합합니다.
 
 발행 코드는 이전 후보가 승격 PR의 조상인지, 병합된 PR의 방향과 두 번째 부모가 맞는지 확인합니다. 소스 fingerprint는 공식 모듈 require의 같은 기본 버전 내 채널 태그, 해당 go.sum 항목과 CI 출처만 정규화합니다. 코드, 일반 의존성, replace, 기본 의존 버전과 관찰 정책의 변경은 새 Preview가 필요합니다. 실제 채널 핀과 공개 모듈 조합은 매 단계 다시 검증합니다.
 

@@ -2,7 +2,7 @@
 
 HTTP v3에서는 Spine이 본문, 경로와 쿼리를 해석합니다. 플랫폼은 원시 요청, 응답 writer와 서버 수명을 제공합니다. 일반 DTO, 컨트롤러와 인터셉터 순서는 유지합니다.
 
-HTTP v3는 코어 `v0.7.0-preview.3`, Echo `v0.2.0-preview.2`, net/http `v0.1.0-preview.1`부터 공개됐습니다. 이 소스의 Preview 코어 후보는 `v0.7.0-preview.12`입니다. 소스 CI는 Echo `v0.2.0-preview.5`, net/http `v0.1.0-preview.3`와 [릴리스 운영](../../RELEASING.md#정책과-소스-ci)에 나열한 나머지 다섯 플랫폼을 검증 대상으로 고정합니다. 새 코어의 공개 발행과 전체 조합 검증은 릴리스 절차에 따라 별도로 완료해야 합니다. HTTP v2 구현은 v3 코어에 그대로 연결할 수 없습니다.
+HTTP v3는 코어 `v0.7.0-preview.3`, Echo `v0.2.0-preview.2`, net/http `v0.1.0-preview.1`부터 공개됐습니다. 이 소스의 Preview 코어 후보는 `v0.7.0-preview.13`입니다. 공개 조합은 Echo `v0.2.0-preview.4`, net/http `v0.1.0-preview.2`와 [릴리스 운영](../../RELEASING.md#정책과-소스-ci)에 나열한 나머지 다섯 플랫폼을 검증 대상으로 고정합니다. 새 코어의 공개 발행과 전체 조합 검증은 릴리스 절차에 따라 별도로 완료해야 합니다. HTTP v2 구현은 v3 코어에 그대로 연결할 수 없습니다.
 
 ## CLI로 생성하고 업데이트하기
 
