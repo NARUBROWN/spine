@@ -2,16 +2,6 @@
   <a href="README.md">한국어</a> | <a href="README.en.md">English</a> | 日本語 | <a href="README.zh-Hans.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a>
 </p>
 
-> **リリースチャネル: Preview → RC → Stable。** このソースの対象バージョンは `v0.7.1` です。[リリース手順](RELEASING.md)、[import の移行ガイド](docs/migration/v0.7.1.md)、[公開済みリリース](https://github.com/NARUBROWN/spine/releases)を参照してください。
-
-> **v0.6.5** は HTTP・WebSocket・event・validator の公開契約と独立した実装選択を統合します。コアは標準ライブラリのみを使用します。[v0.6.5 移行ガイド](docs/migration/v0.6.5.md)を参照してください。
-
-> Spine `v0.6.0` 以降、新しいプロジェクトは [Spine CLI の `new`](https://github.com/NARUBROWN/spine-cli#빠른-시작) で作成します。CLI が Echo プラットフォームと依存関係を設定します。既存アプリは[移行ガイド](docs/migration/http-adapter-modules.md)を参照してください。
->
-> 開発ソースのイベント連携は `spine.WithEventAdapter` と Kafka/RabbitMQ プラットフォームを使用します。旧 boot 設定からの移行は [イベントプラットフォーム移行ガイド](docs/migration/event-platforms.en.md)を参照してください。
-
-> 開発ソースの WebSocket は `contract/websocket` と [Gorilla プラットフォーム](https://github.com/NARUBROWN/spine-gorilla-platform)に分離しました。`spine.New(echoPlatform.Option(), gorillaPlatform.Option())` で両方を選択します。[WS 移行ガイド](docs/migration/websocket-platforms.en.md)を参照してください。
-
 # 🦴 Spine
 <p align="center">
   <img src="assets/spine-logo.png" alt="Spine" width="420" />
@@ -20,11 +10,53 @@
 **Spineは、リクエストの実行フローを明示するバックエンドフレームワークです。**  
 リクエストがどのように解釈され、実行されるのかを隠しません。
 
+## 現在のチャネル
+
+**RC** | 公開済みコアタグ [`v0.7.1-rc.1`](https://github.com/NARUBROWN/spine/tree/v0.7.1-rc.1)
+
+他のチャネル | [Preview](https://github.com/NARUBROWN/spine/tree/preview) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
+
 ## コアコンセプト
 
 - 実行順序と責務をコード構造として固定します
 - メソッドシグネチャがAPIの契約です
 - `path.*`、`query.*`、`httperr.*`のセマンティック型を使用します
+
+## 推奨環境
+
+- 推奨Goバージョン: **1.27.3**
+
+## Spine CLI で始める
+
+```sh
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.3-rc.3
+spine version
+spine new todo-api --module github.com/acme/todo-api --channel rc --no-interactive
+cd todo-api
+go get github.com/NARUBROWN/spine@v0.7.1-rc.1 github.com/NARUBROWN/spine-echo-platform@v0.2.0-rc.1
+go mod tidy
+spine dev
+```
+
+```sh
+curl http://localhost:8080/health
+```
+
+使用するコアとプラットフォームのバージョンは生成された `go.mod` で確認してください。
+
+本番環境では Stable を使用してください。`--channel rc` は公開された RC と正式版のうち最新のタグを選ぶため、正式版のコアが選ばれる場合があります。上の `go get` でコアと Echo プラットフォームを検証対象の RC タグに固定します。
+
+## リンク
+
+- 公式サイト: https://spine.na2ru2.me/ja/
+- Spine CLI（プロジェクト生成・実行契約の検査）: https://github.com/NARUBROWN/spine-cli
+- Bun ORM + Swagger統合サンプルプロジェクト: https://github.com/NARUBROWN/spine-user-demo
+- Kafka MSAサンプルプロジェクト: https://github.com/NARUBROWN/spine-simple-msa-demo
+- シンプルなWebSocketチャットのサンプルプロジェクト: https://github.com/NARUBROWN/spine-simple-chat-demo
+
+---
+
+Spine `v0.7.1` の[コントローラーでのルート登録例](docs/migration/controller-routes.md)を参照してください。
 
 ## 企業導入の無償技術サポート
 
@@ -60,70 +92,6 @@ Spineの導入を検討中、または利用中の企業や開発チームは、
 エラーの場合は、SpineとGoのバージョン、期待する動作と実際の動作、最小限の再現手順を添えてください。
 GitHub Issuesは公開されます。機密情報を除いた概要や最小限の再現コードを共有してください。
 
-## 推奨環境
-
-- 推奨Goバージョン: **1.27.3**
-
-## リンク
-
-- 公式サイト: https://spine.na2ru2.me/ja/
-- Spine CLI（プロジェクト生成・実行契約の検査）: https://github.com/NARUBROWN/spine-cli
-- Bun ORM + Swagger統合サンプルプロジェクト: https://github.com/NARUBROWN/spine-user-demo
-- Kafka MSAサンプルプロジェクト: https://github.com/NARUBROWN/spine-simple-msa-demo
-- シンプルなWebSocketチャットのサンプルプロジェクト: https://github.com/NARUBROWN/spine-simple-chat-demo
-
----
-
-## Spine CLI で始める
-
-Spine `v0.6.0` 以降、公式のプロジェクト作成方法は `spine new` です。[Spine CLI のインストールガイド](https://github.com/NARUBROWN/spine-cli#권장-환경과-설치)に従って `spine` コマンドをインストールし、対応バージョンを確認してください。
-
-`new` はインストールした CLI に含まれる検証済みレシピに従い、互換性のある Spine、Echo プラットフォーム、Echo のバージョンを設定します。選択されたバージョンは生成された `go.mod` で確認してください。
-
-プロジェクトを作成し、開発サーバーを起動します。
-
-次の例は `@latest` で正式版 CLI をインストールします。内蔵レシピが、このチェックアウトの Preview コアを生成するとは限りません。HTTP v3 Preview を使う場合はインストールコマンドを `go install github.com/NARUBROWN/spine-cli/cmd/spine@preview` に置き換え、[HTTP v3 移行ガイド](docs/migration/http-v3.md)を参照してください。`@preview` は更新されるブランチを追跡します。再現可能なインストールには公開 CLI タグを指定し、`spine version` と生成された `go.mod` を確認してください。
-
-```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
-spine version
-spine new todo-api --module github.com/acme/todo-api
-cd todo-api
-spine dev
-```
-
-CLI 自体を更新する場合は、同じ `go install` コマンドを再実行します。`spine update` はプロジェクトの Spine と Echo プラットフォームの依存関係を更新するコマンドであり、CLI 実行ファイルは更新しません。
-
-別のターミナルで標準の health endpoint を確認します。`200 OK` と `{"status":"ok"}` が返ります。
-
-```sh
-curl http://localhost:8080/health
-```
-
-`new` は標準で Echo プラットフォームの設定、依存関係のインストール、静的契約の検査とビルドを完了してからプロジェクトを作成します。サーバーは `spine dev` で起動します。`--skip-install` でファイルだけを生成した場合は、その後に `go mod tidy` と `go mod download all` を実行してください。静的検査で `MODULE_GRAPH_UNAVAILABLE` が表示された場合も、この2つのコマンドでモジュールのメタデータを揃えてから再検査します。
-
-プロジェクトのディレクトリで契約とローカル検査を実行します。
-
-```sh
-spine context --root . --json
-spine contract check --root . --warnings-as-errors --json
-spine verify --root . --warnings-as-errors --json
-```
-
-`spine verify` は静的契約、コード書式、`go vet` と Go テストを検査します。データベース、メッセージブローカー、デプロイ環境の動作は別途検証してください。
-
-ジェネレーターは標準で既存ファイルを上書きしません。dry-run の変更内容と `base_hash` を確認し、同じ値を `--if-match` に渡してください。
-
-```sh
-spine g resource order --root . --dry-run --json
-spine g resource order --root . --if-match <base_hash> --json
-```
-
-CLI は HTTP、DI、インターセプター、コンシューマー、WebSocket の登録を解析し、契約スナップショットの比較と OpenAPI/AsyncAPI の出力を提供します。手動のプラットフォーム接続と App API は[移行ガイド](docs/migration/http-adapter-modules.md)、全コマンドと解析範囲は [CLI ドキュメント](https://github.com/NARUBROWN/spine-cli#readme)を参照してください。
-
-
----
-
 ## 支援
 
 <p align="center">
@@ -148,30 +116,3 @@ FOSS for Allロゴの著作権はFOSS for Allに帰属します（© FOSS for Al
 ## ライセンス
 
 MIT
-
-## コントローラー内でルートを宣言する
-
-現在の `v0.7.0-preview.8` ソース候補では、`api.Controller.RegisterRoutes` と `input.Path[T]`、`input.Query[T]`、`input.Body[T]` を使用できます。具象コントローラーのオブジェクトを `app.Constructor(constructor.Controller(&UserController{}))` に登録すると、内部のルートを収集します。別のルート表は不要です。公開タグや CLI のリリース完了を示すものではありません。[コード例と仕様取得の条件](docs/migration/controller-routes.md)を参照してください。
-
-```go
-package controller
-
-import (
-    "github.com/NARUBROWN/spine/pkg/api"
-    "github.com/NARUBROWN/spine/pkg/httpx"
-    "github.com/NARUBROWN/spine/pkg/input"
-)
-
-type UserController struct{}
-type CreateUser struct { Name string `json:"name"` }
-type User struct { Name string `json:"name"` }
-
-func (*UserController) Constructor() *UserController { return &UserController{} }
-
-
-func (c *UserController) RegisterRoutes(r *api.Registry) {
-    r.POST("/users", func(a input.Body[CreateUser]) httpx.Response[User] {
-        return httpx.Response[User]{Body: User{Name: a.Name}}
-    })
-}
-```

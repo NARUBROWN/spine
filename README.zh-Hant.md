@@ -2,16 +2,6 @@
   <a href="README.md">한국어</a> | <a href="README.en.md">English</a> | <a href="README.ja.md">日本語</a> | <a href="README.zh-Hans.md">简体中文</a> | 繁體中文
 </p>
 
-> **發布管道：Preview → RC → Stable。** 此原始碼的目標版本為 `v0.7.1`。請參閱[發布流程](RELEASING.md)、[import 遷移指南](docs/migration/v0.7.1.md)和[已發布版本](https://github.com/NARUBROWN/spine/releases)。
-
-> **v0.6.5** 整合 HTTP、WebSocket、event、validator 的公開契約與獨立實作選擇。核心僅使用標準函式庫。請參閱 [v0.6.5 遷移指南](docs/migration/v0.6.5.md)。
-
-> 從 Spine `v0.6.0` 開始，使用 [Spine CLI 的 `new`](https://github.com/NARUBROWN/spine-cli#빠른-시작) 建立新專案。CLI 會設定 Echo 平台和相依套件。既有應用請參閱[遷移指南](docs/migration/http-adapter-modules.md)。
->
-> 開發原始碼透過 `spine.WithEventAdapter` 接入 Kafka/RabbitMQ 平台。舊 broker boot 設定請依[事件平台遷移指南](docs/migration/event-platforms.en.md)遷移。
-
-> 開發原始碼透過 `contract/websocket` 和 [Gorilla 平台](https://github.com/NARUBROWN/spine-gorilla-platform)分離 WebSocket。使用 `spine.New(echoPlatform.Option(), gorillaPlatform.Option())` 選擇兩種實作。請參閱 [WS 遷移指南](docs/migration/websocket-platforms.en.md)。
-
 # 🦴 Spine
 <p align="center">
   <img src="assets/spine-logo.png" alt="Spine" width="420" />
@@ -20,11 +10,53 @@
 **Spine 是一個讓請求執行流程清楚可見的後端框架。**  
 它不會隱藏請求如何解析與執行。
 
+## 目前管道
+
+**RC** | 已發布的核心標籤 [`v0.7.1-rc.1`](https://github.com/NARUBROWN/spine/tree/v0.7.1-rc.1)
+
+其他管道 | [Preview](https://github.com/NARUBROWN/spine/tree/preview) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
+
 ## 核心理念
 
 - 透過程式碼結構固定執行順序與職責
 - 方法簽章即為 API 契約
 - 使用 `path.*`、`query.*`、`httperr.*` 語意型別
+
+## 建議環境
+
+- 建議 Go 版本：**1.27.3**
+
+## 使用 Spine CLI 開始
+
+```sh
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.3-rc.3
+spine version
+spine new todo-api --module github.com/acme/todo-api --channel rc --no-interactive
+cd todo-api
+go get github.com/NARUBROWN/spine@v0.7.1-rc.1 github.com/NARUBROWN/spine-echo-platform@v0.2.0-rc.1
+go mod tidy
+spine dev
+```
+
+```sh
+curl http://localhost:8080/health
+```
+
+請在產生的 `go.mod` 中查看應用程式使用的核心和平台版本。
+
+正式環境請使用 Stable。`--channel rc` 選擇已發布的 RC 和正式版中最新的標籤，因此產生的應用程式可能使用正式版核心。上面的 `go get` 將核心與 Echo 平台固定為要驗證的 RC 標籤。
+
+## 連結
+
+- 官方網站：https://spine.na2ru2.me/zh-Hant/
+- Spine CLI（專案產生與執行契約檢查）：https://github.com/NARUBROWN/spine-cli
+- Bun ORM + Swagger 整合範例專案：https://github.com/NARUBROWN/spine-user-demo
+- Kafka MSA 範例專案：https://github.com/NARUBROWN/spine-simple-msa-demo
+- 簡易 WebSocket 聊天範例專案：https://github.com/NARUBROWN/spine-simple-chat-demo
+
+---
+
+請參閱 Spine `v0.7.1` 的[控制器路由註冊範例](docs/migration/controller-routes.md)。
 
 ## 企業導入免費技術支援
 
@@ -60,70 +92,6 @@
 回報錯誤時，請提供 Spine 與 Go 版本、預期與實際行為，以及最小重現步驟。
 GitHub Issues 為公開內容。請分享已移除機密資訊的摘要或最小重現程式碼。
 
-## 建議環境
-
-- 建議 Go 版本：**1.27.3**
-
-## 連結
-
-- 官方網站：https://spine.na2ru2.me/zh-Hant/
-- Spine CLI（專案產生與執行契約檢查）：https://github.com/NARUBROWN/spine-cli
-- Bun ORM + Swagger 整合範例專案：https://github.com/NARUBROWN/spine-user-demo
-- Kafka MSA 範例專案：https://github.com/NARUBROWN/spine-simple-msa-demo
-- 簡易 WebSocket 聊天範例專案：https://github.com/NARUBROWN/spine-simple-chat-demo
-
----
-
-## 使用 Spine CLI 開始
-
-從 Spine `v0.6.0` 開始，官方專案建立方式是 `spine new`。請依照 [Spine CLI 安裝指南](https://github.com/NARUBROWN/spine-cli#권장-환경과-설치)安裝 `spine` 指令，並確認支援的版本。
-
-`new` 依照已安裝 CLI 內建的驗證配方，設定相容的 Spine、Echo 平台與 Echo 版本組合。請在產生的 `go.mod` 中查看選取的版本。
-
-建立專案並啟動開發伺服器。
-
-以下範例使用 `@latest` 安裝正式版 CLI，其內建配方不一定產生目前簽出的 Preview 核心。使用 HTTP v3 Preview 時，請將安裝命令替換為 `go install github.com/NARUBROWN/spine-cli/cmd/spine@preview`，並參閱 [HTTP v3 遷移指南](docs/migration/http-v3.md)。`@preview` 追蹤持續更新的分支。需要可重現的安裝時，請指定已發布的 CLI 標籤，並檢查 `spine version` 和產生的 `go.mod`。
-
-```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@latest
-spine version
-spine new todo-api --module github.com/acme/todo-api
-cd todo-api
-spine dev
-```
-
-更新 CLI 本身時，請重新執行相同的 `go install` 指令。`spine update` 更新專案的 Spine 與 Echo 平台相依套件，不會更新 CLI 執行檔。
-
-在另一個終端機中檢查預設的 health endpoint。它應回傳 `200 OK` 和 `{"status":"ok"}`。
-
-```sh
-curl http://localhost:8080/health
-```
-
-預設情況下，`new` 完成 Echo 平台設定、相依套件安裝、靜態契約檢查與建置後才建立專案。使用 `spine dev` 啟動伺服器。如果使用 `--skip-install` 僅產生檔案，請接著執行 `go mod tidy` 和 `go mod download all`。若靜態檢查回報 `MODULE_GRAPH_UNAVAILABLE`，也應先使用這兩個命令準備完整的模組中繼資料，再重新檢查。
-
-在專案目錄中執行契約與本機檢查。
-
-```sh
-spine context --root . --json
-spine contract check --root . --warnings-as-errors --json
-spine verify --root . --warnings-as-errors --json
-```
-
-`spine verify` 檢查靜態契約、程式碼格式、`go vet` 與 Go 測試。資料庫連線、訊息代理與部署環境的行為需要另外驗證。
-
-產生器預設不會覆寫既有檔案。先檢查 dry-run 的變更與 `base_hash`，再將相同值傳給 `--if-match`。
-
-```sh
-spine g resource order --root . --dry-run --json
-spine g resource order --root . --if-match <base_hash> --json
-```
-
-CLI 分析 HTTP、DI、攔截器、消費者與 WebSocket 註冊，支援契約快照比較及 OpenAPI/AsyncAPI 匯出。手動平台整合與 App API 請參閱[遷移指南](docs/migration/http-adapter-modules.md)，完整指令與分析範圍請參閱 [CLI 文件](https://github.com/NARUBROWN/spine-cli#readme)。
-
-
----
-
 ## 支持
 
 <p align="center">
@@ -146,30 +114,3 @@ FOSS for All 標誌的著作權歸 FOSS for All 所有（© FOSS for All），�
 ## 授權
 
 MIT
-
-## 在控制器中宣告路由
-
-目前 `v0.7.0-preview.8` 原始碼候選版本提供 `api.Controller.RegisterRoutes` 和 `input.Path[T]`、`input.Query[T]`、`input.Body[T]`。將具體控制器的物件註冊至 `app.Constructor(constructor.Controller(&UserController{}))` 後，框架會收集控制器中的路由，不需要獨立的路由表。這不代表公開標籤或 CLI 已發布。請參閱[程式碼範例和規格查詢條件](docs/migration/controller-routes.md)。
-
-```go
-package controller
-
-import (
-    "github.com/NARUBROWN/spine/pkg/api"
-    "github.com/NARUBROWN/spine/pkg/httpx"
-    "github.com/NARUBROWN/spine/pkg/input"
-)
-
-type UserController struct{}
-type CreateUser struct { Name string `json:"name"` }
-type User struct { Name string `json:"name"` }
-
-func (*UserController) Constructor() *UserController { return &UserController{} }
-
-
-func (c *UserController) RegisterRoutes(r *api.Registry) {
-    r.POST("/users", func(a input.Body[CreateUser]) httpx.Response[User] {
-        return httpx.Response[User]{Body: User{Name: a.Name}}
-    })
-}
-```
