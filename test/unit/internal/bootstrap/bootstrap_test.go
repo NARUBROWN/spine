@@ -584,9 +584,9 @@ func TestValidate_RejectsInvalidInterceptorScopeBeforeStartup(t *testing.T) {
 	}
 }
 
-func TestSpineVersionMatchesV070(t *testing.T) {
-	if spineVersion != "v0.7.0" {
-		t.Fatalf("runtime version = %q, want v0.7.0", spineVersion)
+func TestSpineVersionMatchesV071(t *testing.T) {
+	if spineVersion != "v0.7.1" {
+		t.Fatalf("runtime version = %q, want v0.7.1", spineVersion)
 	}
 }
 
