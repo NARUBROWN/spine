@@ -17,7 +17,6 @@ func DTOParameterIssues(method reflect.Method, prefix, routePath string) []boot.
 }
 
 func HandlerDTOParameterIssues(meta core.HandlerMeta, prefix, routePath string) []boot.ConfigIssue {
-	signature, offset := meta.FunctionType(), meta.ArgumentOffset()
 	handlerName := meta.Method.Name
 	if meta.Callback.IsValid() {
 		handlerName = meta.HandlerName()
@@ -35,11 +34,10 @@ func HandlerDTOParameterIssues(meta core.HandlerMeta, prefix, routePath string) 
 	seen := map[reflect.Type]int{}
 	keys := map[string]int{}
 	bodyIndex := -1
-	scalarPathIndex := -1
+	scalarPathIndex, scalarPathCount := -1, 0
 	var issues []boot.ConfigIssue
 	resolvers := Resolvers(nil)
-	for index := offset; index < signature.NumIn(); index++ {
-		parameter := resolver.ParameterMeta{Index: index - offset, Type: signature.In(index)}
+	for _, parameter := range resolver.HandlerParameters(meta, pathKeys) {
 		legacyPagination := resolver.IsLegacyPagination(parameter.Type)
 		if legacyPagination {
 			if parameter.Type.Kind() == reflect.Pointer {
@@ -76,12 +74,10 @@ func HandlerDTOParameterIssues(meta core.HandlerMeta, prefix, routePath string) 
 			continue
 		}
 		if plan.Scalar {
-			if scalarPathIndex >= 0 || len(pathKeys) != 1 {
-				issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_PATH_SCALAR_AMBIGUOUS", Message: "A scalar path input requires exactly one route key and one scalar path argument.", Hint: "Use one scalar path argument for a route with one key, or use a path DTO."})
-			}
+			scalarPathCount++
 			scalarPathIndex = parameter.Index
-			if len(pathKeys) == 1 {
-				plan.Fields = []input.Field{{Name: pathKeys[0], Type: plan.Payload}}
+			if parameter.PathKey != "" {
+				plan.Fields = []input.Field{{Name: parameter.PathKey, Type: plan.Payload}}
 			}
 		}
 		if planned && plan.Source != "body" {
@@ -99,7 +95,9 @@ func HandlerDTOParameterIssues(meta core.HandlerMeta, prefix, routePath string) 
 				typedAPIIndex = parameter.Index
 			}
 			if source == "path" {
-				pathDTOIndex = parameter.Index
+				if !plan.Scalar {
+					pathDTOIndex = parameter.Index
+				}
 				for _, field := range fields {
 					if !declaredPathKeys[field.Name] {
 						issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_PATH_KEY_UNDECLARED", Message: fmt.Sprintf("Handler %s binds path key %q that its route does not declare.", handlerName, field.Name), Hint: "Match path tags to this route's named parameters."})
@@ -153,6 +151,9 @@ func HandlerDTOParameterIssues(meta core.HandlerMeta, prefix, routePath string) 
 					key = "legacy\x00" + key
 				}
 				if first, exists := keys[key]; exists {
+					if source == "path" && scalarPathIndex >= 0 && pathDTOIndex >= 0 {
+						continue // The mixed path-input error below explains this conflict.
+					}
 					issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_INPUT_KEY_DUPLICATED", Message: fmt.Sprintf("Handler %s repeats %s key %q at parameter indexes %d and %d.", handlerName, source, field.Name, first, parameter.Index), Hint: "Declare each input key once within its source."})
 				} else {
 					keys[key] = parameter.Index
@@ -161,12 +162,21 @@ func HandlerDTOParameterIssues(meta core.HandlerMeta, prefix, routePath string) 
 			break
 		}
 	}
-	if legacyIndex >= 0 && pathDTOIndex >= 0 {
-		issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, pathDTOIndex), Code: "HTTP_PATH_INPUT_MIXED", Message: fmt.Sprintf("Handler %s mixes legacy path wrappers and path DTOs.", handlerName), Hint: "Move every path binding in this handler to path-tagged struct fields."})
+	if legacyIndex >= 0 && (pathDTOIndex >= 0 || scalarPathIndex >= 0) {
+		mixedIndex := pathDTOIndex
+		if mixedIndex < 0 {
+			mixedIndex = scalarPathIndex
+		}
+		issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, mixedIndex), Code: "HTTP_PATH_INPUT_MIXED", Message: fmt.Sprintf("Handler %s mixes legacy path wrappers and typed path inputs.", handlerName), Hint: "Use either scalar path arguments in route order or path-tagged struct fields."})
+	} else if scalarPathIndex >= 0 && pathDTOIndex >= 0 {
+		issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, pathDTOIndex), Code: "HTTP_PATH_INPUT_MIXED", Message: fmt.Sprintf("Handler %s mixes scalar path arguments and path DTOs.", handlerName), Hint: "Use either scalar path arguments in route order or path-tagged struct fields."})
 	} else if legacyAPIIndex >= 0 && typedAPIIndex >= 0 {
 		issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, typedAPIIndex), Code: "HTTP_INPUT_API_MIXED", Message: fmt.Sprintf("Handler %s mixes deprecated and typed path/query/header inputs at parameter indexes %d and %d.", handlerName, legacyAPIIndex, typedAPIIndex), Hint: "Migrate every deprecated input, including query.Pagination, to tagged struct pointers. Existing body DTOs and contexts may still accompany deprecated inputs."})
 	} else if legacyCount > len(pathKeys) {
 		issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, legacyIndex), Code: "HTTP_PATH_ARGUMENT_UNBOUND", Message: fmt.Sprintf("Handler %s declares more legacy path arguments than its route has keys.", handlerName), Hint: "Migrate to named path fields or remove the unbound argument."})
+	}
+	if scalarPathCount > 0 && pathDTOIndex < 0 && legacyCount == 0 && scalarPathCount != len(pathKeys) {
+		issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, scalarPathIndex), Code: "HTTP_PATH_SCALAR_AMBIGUOUS", Message: fmt.Sprintf("Handler %s declares %d scalar path arguments for %d route keys.", handlerName, scalarPathCount, len(pathKeys)), Hint: "Declare one scalar input.Path argument for each route key in route order."})
 	}
 	return issues
 }

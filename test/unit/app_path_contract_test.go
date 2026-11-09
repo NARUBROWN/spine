@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/NARUBROWN/spine/pkg/input"
 	"github.com/NARUBROWN/spine/pkg/path"
 )
 
@@ -36,7 +37,9 @@ func (*pathContractController) Value(pathContract)                          {}
 func (*pathContractController) Body(*nestedPathBody)                        {}
 func (*pathContractController) Legacy(path.Int, *pathContract)              {}
 
-func (*pathContractController) TooManyLegacy(path.Int, path.Int) {}
+func (*pathContractController) TooManyLegacy(path.Int, path.Int)              {}
+func (*pathContractController) Scalars(input.Path[int64], input.Path[string]) {}
+func (*pathContractController) ScalarDTO(input.Path[int64], *pathContract)    {}
 
 func TestPathConfigurationFailsBeforeInitializationAndSchemaCallbacks(t *testing.T) {
 	for _, test := range []struct {
@@ -55,6 +58,9 @@ func TestPathConfigurationFailsBeforeInitializationAndSchemaCallbacks(t *testing
 		{(*pathContractController).Body, "/:id", "HTTP_INPUT_CONTRACT_INVALID"},
 		{(*pathContractController).Legacy, "/:id", "HTTP_PATH_INPUT_MIXED"},
 		{(*pathContractController).TooManyLegacy, "/:id", "HTTP_PATH_ARGUMENT_UNBOUND"},
+		{(*pathContractController).Scalars, "/:id", "HTTP_PATH_SCALAR_AMBIGUOUS"},
+		{(*pathContractController).Scalars, "/:id/:name/:extra", "HTTP_PATH_SCALAR_AMBIGUOUS"},
+		{(*pathContractController).ScalarDTO, "/:id", "HTTP_PATH_INPUT_MIXED"},
 	} {
 		for _, configured := range []bool{false, true} {
 			for _, enabled := range []bool{false, true} {
