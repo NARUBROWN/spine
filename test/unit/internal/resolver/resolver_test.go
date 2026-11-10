@@ -17,6 +17,7 @@ import (
 	pkgmultipart "github.com/NARUBROWN/spine/pkg/multipart"
 	"github.com/NARUBROWN/spine/pkg/path"
 	"github.com/NARUBROWN/spine/pkg/query"
+	"github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type fakeHttpCtx struct {
@@ -261,23 +262,24 @@ func TestFormDTOResolver_SupportsAndResolve(t *testing.T) {
 
 func TestControllerContextResolver_Resolve(t *testing.T) {
 	r := &ControllerContextResolver{}
-	pm := ParameterMeta{Type: reflect.TypeOf((*core.ControllerContext)(nil)).Elem()}
 	ctx := newFakeHttpCtx()
 	ctx.store["userID"] = 7
 
-	if !r.Supports(pm) {
-		t.Fatal("ControllerContextResolver는 ControllerContext를 지원해야 합니다")
-	}
-
-	val, err := r.Resolve(ctx, pm)
-	if err != nil {
-		t.Fatalf("ControllerContextResolver Resolve 실패: %v", err)
-	}
-
-	controllerCtx := val.(core.ControllerContext)
-	got, ok := controllerCtx.Get("userID")
-	if !ok || got.(int) != 7 {
-		t.Fatalf("ControllerContext가 store를 읽지 못했습니다: %v %v", got, ok)
+	for _, typ := range []reflect.Type{reflect.TypeFor[spine.Ctx](), reflect.TypeFor[core.ControllerContext]()} {
+		t.Run(typ.String(), func(t *testing.T) {
+			pm := ParameterMeta{Type: typ}
+			if !r.Supports(pm) {
+				t.Fatalf("컨텍스트 입력 %s를 지원해야 합니다", typ)
+			}
+			val, err := r.Resolve(ctx, pm)
+			if err != nil || val == nil || !reflect.TypeOf(val).AssignableTo(typ) {
+				t.Fatalf("컨텍스트 입력 %s에 %T를 할당할 수 없습니다: %v", typ, val, err)
+			}
+			got, ok := val.(spine.Ctx).Get("userID")
+			if !ok || got != 7 {
+				t.Fatalf("컨텍스트가 store를 읽지 못했습니다: %v %v", got, ok)
+			}
+		})
 	}
 }
 
