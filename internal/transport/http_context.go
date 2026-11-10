@@ -19,8 +19,8 @@ import (
 
 // HTTPContext는 독립 HTTP scope에 Spine 요청 store와 이벤트 버스를 결합합니다.
 type HTTPContext struct {
+	execution.Store
 	scope                adapter.HTTPContext
-	store                map[string]any
 	bus                  emission.Bus
 	writer               core.ResponseWriter
 	params               map[string]string
@@ -36,7 +36,7 @@ var _ execution.Context = (*HTTPContext)(nil)
 var _ execution.HTTPRequestContext = (*HTTPContext)(nil)
 
 func NewHTTPContext(scope adapter.HTTPContext, multipartMemoryBytes int64) *HTTPContext {
-	return &HTTPContext{scope: scope, store: make(map[string]any), writer: scope.Writer(), multipartMemoryBytes: multipartMemoryBytes}
+	return &HTTPContext{scope: scope, writer: scope.Writer(), multipartMemoryBytes: multipartMemoryBytes}
 }
 
 func (c *HTTPContext) ResponseWriter() core.ResponseWriter          { return c.writer }
@@ -72,8 +72,6 @@ func (c *HTTPContext) RawQuery() string { return c.scope.RawQuery() }
 
 func (c *HTTPContext) Header(name string) string    { return c.scope.Header(name) }
 func (c *HTTPContext) Headers() map[string][]string { return c.scope.Headers() }
-func (c *HTTPContext) Set(key string, value any)    { c.store[key] = value }
-func (c *HTTPContext) Get(key string) (any, bool)   { value, ok := c.store[key]; return value, ok }
 func (c *HTTPContext) Bind(out any) error {
 	if err := c.prepareBody(); err != nil {
 		return err

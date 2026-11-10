@@ -16,6 +16,7 @@ import (
 )
 
 type WSExecutionContext struct {
+	execution.Store
 	mu          sync.RWMutex
 	ctx         context.Context
 	connID      string
@@ -25,7 +26,6 @@ type WSExecutionContext struct {
 	eventBus    publish.EventBus
 	params      map[string]string
 	pathKeys    []string
-	store       map[string]any
 	request     *webSocketRequestSnapshot
 }
 
@@ -166,16 +166,6 @@ func (w *WSExecutionContext) EventBus() emission.Bus {
 	return w.eventBus
 }
 
-func (w *WSExecutionContext) Get(key string) (any, bool) {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	if w.store == nil {
-		return nil, false
-	}
-	v, ok := w.store[key]
-	return v, ok
-}
-
 func (w *WSExecutionContext) Header(name string) string {
 	return w.request.Header(name)
 }
@@ -233,13 +223,4 @@ func (w *WSExecutionContext) Payload() []byte {
 
 func (w *WSExecutionContext) Queries() map[string][]string {
 	return w.request.Queries()
-}
-
-func (w *WSExecutionContext) Set(key string, value any) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.store == nil {
-		w.store = make(map[string]any)
-	}
-	w.store[key] = value
 }

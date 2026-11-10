@@ -10,10 +10,10 @@ import (
 )
 
 type ConsumerRequestContextImpl struct {
+	execution.Store
 	ctx      context.Context
 	msg      *Message
 	eventBus publish.EventBus
-	store    map[string]any
 	params   map[string]string
 	pathKeys []string
 }
@@ -47,21 +47,6 @@ func (c *ConsumerRequestContextImpl) EventBus() publish.EventBus {
 		c.eventBus = publish.NewEventBus()
 	}
 	return c.eventBus
-}
-
-func (c *ConsumerRequestContextImpl) Get(key string) (any, bool) {
-	if c.store == nil {
-		return nil, false
-	}
-	v, ok := c.store[key]
-	return v, ok
-}
-
-func (c *ConsumerRequestContextImpl) Set(key string, value any) {
-	if c.store == nil {
-		c.store = make(map[string]any)
-	}
-	c.store[key] = value
 }
 
 func (c *ConsumerRequestContextImpl) Header(key string) string {

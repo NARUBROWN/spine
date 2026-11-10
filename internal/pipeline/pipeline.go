@@ -48,6 +48,10 @@ func (p *Pipeline) AddReturnValueHandler(handlers ...handler.ReturnValueHandler)
 
 // Execute는 하나의 요청 실행 전체를 소유합니다.
 func (p *Pipeline) Execute(ctx execution.Context) (finalErr error) {
+	// 응답 처리와 완료 훅이 끝난 뒤 저장값의 참조를 해제합니다.
+	if store, ok := ctx.(interface{ ReleaseStore() }); ok {
+		defer store.ReleaseStore()
+	}
 	globalMeta := execution.HandlerMeta{}
 	var interceptorCtx core.ExecutionContext
 	if len(p.interceptors) > 0 {
