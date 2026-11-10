@@ -19,56 +19,13 @@ type Field struct {
 	Type  reflect.Type
 }
 
-// DTO는 일반 구조체의 path, query 또는 header 태그에서 입력 출처를 식별합니다.
-// 타입 이름과 제네릭 래퍼에 의존하지 않습니다. 혼합 출처는 Fields에서 거부합니다.
+// DTO는 명시적 Path, Query, Header 래퍼의 구조체와 출처를 반환합니다.
 func DTO(t reflect.Type) (reflect.Type, string, bool) {
-	if source, wrapped := Wrapper(t); wrapped {
-		if source != "body" && t.Kind() == reflect.Pointer && t.Elem().Kind() == reflect.Struct {
-			return t.Elem(), source, true
-		}
-		return nil, "", false
+	source, wrapped := Wrapper(t)
+	if wrapped && source != "body" && t.Kind() == reflect.Pointer && t.Elem().Kind() == reflect.Struct {
+		return t.Elem(), source, true
 	}
-	if t.Kind() == reflect.Pointer {
-		t = t.Elem()
-	}
-	if t.Kind() != reflect.Struct {
-		return nil, "", false
-	}
-	visited := map[reflect.Type]bool{}
-	var source func(reflect.Type, bool) string
-	source = func(current reflect.Type, declared bool) string {
-		if visited[current] {
-			return ""
-		}
-		visited[current] = true
-		for i := 0; i < current.NumField(); i++ {
-			field := current.Field(i)
-			if !field.IsExported() {
-				continue
-			}
-			for _, name := range []string{"path", "query", "header"} {
-				if tag, exists := field.Tag.Lookup(name); exists && (declared || tag != "" && tag != "-") {
-					return name
-				}
-			}
-			base := field.Type
-			if base.Kind() == reflect.Pointer {
-				base = base.Elem()
-			}
-			if field.Anonymous && base.Kind() == reflect.Struct {
-				if name := source(base, declared); name != "" {
-					return name
-				}
-			}
-		}
-		return ""
-	}
-	name := source(t, false)
-	if name == "" {
-		visited = map[reflect.Type]bool{}
-		name = source(t, true)
-	}
-	return t, name, name != ""
+	return nil, "", false
 }
 
 // Fields는 명시한 출처의 태그만 선택합니다. 중복 이름과 지원하지 않는 타입은 거부합니다.

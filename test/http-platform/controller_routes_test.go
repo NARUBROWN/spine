@@ -56,7 +56,7 @@ func (c *registeredController) RegisterRoutes(r *api.Registry) {
 		r.POST("/users", func() int { return 1 })
 		return
 	case "body":
-		r.POST("/users", func(input.Body[controllerBody], *bodyDTO) error { return nil })
+		r.POST("/users", func(input.Body[controllerBody], input.Body[bodyDTO]) error { return nil })
 		return
 	case "collision":
 		r.GET("/openapi.json", func() error { return nil })

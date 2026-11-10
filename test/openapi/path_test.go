@@ -1,5 +1,7 @@
 package openapi_test
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"context"
 	"encoding/json"
@@ -70,27 +72,27 @@ func (v *pathAtom) UnmarshalText(b []byte) error { *v = pathAtom("decoded:" + st
 
 type pathController struct{ calls int }
 
-func (c *pathController) Update(p *fivePath, b *pathBody, q *pathQuery, h *pathHeader) httpx.Response[pathResult] {
+func (c *pathController) Update(p httpinput.Path[fivePath], b httpinput.Body[pathBody], q httpinput.Query[pathQuery], h httpinput.Header[pathHeader]) httpx.Response[pathResult] {
 	c.calls++
 	return httpx.Response[pathResult]{Body: pathResult{Org: p.OrgID, Project: p.ProjectID, Item: p.ItemID, Revision: p.Revision, Enabled: p.Enabled, Body: b.ID, Query: q.ID, Header: h.ID}}
 }
-func (c *pathController) Pointer(p *optionalPathPointer) httpx.Response[int] {
+func (c *pathController) Pointer(p httpinput.Path[optionalPathPointer]) httpx.Response[int] {
 	c.calls++
 	return httpx.Response[int]{Body: *p.ID}
 }
-func (c *pathController) Unused(p *unusedPathKey) httpx.Response[int64] {
+func (c *pathController) Unused(p httpinput.Path[unusedPathKey]) httpx.Response[int64] {
 	c.calls++
 	return httpx.Response[int64]{Body: p.ID}
 }
-func (c *pathController) Embedded(p *embeddedPath) httpx.Response[string] {
+func (c *pathController) Embedded(p httpinput.Path[embeddedPath]) httpx.Response[string] {
 	c.calls++
 	return httpx.Response[string]{Body: p.Org}
 }
-func (c *pathController) Token(p *tokenPath) httpx.Response[string] {
+func (c *pathController) Token(p httpinput.Path[tokenPath]) httpx.Response[string] {
 	c.calls++
 	return httpx.Response[string]{Body: string(p.Token)}
 }
-func (*pathController) Excluded(*excludedPath) {}
+func (*pathController) Excluded(httpinput.Path[excludedPath]) {}
 func (*pathController) Legacy(p path.Int) httpx.Response[int64] {
 	return httpx.Response[int64]{Body: p.Value}
 }

@@ -1,5 +1,7 @@
 package httpplatform_test
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"bytes"
 	"context"
@@ -134,19 +136,19 @@ type requiredDTO struct {
 }
 type inputController struct{ calls atomic.Int32 }
 
-func (c *inputController) Body(dto *bodyDTO) httpx.Response[bodyDTO] {
+func (c *inputController) Body(dto httpinput.Body[bodyDTO]) httpx.Response[bodyDTO] {
 	c.calls.Add(1)
 	return httpx.Response[bodyDTO]{Body: *dto}
 }
-func (c *inputController) Form(dto *formDTO) httpx.Response[formDTO] {
+func (c *inputController) Form(dto httpinput.Body[formDTO]) httpx.Response[formDTO] {
 	c.calls.Add(1)
 	return httpx.Response[formDTO]{Body: *dto}
 }
-func (c *inputController) Inspect(path *pathDTO, query *queryDTO, header *headerDTO) httpx.Response[map[string]any] {
+func (c *inputController) Inspect(path httpinput.Path[pathDTO], query httpinput.Query[queryDTO], header httpinput.Header[headerDTO]) httpx.Response[map[string]any] {
 	c.calls.Add(1)
 	return httpx.Response[map[string]any]{Body: map[string]any{"id": path.ID, "tags": query.Tags, "page": query.Page, "host": header.Host}}
 }
-func (c *inputController) Required(dto *requiredDTO) httpx.Response[requiredDTO] {
+func (c *inputController) Required(dto httpinput.Body[requiredDTO]) httpx.Response[requiredDTO] {
 	c.calls.Add(1)
 	return httpx.Response[requiredDTO]{Body: *dto}
 }
@@ -251,13 +253,13 @@ type uploadController struct {
 	failure string
 }
 
-func (c *uploadController) FormFirst(form *formDTO, upload files.UploadedFiles) httpx.Response[string] {
+func (c *uploadController) FormFirst(form httpinput.Body[formDTO], upload files.UploadedFiles) httpx.Response[string] {
 	return c.handle(form, upload)
 }
-func (c *uploadController) FilesFirst(upload files.UploadedFiles, form *formDTO) httpx.Response[string] {
+func (c *uploadController) FilesFirst(upload files.UploadedFiles, form httpinput.Body[formDTO]) httpx.Response[string] {
 	return c.handle(form, upload)
 }
-func (c *uploadController) handle(form *formDTO, upload files.UploadedFiles) httpx.Response[string] {
+func (c *uploadController) handle(form httpinput.Body[formDTO], upload files.UploadedFiles) httpx.Response[string] {
 	c.order = append(c.order, "controller")
 	if form.Title != "body" || len(upload.Files) != 1 {
 		c.t.Errorf("폼과 파일: %+v %+v", form, upload)

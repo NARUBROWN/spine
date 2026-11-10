@@ -41,7 +41,7 @@ func HandlerDTOParameterIssues(meta core.HandlerMeta, prefix, routePath string) 
 		legacyPagination := resolver.IsLegacyPagination(parameter.Type)
 		if legacyPagination {
 			if parameter.Type.Kind() == reflect.Pointer {
-				issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_INPUT_CONTRACT_INVALID", Message: "Deprecated query.Pagination must be a value.", Hint: "Keep the existing value parameter or migrate page and size to a query-tagged struct pointer."})
+				issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_INPUT_CONTRACT_INVALID", Message: "Deprecated query.Pagination must be a value.", Hint: "Keep the existing value parameter or migrate page and size to a input.Query[T]."})
 				continue
 			}
 			if legacyAPIIndex < 0 {
@@ -54,16 +54,24 @@ func HandlerDTOParameterIssues(meta core.HandlerMeta, prefix, routePath string) 
 				legacyAPIIndex = parameter.Index
 			}
 			if parameter.Type.Kind() == reflect.Pointer {
-				issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_INPUT_CONTRACT_INVALID", Message: "Legacy path wrappers must be values.", Hint: "Migrate to a struct pointer with path tags."})
+				issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_INPUT_CONTRACT_INVALID", Message: "Legacy path wrappers must be values.", Hint: "Migrate to input.Path[T]."})
 			}
 			continue
 		}
 		if resolver.IsLegacyValues(parameter.Type) {
 			if parameter.Type.Kind() == reflect.Pointer {
-				issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_INPUT_CONTRACT_INVALID", Message: "Deprecated query.Values and header.Values must be values.", Hint: "Use the existing value parameter or migrate to a tagged struct pointer."})
+				issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_INPUT_CONTRACT_INVALID", Message: "Deprecated query.Values and header.Values must be values.", Hint: "Use the existing value parameter or migrate to an input wrapper."})
 			} else if legacyAPIIndex < 0 {
 				legacyAPIIndex = parameter.Index
 			}
+			continue
+		}
+		if _, wrapped := input.Wrapper(parameter.Type); !wrapped && parameter.Type.Kind() == reflect.Pointer && parameter.Type.Elem().Kind() == reflect.Struct {
+			issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_INPUT_WRAPPER_REQUIRED", Message: fmt.Sprintf("Handler %s uses an unwrapped DTO %s.", handlerName, parameter.Type), Hint: "Declare input.Body[T], input.Query[T], input.Header[T] or input.Path[T] explicitly."})
+			continue
+		}
+		if parameter.Type.Kind() == reflect.Struct && !legacyPagination && !(&resolver.UploadedFilesResolver{}).Supports(parameter) {
+			issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_INPUT_CONTRACT_INVALID", Message: "HTTP DTO values require an explicit input wrapper.", Hint: "Use input.Body[T], input.Query[T], input.Header[T] or input.Path[T]."})
 			continue
 		}
 		var fields []input.Field
@@ -171,7 +179,7 @@ func HandlerDTOParameterIssues(meta core.HandlerMeta, prefix, routePath string) 
 	} else if scalarPathIndex >= 0 && pathDTOIndex >= 0 {
 		issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, pathDTOIndex), Code: "HTTP_PATH_INPUT_MIXED", Message: fmt.Sprintf("Handler %s mixes scalar path arguments and path DTOs.", handlerName), Hint: "Use either scalar path arguments in route order or path-tagged struct fields."})
 	} else if legacyAPIIndex >= 0 && typedAPIIndex >= 0 {
-		issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, typedAPIIndex), Code: "HTTP_INPUT_API_MIXED", Message: fmt.Sprintf("Handler %s mixes deprecated and typed path/query/header inputs at parameter indexes %d and %d.", handlerName, legacyAPIIndex, typedAPIIndex), Hint: "Migrate every deprecated input, including query.Pagination, to tagged struct pointers. Existing body DTOs and contexts may still accompany deprecated inputs."})
+		issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, typedAPIIndex), Code: "HTTP_INPUT_API_MIXED", Message: fmt.Sprintf("Handler %s mixes deprecated and typed path/query/header inputs at parameter indexes %d and %d.", handlerName, legacyAPIIndex, typedAPIIndex), Hint: "Migrate every deprecated input, including query.Pagination, to input.Path[T], input.Query[T] or input.Header[T]. Existing body DTOs and contexts may still accompany deprecated inputs."})
 	} else if legacyCount > len(pathKeys) {
 		issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, legacyIndex), Code: "HTTP_PATH_ARGUMENT_UNBOUND", Message: fmt.Sprintf("Handler %s declares more legacy path arguments than its route has keys.", handlerName), Hint: "Migrate to named path fields or remove the unbound argument."})
 	}

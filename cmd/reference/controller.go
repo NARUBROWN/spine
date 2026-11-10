@@ -1,5 +1,7 @@
 package main
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"context"
 	"fmt"
@@ -48,7 +50,7 @@ type User struct {
 	Name string `json:"name"`
 }
 
-func (c *UserController) GetUser(ctx context.Context, p *UserPath, spineCtx spine.Ctx) (User, error) {
+func (c *UserController) GetUser(ctx context.Context, p httpinput.Path[UserPath], spineCtx spine.Ctx) (User, error) {
 	v, ok := spineCtx.Get("test")
 	if !ok {
 		return User{}, httperr.BadRequest("context does not contain content")
@@ -61,7 +63,7 @@ type CreateUserRequest struct {
 	Name string `json:"name"`
 }
 
-func (c *UserController) CreateUser(ctx context.Context, req *CreateUserRequest) map[string]any {
+func (c *UserController) CreateUser(ctx context.Context, req httpinput.Body[CreateUserRequest]) map[string]any {
 	return map[string]any{
 		"name": req.Name,
 	}
@@ -71,7 +73,7 @@ type UserQuery struct {
 	Name string `query:"name"`
 }
 
-func (c *UserController) GetUserQuery(ctx context.Context, q *UserQuery) httpx.Response[string] {
+func (c *UserController) GetUserQuery(ctx context.Context, q httpinput.Query[UserQuery]) httpx.Response[string] {
 	return httpx.Response[string]{
 		Body: "OK",
 	}
@@ -89,9 +91,9 @@ type UploadQuery struct {
 
 func (c *UserController) Upload(
 	ctx context.Context,
-	form *CreatePostForm,
+	form httpinput.Body[CreatePostForm],
 	files multipart.UploadedFiles,
-	q *UploadQuery,
+	q httpinput.Query[UploadQuery],
 ) string {
 	page, size := 1, 20
 	if q.Page != nil {
@@ -126,7 +128,7 @@ func (c *UserController) Upload(
 	return "OK"
 }
 
-func (c *UserController) CreateOrder(ctx context.Context, p *OrderPath) httpx.Response[string] {
+func (c *UserController) CreateOrder(ctx context.Context, p httpinput.Path[OrderPath]) httpx.Response[string] {
 	publish.Event(ctx, OrderCreated{
 		OrderID: p.OrderID,
 		At:      time.Now(),
@@ -137,7 +139,7 @@ func (c *UserController) CreateOrder(ctx context.Context, p *OrderPath) httpx.Re
 	}
 }
 
-func (c *UserController) CreateStock(ctx context.Context, p *StockPath) httpx.Response[string] {
+func (c *UserController) CreateStock(ctx context.Context, p httpinput.Path[StockPath]) httpx.Response[string] {
 	publish.Event(ctx, StockCreated{
 		OrderID: p.StockID,
 		At:      time.Now(),
@@ -160,7 +162,7 @@ type RequestHeaders struct {
 	ContentType string `header:"Content-Type"`
 }
 
-func (c *CommonController) CheckHeader(headers *RequestHeaders) Headers {
+func (c *CommonController) CheckHeader(headers httpinput.Header[RequestHeaders]) Headers {
 	return Headers{
 		UserAgent:   headers.UserAgent,
 		ContentType: headers.ContentType,

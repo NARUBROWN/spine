@@ -16,29 +16,17 @@ type DTOResolver struct {
 }
 
 func (r *DTOResolver) Supports(pm ParameterMeta) bool {
-	// 실행 컨텍스트 제외
-	if pm.Type == reflect.TypeFor[core.ExecutionContext]() {
+	source, wrapped := input.Wrapper(pm.Type)
+	if !wrapped || source != "body" || pm.Type.Kind() != reflect.Pointer || pm.Type.Elem().Kind() != reflect.Struct {
 		return false
 	}
-
-	// 반드시 포인터
-	if pm.Type.Kind() != reflect.Ptr {
-		return false
-	}
-
-	if _, _, ok := input.DTO(pm.Type); ok {
-		return false
-	}
-
-	elem := pm.Type.Elem()
-	if elem.Kind() != reflect.Struct {
-		return false
-	}
-
-	return !input.HasForm(elem)
+	return !input.HasForm(pm.Type.Elem())
 }
 
 func (r *DTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error) {
+	if !r.Supports(parameterMeta) {
+		return nil, fmt.Errorf("HTTP DTO inputs require an explicit input wrapper")
+	}
 	httpCtx, ok := ctx.(core.HttpRequestContext)
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")
@@ -59,7 +47,7 @@ func (r *DTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta Parameter
 	if err := ValidateHTTPDTO(ctx.Context(), r.Validator, valuePtr.Interface(), "body", bodyFieldTag(httpCtx)); err != nil {
 		return nil, err
 	}
-	return valuePtr.Interface(), nil
+	return valuePtr.Convert(parameterMeta.Type).Interface(), nil
 }
 
 func bodyFieldTag(ctx core.HttpRequestContext) string {

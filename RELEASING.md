@@ -10,7 +10,7 @@
 
 | 모듈 | Preview 버전 |
 | --- | --- |
-| Spine 코어 | `v0.7.2-preview.1` |
+| Spine 코어 | `v0.7.2-preview.2` |
 | Echo | `v0.2.0-preview.4` |
 | Gorilla | `v0.2.0-preview.2` |
 | Kafka | `v0.2.0-preview.2` |
@@ -19,7 +19,7 @@
 | net/http | `v0.1.0-preview.2` |
 | NATS | `v0.1.0-preview.1` |
 
-코어 `v0.7.2-preview.1`은 새 후보이며 플랫폼 태그는 기존 공개 버전입니다. 표의 태그가 있다는 사실만으로 호환성이 확인되는 것은 아닙니다. 코어가 고정한 공개 모듈을 함께 설치하고 전체 조합 검증을 통과해야 합니다. RC와 정식 조합도 독립된 플랫폼 태그를 지정하며 현재 정책은 위 태그를 재사용합니다. 정식 발행 전에는 Preview 플랫폼 태그를 그대로 사용하는 것이 적절한지 검토합니다.
+코어 `v0.7.2-preview.2`은 새 후보이며 플랫폼 태그는 기존 공개 버전입니다. 표의 태그가 있다는 사실만으로 호환성이 확인되는 것은 아닙니다. 코어가 고정한 공개 모듈을 함께 설치하고 전체 조합 검증을 통과해야 합니다. RC와 정식 조합도 독립된 플랫폼 태그를 지정하며 현재 정책은 위 태그를 재사용합니다. 정식 발행 전에는 Preview 플랫폼 태그를 그대로 사용하는 것이 적절한지 검토합니다.
 
 HTTP v3의 net/http 플랫폼을 독립 저장소와 여섯 번째 발행 모듈로 편입합니다. 소스 CI는 고정한 net/http 커밋을 사용하고 HTTP/TLS 비교 E2E를 실행합니다. 공개 조합 완료에는 고정한 net/http 태그의 설치와 조합 검증이 필요합니다. 원격 저장소 준비와 PR 게시는 후보 태그 발행을 뜻하지 않습니다.
 
@@ -67,7 +67,7 @@ Preview 전체 조합 완료 후 72시간이 지나야 RC를 발행할 수 있�
 채널별 의존 버전 변경은 전용 승격 브랜치에서 준비합니다. RC 예시는 다음과 같습니다.
 
 ```sh
-git switch -c promote/rc/v0.7.2-rc.1 v0.7.2-preview.1
+git switch -c promote/rc/v0.7.2-rc.1 v0.7.2-preview.2
 python3 scripts/release/pin_channel.py --channel rc
 python3 scripts/release/pin_channel.py --channel rc --apply
 ```

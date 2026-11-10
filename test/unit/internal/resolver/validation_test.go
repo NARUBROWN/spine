@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"errors"
+	httpinput "github.com/NARUBROWN/spine/pkg/input"
 	"reflect"
 	"testing"
 
@@ -24,7 +25,7 @@ func TestHTTPDTOValidationRunsAfterBinding(t *testing.T) {
 		for _, reject := range []bool{false, true} {
 			ctx := newFakeHttpCtx()
 			ctx.bindValue = bodyDTO{Name: "Kim"}
-			pm := ParameterMeta{Type: reflect.TypeFor[*bodyDTO]()}
+			pm := ParameterMeta{Type: reflect.TypeFor[httpinput.Body[bodyDTO]]()}
 			failure := validation.NewError(validation.FieldError{Field: "/name", Rule: "custom"})
 			calls := 0
 			validator := validatorFunc(func(_ context.Context, dto any) error {
@@ -40,7 +41,7 @@ func TestHTTPDTOValidationRunsAfterBinding(t *testing.T) {
 			var r ArgumentResolver = &DTOResolver{Validator: validator}
 			if isForm {
 				ctx.bindValue = formDTO{Name: "Kim"}
-				pm.Type = reflect.TypeFor[*formDTO]()
+				pm.Type = reflect.TypeFor[httpinput.Body[formDTO]]()
 				r = &FormDTOResolver{Validator: validator}
 			}
 			value, err := r.Resolve(ctx, pm)

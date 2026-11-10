@@ -1,5 +1,7 @@
 package test
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"context"
 	"encoding/json"
@@ -21,7 +23,7 @@ type userPath struct {
 }
 type appCtrl struct{}
 
-func (c *appCtrl) GetUser(p *userPath) httpx.Response[int] {
+func (c *appCtrl) GetUser(p httpinput.Path[userPath]) httpx.Response[int] {
 	return httpx.Response[int]{Body: int(p.ID)}
 }
 
@@ -33,7 +35,7 @@ func (c *appCtrl) Fail() error {
 	return httperr.BadRequest("bad")
 }
 
-func (c *appCtrl) Echo(req *echoRequest) httpx.Response[string] {
+func (c *appCtrl) Echo(req httpinput.Body[echoRequest]) httpx.Response[string] {
 	return httpx.Response[string]{Body: req.Name}
 }
 

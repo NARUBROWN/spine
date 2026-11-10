@@ -1,6 +1,7 @@
 package input
 
 import (
+	httpinput "github.com/NARUBROWN/spine/pkg/input"
 	"reflect"
 	"strings"
 	"testing"
@@ -88,13 +89,16 @@ func TestHeaderListsAndInvalidFieldPlans(t *testing.T) {
 	}
 }
 
-func TestOrdinaryDTOClassificationAndMixedSources(t *testing.T) {
+func TestExplicitDTOClassificationRejectsUnwrappedPointersAndMixedSources(t *testing.T) {
 	type headers struct {
 		ID string `header:"X-ID"`
 	}
-	typ, source, ok := DTO(reflect.TypeFor[*headers]())
+	if _, _, ok := DTO(reflect.TypeFor[*headers]()); ok {
+		t.Fatal("plain DTO must not infer a source")
+	}
+	typ, source, ok := DTO(reflect.TypeFor[httpinput.Header[headers]]())
 	if !ok || source != "header" || typ != reflect.TypeFor[headers]() {
-		t.Fatalf("일반 헤더 DTO 식별: %s %s %v", typ, source, ok)
+		t.Fatalf("헤더 래퍼 DTO 식별: %s %s %v", typ, source, ok)
 	}
 	for _, typ := range []reflect.Type{
 		reflect.TypeFor[struct {

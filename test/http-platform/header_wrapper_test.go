@@ -30,9 +30,11 @@ func (*headerController) RegisterRoutes(r *api.Registry) {
 	r.GET("/wrapped", func(h input.Header[wrappedHeaders]) httpx.Response[string] {
 		return httpx.Response[string]{Body: h.RequestID + ":" + h.Token + ":" + h.Ignored}
 	})
-	r.GET("/legacy", func(h *legacyHeaders) httpx.Response[string] { return httpx.Response[string]{Body: h.RequestID} })
+	r.GET("/tagged", func(h input.Header[legacyHeaders]) httpx.Response[string] {
+		return httpx.Response[string]{Body: h.RequestID}
+	})
 }
-func TestHeaderWrapperAndLegacyHTTP(t *testing.T) {
+func TestHeaderWrapperWithExplicitAndDefaultNamesHTTP(t *testing.T) {
 	for _, adapter := range []string{"echo", "nethttp"} {
 		t.Run(adapter, func(t *testing.T) {
 			app := spine.New(spine.WithHTTPAdapter(platformFactory(adapter, nativeHooks{})), spine.WithValidator(&registeredSchemaValidator{}))
@@ -54,7 +56,7 @@ func TestHeaderWrapperAndLegacyHTTP(t *testing.T) {
 				t.Fatalf("headers: %v", names)
 			}
 			base, client := managedServer(t, prepared)
-			for _, tc := range []struct{ path, want string }{{"/wrapped", `abc:secret:`}, {"/legacy", `abc`}} {
+			for _, tc := range []struct{ path, want string }{{"/wrapped", `abc:secret:`}, {"/tagged", `abc`}} {
 				req, _ := http.NewRequest("GET", base+tc.path, nil)
 				req.Header.Set("x-request-id", "abc")
 				req.Header.Set("token", "secret")

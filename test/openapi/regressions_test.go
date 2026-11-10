@@ -1,5 +1,7 @@
 package openapi_test
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"context"
 	"encoding/json"
@@ -45,16 +47,16 @@ type regressionExcludedHeader struct {
 }
 type regressionController struct{}
 
-func (*regressionController) Form(f *regressionForm, q *regressionQuery) httpx.Response[map[string]string] {
+func (*regressionController) Form(f httpinput.Body[regressionForm], q httpinput.Query[regressionQuery]) httpx.Response[map[string]string] {
 	return httpx.Response[map[string]string]{Body: map[string]string{"body": f.ID, "query": q.ID}}
 }
-func (*regressionController) Named(f *regressionNamedForm) httpx.Response[string] {
+func (*regressionController) Named(f httpinput.Body[regressionNamedForm]) httpx.Response[string] {
 	return httpx.Response[string]{Body: f.Inner.ID}
 }
-func (*regressionController) Shape(f *regressionShape) httpx.Response[regressionShape] {
+func (*regressionController) Shape(f httpinput.Body[regressionShape]) httpx.Response[regressionShape] {
 	return httpx.Response[regressionShape]{Body: *f}
 }
-func (*regressionController) ArrayRules(f *regressionArrayRules) httpx.Response[regressionArrayRules] {
+func (*regressionController) ArrayRules(f httpinput.Body[regressionArrayRules]) httpx.Response[regressionArrayRules] {
 	return httpx.Response[regressionArrayRules]{Body: *f}
 }
 func (*regressionController) Left() httpx.Response[struct{ Value left.Item }] {
@@ -63,8 +65,8 @@ func (*regressionController) Left() httpx.Response[struct{ Value left.Item }] {
 func (*regressionController) Right() httpx.Response[struct{ Value right.Item }] {
 	return httpx.Response[struct{ Value right.Item }]{}
 }
-func (*regressionController) ExcludedQuery(*regressionExcludedQuery)   {}
-func (*regressionController) ExcludedHeader(*regressionExcludedHeader) {}
+func (*regressionController) ExcludedQuery(httpinput.Query[regressionExcludedQuery])    {}
+func (*regressionController) ExcludedHeader(httpinput.Header[regressionExcludedHeader]) {}
 
 func regressionApplication(t *testing.T, configured bool) (http.Handler, map[string]any) {
 	t.Helper()

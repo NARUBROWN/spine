@@ -28,18 +28,18 @@ type nestedPathBody struct {
 }
 type pathContractController struct{}
 
-func (*pathContractController) One(*pathContract)                           {}
-func (*pathContractController) Repeated(*pathContract, *pathContract)       {}
-func (*pathContractController) Collision(*pathContract, *otherPathContract) {}
-func (*pathContractController) Bad(*badPathContract)                        {}
-func (*pathContractController) Mixed(*mixedPathContract)                    {}
-func (*pathContractController) Value(pathContract)                          {}
-func (*pathContractController) Body(*nestedPathBody)                        {}
-func (*pathContractController) Legacy(path.Int, *pathContract)              {}
+func (*pathContractController) One(input.Path[pathContract])                                      {}
+func (*pathContractController) Repeated(input.Path[pathContract], input.Path[pathContract])       {}
+func (*pathContractController) Collision(input.Path[pathContract], input.Path[otherPathContract]) {}
+func (*pathContractController) Bad(input.Path[badPathContract])                                   {}
+func (*pathContractController) Mixed(input.Path[mixedPathContract])                               {}
+func (*pathContractController) Value(pathContract)                                                {}
+func (*pathContractController) Body(input.Body[nestedPathBody])                                   {}
+func (*pathContractController) Legacy(path.Int, input.Path[pathContract])                         {}
 
-func (*pathContractController) TooManyLegacy(path.Int, path.Int)              {}
-func (*pathContractController) Scalars(input.Path[int64], input.Path[string]) {}
-func (*pathContractController) ScalarDTO(input.Path[int64], *pathContract)    {}
+func (*pathContractController) TooManyLegacy(path.Int, path.Int)                      {}
+func (*pathContractController) Scalars(input.Path[int64], input.Path[string])         {}
+func (*pathContractController) ScalarDTO(input.Path[int64], input.Path[pathContract]) {}
 
 func TestPathConfigurationFailsBeforeInitializationAndSchemaCallbacks(t *testing.T) {
 	for _, test := range []struct {
