@@ -1,15 +1,12 @@
 package runtime
 
-import (
-	"github.com/NARUBROWN/spine/core"
-	"github.com/NARUBROWN/spine/pkg/spine"
-)
+import "github.com/NARUBROWN/spine/core"
 
 type controllerCtxView struct {
 	ec core.ExecutionContext
 }
 
-func NewControllerContext(ec core.ExecutionContext) spine.Ctx {
+func NewControllerContext(ec core.ExecutionContext) core.ControllerContext {
 	return controllerCtxView{ec: ec}
 }
 

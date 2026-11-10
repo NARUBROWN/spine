@@ -15,8 +15,9 @@ func (r *ControllerContextResolver) Supports(parameterMeta ParameterMeta) bool {
 		return false
 	}
 
-	// 실제 읽기 전용 뷰를 할당할 수 있는 인터페이스만 지원합니다.
-	// Ctx에 메서드를 추가한 인터페이스는 이 뷰가 구현하지 않습니다.
+	// Resolve가 실제로 반환하는 concrete view가 요청된 인터페이스에
+	// 할당될 수 있을 때만 지원한다고 광고합니다. ControllerContext를
+	// 확장한 사용자 인터페이스는 추가 메서드를 구현하지 않으므로 제외됩니다.
 	resolvedType := reflect.TypeOf(runtime.NewControllerContext(nil))
 	return resolvedType.AssignableTo(t)
 }
