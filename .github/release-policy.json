@@ -15,9 +15,9 @@
   },
   "channels": {
     "preview": {
-      "core_version": "v0.7.2-preview.2",
+      "core_version": "v0.7.2-preview.3",
       "modules": {
-        "github.com/NARUBROWN/spine-echo-platform": "v0.2.0-preview.4",
+        "github.com/NARUBROWN/spine-echo-platform": "v0.2.1-preview.1",
         "github.com/NARUBROWN/spine-nethttp-platform": "v0.1.0-preview.2",
         "github.com/NARUBROWN/spine-gorilla-platform": "v0.2.0-preview.2",
         "github.com/NARUBROWN/spine-kafka-platform": "v0.2.0-preview.2",
@@ -29,7 +29,7 @@
     "rc": {
       "core_version": "v0.7.2-rc.1",
       "modules": {
-        "github.com/NARUBROWN/spine-echo-platform": "v0.2.0-preview.4",
+        "github.com/NARUBROWN/spine-echo-platform": "v0.2.1-preview.1",
         "github.com/NARUBROWN/spine-nethttp-platform": "v0.1.0-preview.2",
         "github.com/NARUBROWN/spine-gorilla-platform": "v0.2.0-preview.2",
         "github.com/NARUBROWN/spine-kafka-platform": "v0.2.0-preview.2",
@@ -41,7 +41,7 @@
     "stable": {
       "core_version": "v0.7.2",
       "modules": {
-        "github.com/NARUBROWN/spine-echo-platform": "v0.2.0-preview.4",
+        "github.com/NARUBROWN/spine-echo-platform": "v0.2.1-preview.1",
         "github.com/NARUBROWN/spine-nethttp-platform": "v0.1.0-preview.2",
         "github.com/NARUBROWN/spine-gorilla-platform": "v0.2.0-preview.2",
         "github.com/NARUBROWN/spine-kafka-platform": "v0.2.0-preview.2",
