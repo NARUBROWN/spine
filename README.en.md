@@ -12,7 +12,7 @@ It does not hide how a request is resolved and executed.
 
 ## Current channel
 
-**Preview** | Published core tag [`v0.7.1-preview.1`](https://github.com/NARUBROWN/spine/tree/v0.7.1-preview.1)
+**Preview** | Published core tag [`v0.7.2-preview.1`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.1)
 
 Other channels | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 
@@ -54,7 +54,7 @@ Check the generated `go.mod` for the core and platform versions used by the app.
 
 ---
 
-See the [controller route registration example](docs/migration/controller-routes.md) for Spine `v0.7.1`.
+See the [controller route registration example](docs/migration/controller-routes.md) for Spine `v0.7.2`.
 
 ## Free enterprise adoption support
 

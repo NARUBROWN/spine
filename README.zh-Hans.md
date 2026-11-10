@@ -12,7 +12,7 @@
 
 ## 当前渠道
 
-**Preview** | 已发布的核心标签 [`v0.7.1-preview.1`](https://github.com/NARUBROWN/spine/tree/v0.7.1-preview.1)
+**Preview** | 已发布的核心标签 [`v0.7.2-preview.1`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.1)
 
 其他渠道 | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 
@@ -54,7 +54,7 @@ curl http://localhost:8080/health
 
 ---
 
-请参阅 Spine `v0.7.1` 的[控制器路由注册示例](docs/migration/controller-routes.md)。
+请参阅 Spine `v0.7.2` 的[控制器路由注册示例](docs/migration/controller-routes.md)。
 
 ## 企业采用免费技术支持
 
