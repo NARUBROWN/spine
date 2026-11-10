@@ -1,5 +1,7 @@
 package spine
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"context"
 	"encoding/json"
@@ -21,10 +23,10 @@ type descriptionPath struct {
 }
 type descriptionController struct{}
 
-func (*descriptionController) Create(*descriptionDTO) httpx.Response[descriptionDTO] {
+func (*descriptionController) Create(httpinput.Body[descriptionDTO]) httpx.Response[descriptionDTO] {
 	panic("핸들러를 실행하면 안 됩니다")
 }
-func (*descriptionController) Get(*descriptionPath) httpx.Response[*descriptionDTO] {
+func (*descriptionController) Get(httpinput.Path[descriptionPath]) httpx.Response[*descriptionDTO] {
 	panic("핸들러를 실행하면 안 됩니다")
 }
 

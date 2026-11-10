@@ -1,5 +1,7 @@
 package openapi_test
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"context"
 	"encoding/json"
@@ -41,25 +43,25 @@ type sourcePath struct {
 }
 type sourceController struct{}
 
-func (*sourceController) Body(input *sourceBody) httpx.Response[sourceBody] {
+func (*sourceController) Body(input httpinput.Body[sourceBody]) httpx.Response[sourceBody] {
 	return httpx.Response[sourceBody]{Body: *input}
 }
-func (*sourceController) Query(input *sourceQuery) httpx.Response[sourceQuery] {
+func (*sourceController) Query(input httpinput.Query[sourceQuery]) httpx.Response[sourceQuery] {
 	return httpx.Response[sourceQuery]{Body: *input}
 }
-func (*sourceController) Header(input *sourceHeader) httpx.Response[sourceHeader] {
+func (*sourceController) Header(input httpinput.Header[sourceHeader]) httpx.Response[sourceHeader] {
 	return httpx.Response[sourceHeader]{Body: *input}
 }
-func (*sourceController) Form(input *sourceForm) httpx.Response[sourceForm] {
+func (*sourceController) Form(input httpinput.Body[sourceForm]) httpx.Response[sourceForm] {
 	return httpx.Response[sourceForm]{Body: *input}
 }
-func (*sourceController) Match(input *sourceMatch) httpx.Response[[]string] {
+func (*sourceController) Match(input httpinput.Header[sourceMatch]) httpx.Response[[]string] {
 	return httpx.Response[[]string]{Body: input.Match}
 }
-func (*sourceController) Encoding(input *sourceEncoding) httpx.Response[string] {
+func (*sourceController) Encoding(input httpinput.Header[sourceEncoding]) httpx.Response[string] {
 	return httpx.Response[string]{Body: input.Encoding}
 }
-func (*sourceController) Plain(_ *sourcePath, input *bareBody) httpx.Response[bareBody] {
+func (*sourceController) Plain(_ httpinput.Path[sourcePath], input httpinput.Body[bareBody]) httpx.Response[bareBody] {
 	return httpx.Response[bareBody]{Body: *input}
 }
 
@@ -96,7 +98,7 @@ func TestHTTPValidationUsesBoundSourceAndWireNames(t *testing.T) {
 		{"POST", "/body", "application/json", "{}", "body", "/id"},
 		{"POST", "/body", "application/xml", "<request/>", "body", "/xml_id"},
 		{"GET", "/query", "", "", "query", "/count"},
-		{"GET", "/header", "", "", "header", "/X-ID"},
+		{"GET", "/header", "", "", "header", "/X-Id"},
 		{"POST", "/form", "application/x-www-form-urlencoded", "", "body", "/form_id"},
 		{"POST", "/form", "application/json", "{}", "body", "/json_id"},
 	} {

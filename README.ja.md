@@ -12,7 +12,7 @@
 
 ## 現在のチャネル
 
-**Preview** | 公開済みコアタグ [`v0.7.2-preview.1`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.1)
+**Preview** | 公開済みコアタグ [`v0.7.2-preview.2`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.2)
 
 他のチャネル | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 

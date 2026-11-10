@@ -19,7 +19,7 @@ func CallableIssues(meta core.HandlerMeta, prefix string) []boot.ConfigIssue {
 			}
 		}
 		if !supported {
-			issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_PARAMETER_UNSUPPORTED", Message: fmt.Sprintf("No resolver supports %s.", parameter.Type), Hint: "Use a supported context or struct input."})
+			issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "HTTP_PARAMETER_UNSUPPORTED", Message: fmt.Sprintf("No resolver supports %s.", parameter.Type), Hint: "Use input.Body[T], input.Query[T], input.Header[T], input.Path[T] or a supported context."})
 		}
 	}
 	t := meta.FunctionType()

@@ -2,6 +2,7 @@ package input
 
 import (
 	"errors"
+	httpinput "github.com/NARUBROWN/spine/pkg/input"
 	"reflect"
 	"strings"
 	"testing"
@@ -25,7 +26,7 @@ func TestPathFieldsBindByExactNameWithoutDecodingOrSplitting(t *testing.T) {
 		Flag  bool      `path:"flag"`
 		Token pathToken `path:"token"`
 	}
-	typ, source, ok := DTO(reflect.TypeFor[*params]())
+	typ, source, ok := DTO(reflect.TypeFor[httpinput.Path[params]]())
 	if !ok || source != "path" {
 		t.Fatal("path 태그로 출처를 판별해야 합니다")
 	}

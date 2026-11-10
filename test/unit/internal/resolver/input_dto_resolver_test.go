@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"errors"
+	httpinput "github.com/NARUBROWN/spine/pkg/input"
 	"reflect"
 	"testing"
 
@@ -26,24 +27,24 @@ func TestInputDTOResolverBindsOnlyTheDeclaredSourceBeforeValidation(t *testing.T
 	ctx.headers = map[string][]string{"x-request-id": {"request-1"}, "X-Roles": {"reader, writer"}, "age": {"999"}}
 	calls := 0
 	r := &InputDTOResolver{Validator: validatorFunc(func(_ context.Context, value any) error { calls++; return nil })}
-	query, err := r.Resolve(ctx, ParameterMeta{Type: reflect.TypeFor[*filters]()})
+	query, err := r.Resolve(ctx, ParameterMeta{Type: reflect.TypeFor[httpinput.Query[filters]]()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	q := query.(*filters)
+	q := query.(httpinput.Query[filters])
 	if q.Age != 18 || q.Zero == nil || *q.Zero != 0 {
 		t.Fatalf("쿼리 구조체 직접 접근: %+v", q)
 	}
-	value, err := r.Resolve(ctx, ParameterMeta{Type: reflect.TypeFor[*headers]()})
+	value, err := r.Resolve(ctx, ParameterMeta{Type: reflect.TypeFor[httpinput.Header[headers]]()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := value.(*headers)
+	h := value.(httpinput.Header[headers])
 	if h.ID != "request-1" || len(h.Roles) != 2 || calls != 2 {
 		t.Fatalf("헤더 바인딩과 검증: %+v %d", h, calls)
 	}
 	ctx.queries["age"] = []string{"secret-not-an-int"}
-	_, err = r.Resolve(ctx, ParameterMeta{Type: reflect.TypeFor[*filters]()})
+	_, err = r.Resolve(ctx, ParameterMeta{Type: reflect.TypeFor[httpinput.Query[filters]]()})
 	var failure *httperr.HTTPError
 	if !errors.As(err, &failure) || failure.Status != 400 || calls != 2 {
 		t.Fatalf("변환 실패는 검증 전 400이어야 합니다: %v %d", err, calls)
@@ -56,7 +57,7 @@ func TestInputDTOResolverPreservesValidationFailure(t *testing.T) {
 	}
 	failure := validation.NewError(validation.FieldError{Field: "/X-ID", Rule: "required"})
 	r := &InputDTOResolver{Validator: validatorFunc(func(context.Context, any) error { return failure })}
-	_, err := r.Resolve(newFakeHttpCtx(), ParameterMeta{Type: reflect.TypeFor[*headers]()})
+	_, err := r.Resolve(newFakeHttpCtx(), ParameterMeta{Type: reflect.TypeFor[httpinput.Header[headers]]()})
 	if !errors.Is(err, failure) {
 		t.Fatalf("검증 계약의 오류를 보존해야 합니다: %v", err)
 	}
@@ -86,7 +87,7 @@ func TestInputDTOResolverUsesRawQueryBeforeValidation(t *testing.T) {
 		}
 		return nil
 	})}
-	meta := ParameterMeta{Type: reflect.TypeFor[*filters]()}
+	meta := ParameterMeta{Type: reflect.TypeFor[httpinput.Query[filters]]()}
 	if _, err := r.Resolve(ctx, meta); err != nil || calls != 1 {
 		t.Fatalf("원시 쿼리 바인딩 실패: %v %d", err, calls)
 	}
@@ -100,7 +101,7 @@ func TestInputDTOResolverUsesRawQueryBeforeValidation(t *testing.T) {
 	ctx.queries = map[string][]string{"tags": {"a,b"}}
 	r.Validator = nil
 	value, err := r.Resolve(ctx.fakeHttpCtx, meta)
-	if err != nil || !reflect.DeepEqual(value.(*filters).Tags, []string{"a,b"}) {
+	if err != nil || !reflect.DeepEqual(value.(httpinput.Query[filters]).Tags, []string{"a,b"}) {
 		t.Fatalf("원시 쿼리가 없으면 디코딩된 쉼표를 구분자로 추측하면 안 됩니다: %+v %v", value, err)
 	}
 }

@@ -1,5 +1,7 @@
 package application
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"context"
 
@@ -25,7 +27,7 @@ type UserPath struct {
 	ID int64 `path:"id"`
 }
 
-func (*Controller) User(p *UserPath) httpx.Response[UserResponse] {
+func (*Controller) User(p httpinput.Path[UserPath]) httpx.Response[UserResponse] {
 	return httpx.Response[UserResponse]{Body: UserResponse{ID: p.ID}}
 }
 
@@ -35,7 +37,7 @@ type EchoMessage struct {
 	Count   int    `json:"count"`
 }
 
-func (*Controller) Echo(message *EchoMessage) httpx.Response[EchoMessage] {
+func (*Controller) Echo(message httpinput.Body[EchoMessage]) httpx.Response[EchoMessage] {
 	return httpx.Response[EchoMessage]{Body: *message}
 }
 
