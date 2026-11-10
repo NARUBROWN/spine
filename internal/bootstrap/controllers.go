@@ -53,7 +53,7 @@ func collectControllers(ctx context.Context, config *Config, container *containe
 		if err := registerController(value.(api.Controller), registry); err != nil {
 			return fmt.Errorf("controller %s RegisterRoutes: %w", owner, err)
 		}
-		routes, err := registry.Freeze()
+		routes, err := apiregistry.Freeze(registry)
 		if err != nil {
 			return fmt.Errorf("controller %s RegisterRoutes: %w", owner, err)
 		}

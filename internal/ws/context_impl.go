@@ -10,16 +10,8 @@ import (
 
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/event/publish"
-	pkgws "github.com/NARUBROWN/spine/pkg/ws"
+	"github.com/NARUBROWN/spine/internal/ws/sendctx"
 )
-
-type connSender struct {
-	send func(messageType int, data []byte) error
-}
-
-func (s *connSender) Send(messageType int, data []byte) error {
-	return s.send(messageType, data)
-}
 
 type WSExecutionContext struct {
 	mu          sync.RWMutex
@@ -107,7 +99,7 @@ func (s *webSocketRequestSnapshot) Host() string       { return s.host }
 func (s *webSocketRequestSnapshot) RequestURI() string { return s.requestURI }
 
 func NewWSExecutionContext(ctx context.Context, connID string, path string, messageType int, payload []byte, eventBus publish.EventBus, sendFn func(int, []byte) error, request ...core.WebSocketHandshakeContext) core.WebSocketContext {
-	ctx = context.WithValue(ctx, pkgws.SenderKey, &connSender{send: sendFn})
+	ctx = sendctx.With(ctx, sendFn)
 	requestSnapshot := &webSocketRequestSnapshot{
 		ctx:     ctx,
 		path:    path,

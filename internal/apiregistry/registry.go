@@ -53,7 +53,7 @@ func (r *Registry) add(method, path string, handler any, options []router.RouteO
 }
 
 // Freeze는 이후 등록을 거부하고 호출자가 소유하는 스냅샷을 반환합니다.
-func (r *Registry) Freeze() ([]router.RouteSpec, error) {
+func Freeze(r *Registry) ([]router.RouteSpec, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.frozen = true

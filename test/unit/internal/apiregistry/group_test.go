@@ -14,7 +14,7 @@ func TestGroupsComposeAndFreeze(t *testing.T) {
 	users := outer.Group("/users", Tags("Users", "Admin"))
 	users.GET("/", func() {}, Summary("List"), Tags("Extra"))
 	users.GET("/:id", func() {})
-	routes, err := r.Freeze()
+	routes, err := Freeze(r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestGroupsComposeAndFreeze(t *testing.T) {
 func TestInvalidGroupPath(t *testing.T) {
 	r := New(nil)
 	r.Group("users").GET("/", func() {})
-	if _, err := r.Freeze(); err == nil {
+	if _, err := Freeze(r); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -57,7 +57,7 @@ func TestGroupInterceptorsAreInheritedInOrder(t *testing.T) {
 	parent := r.Group("/users", Interceptors(outer))
 	nested := parent.Group("/admin", Interceptors(inner))
 	nested.GET("/", func() {}, Interceptors(local))
-	routes, err := r.Freeze()
+	routes, err := Freeze(r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestRegistryAndGroupShareRouteOptions(t *testing.T) {
 	r := New(nil)
 	r.GET("/direct", func() {}, Tags("Direct"))
 	r.Group("/group").GET("/", func() {}, Tags("Grouped"))
-	routes, err := r.Freeze()
+	routes, err := Freeze(r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestGroupMethodsUseRegistryArgumentOrder(t *testing.T) {
 	group.DELETE("/delete", handler)
 	group.HEAD("/head", handler)
 	group.OPTIONS("/options", handler)
-	routes, err := r.Freeze()
+	routes, err := Freeze(r)
 	if err != nil {
 		t.Fatal(err)
 	}

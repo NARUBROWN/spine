@@ -676,16 +676,14 @@ if err := app.WebSocket().Register(
 
 Supported WebSocket handler inputs are:
 
-- `context.Context`
+- `spine.Ctx` (`context.Context` injection remains supported for compatibility)
 - `ws.ConnectionID`
 - raw `[]byte`
 - a non-pointer struct decoded from the JSON message
 
-Prefer `func (c *ChatController) OnMessage(ctx context.Context, id ws.ConnectionID, command ChatCommand) error`. Use `ws.Send(ctx, ws.TextMessage, encoded)` for the current connection. A non-nil handler error closes with WebSocket code 1011; to keep the socket open for invalid application input, send a typed error event and return nil.
+Use `func (c *ChatController) OnMessage(ctx spine.Ctx, id ws.ConnectionID, command ChatCommand) error`. To reply to this connection, pass `ctx.ExecutionContext().Context()` to `ws.Send`. A non-nil handler error closes with WebSocket code 1011; to keep the socket open for invalid application input, send a typed error event and return nil.
 
-`ws.Send` sends only to the current connection. For broadcast or rooms, obtain `ws.Sender` from `ctx.Value(ws.SenderKey)`, store senders in shared controller state, copy recipients while locked, then send after releasing the lock.
-
-Spine currently has no application-level connect/disconnect callback. A sender kept by application state may only be noticed as stale on a later failed send. Do not treat an in-memory sender map as durable presence; use an external presence store with expiry for multi-instance or strict presence semantics.
+For a broadcast, save a delivery callback for each recipient that calls `ws.Send` with that connection's Go context. Copy the recipient list while holding the lock, then send after releasing it. Use `context.AfterFunc` on each connection context to remove its entry when the connection closes. This in-memory list is local to the server process.
 
 ### WebSocket handshake authentication
 

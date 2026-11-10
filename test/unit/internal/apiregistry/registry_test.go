@@ -12,12 +12,12 @@ func TestRegistryFreezesOwnedSnapshotsAndConfigurationErrors(t *testing.T) {
 	r.POST("/second", func() {})
 	missing := errors.New("missing configuration")
 	r.Error(missing)
-	routes, err := r.Freeze()
+	routes, err := Freeze(r)
 	if !errors.Is(err, missing) || len(routes) != 2 {
 		t.Fatal(routes, err)
 	}
 	routes[0].Path = "changed"
-	another, _ := r.Freeze()
+	another, _ := Freeze(r)
 	if another[0].Path != "/first" {
 		t.Fatal("snapshot aliases internal routes")
 	}
