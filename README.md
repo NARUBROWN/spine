@@ -12,7 +12,7 @@
 
 ## 현재 채널
 
-**Preview** | 공개 코어 태그 [`v0.7.1-preview.1`](https://github.com/NARUBROWN/spine/tree/v0.7.1-preview.1)
+**Preview** | 공개 코어 태그 [`v0.7.2-preview.1`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.1)
 
 다른 채널 | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 
@@ -52,7 +52,7 @@ curl http://localhost:8080/health
 - [Kafka MSA 예제](https://github.com/NARUBROWN/spine-simple-msa-demo): 주문 서버와 재고 워커의 이벤트 처리
 - [WebSocket 채팅 예제](https://github.com/NARUBROWN/spine-simple-chat-demo): 인증과 방별 메시지 전송
 
-Spine `v0.7.1`의 [컨트롤러 경로 등록 예제](docs/migration/controller-routes.md)를 참고하세요.
+Spine `v0.7.2`의 [컨트롤러 경로 등록 예제](docs/migration/controller-routes.md)를 참고하세요.
 
 ## 기업 도입 무상 기술 지원
 

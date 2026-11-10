@@ -12,7 +12,7 @@
 
 ## 目前管道
 
-**Preview** | 已發布的核心標籤 [`v0.7.1-preview.1`](https://github.com/NARUBROWN/spine/tree/v0.7.1-preview.1)
+**Preview** | 已發布的核心標籤 [`v0.7.2-preview.1`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.1)
 
 其他管道 | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 
@@ -54,7 +54,7 @@ curl http://localhost:8080/health
 
 ---
 
-請參閱 Spine `v0.7.1` 的[控制器路由註冊範例](docs/migration/controller-routes.md)。
+請參閱 Spine `v0.7.2` 的[控制器路由註冊範例](docs/migration/controller-routes.md)。
 
 ## 企業導入免費技術支援
 

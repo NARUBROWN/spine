@@ -12,7 +12,7 @@
 
 ## 現在のチャネル
 
-**Preview** | 公開済みコアタグ [`v0.7.1-preview.1`](https://github.com/NARUBROWN/spine/tree/v0.7.1-preview.1)
+**Preview** | 公開済みコアタグ [`v0.7.2-preview.1`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.1)
 
 他のチャネル | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 
@@ -54,7 +54,7 @@ curl http://localhost:8080/health
 
 ---
 
-Spine `v0.7.1` の[コントローラーでのルート登録例](docs/migration/controller-routes.md)を参照してください。
+Spine `v0.7.2` の[コントローラーでのルート登録例](docs/migration/controller-routes.md)を参照してください。
 
 ## 企業導入の無償技術サポート
 
