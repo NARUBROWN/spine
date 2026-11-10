@@ -9,5 +9,9 @@ type Path[T any] *T
 // Query는 쿼리 값을 T의 필드에 바인딩합니다. T는 구조체여야 합니다.
 type Query[T any] *T
 
+// Header는 HTTP 헤더 값을 T의 필드에 바인딩합니다. T는 구조체여야 합니다.
+// header 태그로 이름을 지정하거나 필드 이름을 기본 키로 사용할 수 있습니다.
+type Header[T any] *T
+
 // Body는 요청 본문을 T에 바인딩합니다. T는 구조체여야 합니다.
 type Body[T any] *T
