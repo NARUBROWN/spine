@@ -3,7 +3,7 @@ module github.com/NARUBROWN/spine/test/http-platform
 go 1.25.5
 
 require (
-	github.com/NARUBROWN/spine v0.7.2-preview.3
+	github.com/NARUBROWN/spine v0.7.2-rc.1
 	github.com/NARUBROWN/spine-echo-platform v0.2.1-preview.1
 	github.com/NARUBROWN/spine-gorilla-platform v0.2.0-preview.2
 	github.com/NARUBROWN/spine-nethttp-platform v0.1.0-preview.2
