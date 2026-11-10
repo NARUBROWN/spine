@@ -14,4 +14,6 @@ type Query[T any] *T
 type Header[T any] *T
 
 // Body는 요청 본문을 T에 바인딩합니다. T는 구조체여야 합니다.
+// Content-Type에 따라 JSON, XML, URL-encoded form 또는 multipart를 처리합니다.
+// 각 형식의 필드 이름은 json, xml 또는 form 태그로 지정합니다.
 type Body[T any] *T
