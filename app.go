@@ -45,10 +45,21 @@ type App interface {
 	Run(opts boot.Options) error
 	// RunContext는 context가 취소될 때 정상 종료를 시작합니다.
 	RunContext(ctx context.Context, opts boot.Options) error
-	// 이벤트 소비자 레지스트리 반환
-	Consumers() *consumer.Registry
-	// 웹 소켓 레지스트리 반환
-	WebSocket() *ws.Registry
+	// Consumers는 토픽에 이벤트 핸들러를 등록하는 경로입니다.
+	Consumers() Registrar
+	// WebSocket은 경로에 WebSocket 핸들러를 등록하는 경로입니다.
+	WebSocket() Registrar
+}
+
+// Registrar는 이름에 핸들러를 등록합니다.
+type Registrar interface {
+	Register(name string, handler any) error
+}
+
+type registrar struct{ registry Registrar }
+
+func (r registrar) Register(name string, handler any) error {
+	return r.registry.Register(name, handler)
 }
 
 type app struct {
@@ -133,7 +144,10 @@ func WithValidator(validator validation.Validator) Option {
 // HTTP를 사용할 때는 통합 모듈의 생성자 또는 WithHTTPAdapter를 사용합니다.
 // 예: New(WithHTTPAdapter(factory)). HTTP 없는 앱은 New()로 생성합니다.
 func New(options ...Option) App {
-	a := &app{}
+	a := &app{
+		consumerRegistry:  consumer.NewRegistry(),
+		websocketRegistry: ws.NewRegistry(),
+	}
 	for _, option := range options {
 		if option != nil {
 			option(a)
@@ -246,16 +260,10 @@ func (a *app) RunContext(ctx context.Context, opts boot.Options) error {
 	return bootstrap.RunContext(ctx, a.bootstrapConfig(opts))
 }
 
-func (a *app) Consumers() *consumer.Registry {
-	if a.consumerRegistry == nil {
-		a.consumerRegistry = consumer.NewRegistry()
-	}
-	return a.consumerRegistry
+func (a *app) Consumers() Registrar {
+	return registrar{registry: a.consumerRegistry}
 }
 
-func (a *app) WebSocket() *ws.Registry {
-	if a.websocketRegistry == nil {
-		a.websocketRegistry = ws.NewRegistry()
-	}
-	return a.websocketRegistry
+func (a *app) WebSocket() Registrar {
+	return registrar{registry: a.websocketRegistry}
 }
