@@ -2,11 +2,11 @@ package resolver
 
 import (
 	"fmt"
+	"github.com/NARUBROWN/spine/internal/inputerr"
 	"io"
 	"reflect"
 
-	"github.com/NARUBROWN/spine/core"
-	"github.com/NARUBROWN/spine/pkg/httperr"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/pkg/multipart"
 )
 
@@ -16,15 +16,15 @@ func (r *UploadedFilesResolver) Supports(parameterMeta ParameterMeta) bool {
 	return parameterMeta.Type == reflect.TypeFor[multipart.UploadedFiles]()
 }
 
-func (r *UploadedFilesResolver) Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error) {
-	httpCtx, ok := ctx.(core.HttpRequestContext)
+func (r *UploadedFilesResolver) Resolve(ctx execution.Context, parameterMeta ParameterMeta) (any, error) {
+	httpCtx, ok := ctx.(execution.HTTPRequestContext)
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")
 	}
 
 	form, err := httpCtx.MultipartForm()
 	if err != nil {
-		return nil, &httperr.InputError{Source: "body", Cause: err}
+		return nil, &inputerr.Error{Source: "body", Cause: err}
 	}
 
 	var files []multipart.UploadedFile

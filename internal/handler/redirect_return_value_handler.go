@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 )
 
@@ -20,7 +20,7 @@ func (h *RedirectReturnValueHandler) Supports(returnType reflect.Type) bool {
 	return returnType == reflect.TypeFor[httpx.Redirect]()
 }
 
-func (h *RedirectReturnValueHandler) Handle(value any, ctx core.ExecutionContext) error {
+func (h *RedirectReturnValueHandler) Handle(value any, ctx execution.Context) error {
 	var redirect httpx.Redirect
 	switch v := value.(type) {
 	case httpx.Redirect:

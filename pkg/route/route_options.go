@@ -12,7 +12,7 @@ import (
 //
 // Deprecated: 새 컨트롤러와 그룹에서는 api.Interceptors를 사용하세요.
 func WithInterceptors(interceptors ...core.Interceptor) router.RouteOption {
-	return func(rs *router.RouteSpec) {
+	return router.NewOption(func(rs *router.RouteSpec) {
 		rs.Interceptors = append(rs.Interceptors, interceptors...)
-	}
+	})
 }

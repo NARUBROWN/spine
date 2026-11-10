@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/NARUBROWN/spine/internal/inputerr"
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
-	"github.com/NARUBROWN/spine/pkg/httperr"
 )
 
 // ValidateDTO는 바인딩을 마친 DTO에만 등록된 검증기를 호출합니다.
@@ -39,7 +39,7 @@ func ValidateHTTPDTO(ctx context.Context, validator validation.Validator, dto an
 	}
 	err := ValidateDTO(validation.WithFieldTags(ctx, tag), validator, dto)
 	if _, ok := validation.AsError(err); ok {
-		return &httperr.InputError{Source: source, Cause: err}
+		return &inputerr.Error{Source: source, Cause: err}
 	}
 	return err
 }

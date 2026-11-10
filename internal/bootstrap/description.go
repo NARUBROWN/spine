@@ -8,6 +8,7 @@ import (
 	"github.com/NARUBROWN/spine/contract/description"
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/internal/endpoint"
+	"github.com/NARUBROWN/spine/internal/openapi/resourcepath"
 	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
@@ -36,7 +37,7 @@ func openAPICollisionIssues(config Config, resources []boot.OpenAPIResource) []b
 	resources = append([]boot.OpenAPIResource{{Path: config.HTTP.OpenAPI.DocumentPath()}}, resources...)
 	prefix := strings.TrimSuffix(config.HTTP.GlobalPrefix, "/")
 	for _, resource := range resources {
-		if !boot.IsOpenAPIResourcePath(resource.Path) {
+		if !resourcepath.Valid(resource.Path) {
 			continue
 		}
 		collision := func() {
@@ -82,7 +83,7 @@ func openAPIUIResources(options boot.OpenAPIOptions) ([]boot.OpenAPIResource, []
 		for j, resource := range provided {
 			resourceLocation := fmt.Sprintf("%s.Resources[%d]", location, j)
 			_, _, contentTypeErr := mime.ParseMediaType(resource.ContentType)
-			if !boot.IsOpenAPIResourcePath(resource.Path) || contentTypeErr != nil || strings.ContainsAny(resource.ContentType, "\r\n") {
+			if !resourcepath.Valid(resource.Path) || contentTypeErr != nil || strings.ContainsAny(resource.ContentType, "\r\n") {
 				issues = append(issues, boot.ConfigIssue{Path: resourceLocation, Code: "OPENAPI_UI_RESOURCE_INVALID", Message: "UI resources require static absolute paths and valid content types.", Hint: "Check the UI resource configuration."})
 				continue
 			}

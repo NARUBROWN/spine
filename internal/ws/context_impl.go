@@ -9,7 +9,9 @@ import (
 	"sync"
 
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/event/emission"
 	"github.com/NARUBROWN/spine/internal/event/publish"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/ws/sendctx"
 )
 
@@ -98,7 +100,7 @@ func (s *webSocketRequestSnapshot) RemoteAddr() string { return s.remoteAddr }
 func (s *webSocketRequestSnapshot) Host() string       { return s.host }
 func (s *webSocketRequestSnapshot) RequestURI() string { return s.requestURI }
 
-func NewWSExecutionContext(ctx context.Context, connID string, path string, messageType int, payload []byte, eventBus publish.EventBus, sendFn func(int, []byte) error, request ...core.WebSocketHandshakeContext) core.WebSocketContext {
+func NewWSExecutionContext(ctx context.Context, connID string, path string, messageType int, payload []byte, eventBus publish.EventBus, sendFn func(int, []byte) error, request ...core.WebSocketHandshakeContext) execution.WebSocketContext {
 	ctx = sendctx.With(ctx, sendFn)
 	requestSnapshot := &webSocketRequestSnapshot{
 		ctx:     ctx,
@@ -155,7 +157,7 @@ func (w *WSExecutionContext) Context() context.Context {
 	return w.ctx
 }
 
-func (w *WSExecutionContext) EventBus() core.EventBus {
+func (w *WSExecutionContext) EventBus() emission.Bus {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.eventBus == nil {

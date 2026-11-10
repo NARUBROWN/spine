@@ -6,9 +6,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/event/emission"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/pkg/event/publish"
-	"github.com/NARUBROWN/spine/pkg/httperr"
 )
 
 func TestNewHandlerMeta_RejectsNilWithoutPanic(t *testing.T) {
@@ -45,7 +45,7 @@ func newTestExecutionContext(method string, path string) *testExecutionContext {
 }
 
 func (c *testExecutionContext) Context() context.Context     { return context.Background() }
-func (c *testExecutionContext) EventBus() core.EventBus      { return &testEventBus{} }
+func (c *testExecutionContext) EventBus() emission.Bus       { return &testEventBus{} }
 func (c *testExecutionContext) Method() string               { return c.method }
 func (c *testExecutionContext) Path() string                 { return c.path }
 func (c *testExecutionContext) Params() map[string]string    { return c.params }
@@ -64,27 +64,27 @@ type anotherController struct{}
 
 func (c *anotherController) Another() string { return "another" }
 
-func testHandlerMeta(method string) core.HandlerMeta {
+func testHandlerMeta(method string) execution.HandlerMeta {
 	ctrlType := reflect.TypeOf(&testController{})
 	m, ok := ctrlType.MethodByName(method)
 	if !ok {
 		panic("메서드가 없습니다")
 	}
 
-	return core.HandlerMeta{
+	return execution.HandlerMeta{
 		ControllerType: ctrlType,
 		Method:         m,
 	}
 }
 
-func anotherHandlerMeta() core.HandlerMeta {
+func anotherHandlerMeta() execution.HandlerMeta {
 	ctrlType := reflect.TypeOf(&anotherController{})
 	m, ok := ctrlType.MethodByName("Another")
 	if !ok {
 		panic("메서드가 없습니다")
 	}
 
-	return core.HandlerMeta{
+	return execution.HandlerMeta{
 		ControllerType: ctrlType,
 		Method:         m,
 	}
@@ -128,12 +128,8 @@ func TestRouter_RouteRequiresMethodAndPathMatch(t *testing.T) {
 		t.Fatal("메서드가 맞지 않으면 핸들러를 찾지 못해야 합니다")
 	}
 
-	var httpErr *httperr.HTTPError
-	if !errors.As(err, &httpErr) {
-		t.Fatalf("httperr HTTPError가 예상됐지만 실제: %v", err)
-	}
-	if httpErr.Status != 404 {
-		t.Fatalf("NotFound 상태 코드는 404여야 합니다: %d", httpErr.Status)
+	if !errors.Is(err, ErrRouteNotFound) {
+		t.Fatalf("라우팅 실패가 예상됐지만 실제 오류는 %v입니다", err)
 	}
 }
 
@@ -239,9 +235,8 @@ func TestMatchPathMismatch(t *testing.T) {
 	if err == nil {
 		t.Fatal("세그먼트 길이가 다르면 매칭되면 안 됩니다")
 	}
-	var httpErr *httperr.HTTPError
-	if !errors.As(err, &httpErr) || httpErr.Status != 404 {
-		t.Fatalf("세그먼트 길이가 다르면 404 오류여야 합니다: %v", err)
+	if !errors.Is(err, ErrRouteNotFound) {
+		t.Fatalf("세그먼트 길이가 다르면 라우팅에 실패해야 합니다: %v", err)
 	}
 	if value := ctx.Params(); len(value) != 0 {
 		t.Fatalf("매칭 실패 시 경로 파라미터를 주입하면 안 됩니다: %v", value)

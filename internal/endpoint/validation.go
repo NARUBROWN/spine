@@ -2,11 +2,11 @@ package endpoint
 
 import (
 	"fmt"
-	"github.com/NARUBROWN/spine/core"
 	"reflect"
 	"slices"
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/input"
 	"github.com/NARUBROWN/spine/pkg/boot"
 )
@@ -14,10 +14,10 @@ import (
 // ValidationParameterIssues는 입력에서 제외한 필드를 검증기가 필수로 요구하는 충돌을 찾습니다.
 // 구조 검사에 성공한 뒤 호출하며 검증 태그나 특정 검증 구현체를 강제하지 않습니다.
 func ValidationParameterIssues(method reflect.Method, prefix string, validator validation.Validator) []boot.ConfigIssue {
-	return HandlerValidationParameterIssues(core.HandlerMeta{Method: method}, prefix, validator)
+	return HandlerValidationParameterIssues(execution.HandlerMeta{Method: method}, prefix, validator)
 }
 
-func HandlerValidationParameterIssues(meta core.HandlerMeta, prefix string, validator validation.Validator) []boot.ConfigIssue {
+func HandlerValidationParameterIssues(meta execution.HandlerMeta, prefix string, validator validation.Validator) []boot.ConfigIssue {
 	signature, offset := meta.FunctionType(), meta.ArgumentOffset()
 	name := meta.Method.Name
 	if meta.Callback.IsValid() {

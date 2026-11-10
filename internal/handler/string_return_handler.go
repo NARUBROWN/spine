@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 )
 
@@ -37,7 +37,7 @@ func (h *StringReturnHandler) Supports(returnType reflect.Type) bool {
 	return field.Type.Kind() == reflect.String
 }
 
-func (h *StringReturnHandler) Handle(value any, ctx core.ExecutionContext) error {
+func (h *StringReturnHandler) Handle(value any, ctx execution.Context) error {
 	var resp httpx.Response[string]
 
 	switch v := value.(type) {

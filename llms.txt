@@ -57,7 +57,7 @@ See `docs/migration/http-adapter-modules.md` for the intentional constructor cha
 - `github.com/NARUBROWN/spine`: kernel app assembly, with no Echo or platform-module dependency. Public contracts live under `contract/`.
 - `github.com/NARUBROWN/spine-echo-platform` (package platform): Echo v5.4.4 implementation and starter, depending on Spine and Echo.
 
-Spine v0.6.0 and Echo platform v0.1.0 use `spine.http-adapter/v2`: native hooks belong to typed platform.WithEcho options, JSON writers accept json.RawMessage, and framework routing/writer state uses typed fields. App.Transport and Config.NativeHooks are removed. Custom ExecutionContext implementations must provide SetRoute(params map[string]string, pathKeys []string); HTTP response access uses core.HTTPResponseContext. User Set/Get storage remains separate. Platform v0.1.0 depends on released Spine v0.6.0. Module consumers use the published dependencies without local replacements; the repository fixtures retain sibling-checkout replacements for source development.
+Spine v0.6.0 and Echo platform v0.1.0 use `spine.http-adapter/v2`: native hooks belong to typed platform.WithEcho options, JSON writers accept json.RawMessage, and framework routing/writer state uses typed fields. App.Transport and Config.NativeHooks are removed. In that release, ExecutionContext exposed SetRoute and core.HTTPResponseContext provided response access. See the current interceptor contract below when migrating. User Set/Get storage remains separate. Platform v0.1.0 depends on released Spine v0.6.0. Module consumers use the published dependencies without local replacements; the repository fixtures retain sibling-checkout replacements for source development.
 
 Native Echo extensions import `github.com/labstack/echo/v5`. Handlers and middleware take `*echo.Context`,
 the error handler takes `(ctx *echo.Context, err error)`, and logging uses `log/slog`. Path values use
@@ -599,7 +599,9 @@ type Interceptor interface {
 - `app.InterceptorFor(boot.InterceptorHTTP, x)` applies only to HTTP.
 - `app.InterceptorFor(boot.InterceptorWebSocket, x)` applies only to WebSocket messages and handshake auth when implemented.
 - `boot.InterceptorAll` means HTTP plus WebSocket, not Kafka/RabbitMQ consumers.
-- `route.WithInterceptors` applies only to that HTTP route.
+- Use `api.Interceptors` to apply interceptors to a route or group.
+- Use `core.HTTPRequest` for HTTP request and multipart access and `core.HTTPResponseContext.ResponseWriter()` for response access.
+- Call `publish.Event(ctx.Context(), event)` in `PreHandle` to queue an event from an interceptor. Read handler information with `meta.HandlerName()` and `meta.FunctionType()`. WebSocket message views return an independent payload copy. See [the migration guide](docs/migration/v0.7.2.md) for removed execution members.
 - Reusing the same interceptor pointer across scopes merges its scopes and executes that instance once. Different instances of the same type execute independently.
 
 For CORS, prefer startup validation and scope it to HTTP:

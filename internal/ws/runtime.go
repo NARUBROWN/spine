@@ -16,9 +16,10 @@ import (
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/execution"
+	"github.com/NARUBROWN/spine/internal/httpfailure"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/pkg/boot"
-	"github.com/NARUBROWN/spine/pkg/httperr"
 )
 
 const (
@@ -333,18 +334,18 @@ func (r *Runtime) preHandshake(ctx core.WebSocketHandshakeContext, reg Registrat
 	return nil
 }
 
-func callPreHandshake(interceptor core.WebSocketHandshakeInterceptor, ctx core.WebSocketHandshakeContext, meta core.HandlerMeta) (err error) {
+func callPreHandshake(interceptor core.WebSocketHandshakeInterceptor, ctx core.WebSocketHandshakeContext, meta execution.HandlerMeta) (err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			err = fmt.Errorf("websocket handshake interceptor panic: %v", recovered)
 		}
 	}()
-	return interceptor.PreHandshake(ctx, meta)
+	return interceptor.PreHandshake(ctx, meta.View())
 }
 
 func writeHandshakeRejection(w http.ResponseWriter, err error) {
 	status := http.StatusUnauthorized
-	var httpErr *httperr.HTTPError
+	var httpErr *httpfailure.HTTPError
 	if errors.As(err, &httpErr) && httpErr.Status >= 400 && httpErr.Status <= 499 {
 		status = httpErr.Status
 	}

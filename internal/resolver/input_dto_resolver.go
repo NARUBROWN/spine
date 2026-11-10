@@ -2,14 +2,15 @@ package resolver
 
 import (
 	"fmt"
+	"github.com/NARUBROWN/spine/internal/inputerr"
 	"net/http"
 	"reflect"
 
 	httpcontract "github.com/NARUBROWN/spine/contract/http"
 	validation "github.com/NARUBROWN/spine/contract/validator"
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/execution"
+	"github.com/NARUBROWN/spine/internal/httpfailure"
 	"github.com/NARUBROWN/spine/internal/input"
-	"github.com/NARUBROWN/spine/pkg/httperr"
 )
 
 type InputDTOResolver struct{ Validator validation.Validator }
@@ -19,7 +20,7 @@ func (*InputDTOResolver) Supports(parameter ParameterMeta) bool {
 	return ok && parameter.Type.Kind() == reflect.Pointer
 }
 
-func (r *InputDTOResolver) Resolve(ctx core.ExecutionContext, parameter ParameterMeta) (any, error) {
+func (r *InputDTOResolver) Resolve(ctx execution.Context, parameter ParameterMeta) (any, error) {
 	if !r.Supports(parameter) {
 		return nil, fmt.Errorf("HTTP DTO inputs require an explicit input wrapper")
 	}
@@ -31,7 +32,7 @@ func (r *InputDTOResolver) Resolve(ctx core.ExecutionContext, parameter Paramete
 	if err != nil {
 		return nil, err
 	}
-	httpCtx, ok := ctx.(core.HttpRequestContext)
+	httpCtx, ok := ctx.(execution.HTTPRequestContext)
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")
 	}
@@ -56,7 +57,7 @@ func (r *InputDTOResolver) Resolve(ctx core.ExecutionContext, parameter Paramete
 		bindingErr = input.Bind(value.Elem(), fields, values, source)
 	}
 	if bindingErr != nil {
-		return nil, &httperr.InputError{Source: source, Cause: httperr.BadRequest(bindingErr.Error())}
+		return nil, &inputerr.Error{Source: source, Cause: httpfailure.BadRequest(bindingErr.Error())}
 	}
 	validationContext := ctx.Context()
 	if plan.Wrapped {

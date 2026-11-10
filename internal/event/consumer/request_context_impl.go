@@ -5,8 +5,8 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/event/publish"
+	"github.com/NARUBROWN/spine/internal/execution"
 )
 
 type ConsumerRequestContextImpl struct {
@@ -22,7 +22,7 @@ func NewRequestContext(
 	ctx context.Context,
 	msg *Message,
 	eventBus publish.EventBus,
-) core.ExecutionContext {
+) execution.Context {
 	return &ConsumerRequestContextImpl{
 		ctx:      ctx,
 		msg:      msg,

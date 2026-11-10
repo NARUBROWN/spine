@@ -3,13 +3,12 @@ package runtime
 import (
 	"context"
 
-	"github.com/NARUBROWN/spine/core"
-	"github.com/NARUBROWN/spine/pkg/event/publish"
+	"github.com/NARUBROWN/spine/internal/execution"
 )
 
 // 이름 없는 인터페이스로 공개 뷰와 같은 계약을 구현합니다.
 type executionView = interface {
-	core.ContextCarrier
+	Context() context.Context
 	Get(key string) (any, bool)
 }
 
@@ -20,10 +19,10 @@ type ControllerContext interface {
 }
 
 type controllerCtxView struct {
-	ec core.ExecutionContext
+	ec execution.Context
 }
 
-func NewControllerContext(ec core.ExecutionContext) ControllerContext {
+func NewControllerContext(ec execution.Context) ControllerContext {
 	return controllerCtxView{ec: ec}
 }
 
@@ -36,7 +35,7 @@ func (v controllerCtxView) ExecutionContext() executionView {
 }
 
 type executionCtxView struct {
-	ec core.ExecutionContext
+	ec execution.Context
 }
 
 func (v executionCtxView) Get(key string) (any, bool) {
@@ -44,14 +43,5 @@ func (v executionCtxView) Get(key string) (any, bool) {
 }
 
 func (v executionCtxView) Context() context.Context {
-	return HandlerGoContext(v.ec)
-}
-
-// HandlerGoContext는 전송 컨텍스트에 현재 실행의 이벤트 발행기를 연결합니다.
-func HandlerGoContext(ec core.ExecutionContext) context.Context {
-	ctx := ec.Context()
-	if bus := ec.EventBus(); bus != nil {
-		return publish.WithPublisher(ctx, bus)
-	}
-	return ctx
+	return execution.GoContext(v.ec)
 }

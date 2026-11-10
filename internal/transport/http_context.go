@@ -10,16 +10,18 @@ import (
 
 	adapter "github.com/NARUBROWN/spine/contract/http"
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/event/emission"
 	"github.com/NARUBROWN/spine/internal/event/publish"
+	"github.com/NARUBROWN/spine/internal/execution"
+	"github.com/NARUBROWN/spine/internal/httpfailure"
 	"github.com/NARUBROWN/spine/internal/input"
-	"github.com/NARUBROWN/spine/pkg/httperr"
 )
 
 // HTTPContext는 독립 HTTP scope에 Spine 요청 store와 이벤트 버스를 결합합니다.
 type HTTPContext struct {
 	scope                adapter.HTTPContext
 	store                map[string]any
-	bus                  core.EventBus
+	bus                  emission.Bus
 	writer               core.ResponseWriter
 	params               map[string]string
 	pathKeys             []string
@@ -30,8 +32,8 @@ type HTTPContext struct {
 	closed               bool
 }
 
-var _ core.ExecutionContext = (*HTTPContext)(nil)
-var _ core.HttpRequestContext = (*HTTPContext)(nil)
+var _ execution.Context = (*HTTPContext)(nil)
+var _ execution.HTTPRequestContext = (*HTTPContext)(nil)
 
 func NewHTTPContext(scope adapter.HTTPContext, multipartMemoryBytes int64) *HTTPContext {
 	return &HTTPContext{scope: scope, store: make(map[string]any), writer: scope.Writer(), multipartMemoryBytes: multipartMemoryBytes}
@@ -128,7 +130,7 @@ func (c *HTTPContext) PathKeys() []string {
 	return slices.Clone(c.pathKeys)
 }
 
-func (c *HTTPContext) EventBus() core.EventBus {
+func (c *HTTPContext) EventBus() emission.Bus {
 	if c.bus == nil {
 		c.bus = publish.NewEventBus()
 	}
@@ -138,7 +140,7 @@ func (c *HTTPContext) EventBus() core.EventBus {
 func normalizeInputError(err error) error {
 	var input *adapter.RequestError
 	if errors.As(err, &input) {
-		return &httperr.HTTPError{Status: input.Status, Message: input.Error(), Cause: err}
+		return &httpfailure.HTTPError{Status: input.Status, Message: input.Error(), Cause: err}
 	}
 	return err
 }

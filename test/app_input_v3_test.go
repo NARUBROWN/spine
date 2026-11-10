@@ -108,9 +108,16 @@ func (i *inputV3Interceptor) AfterCompletion(ctx core.ExecutionContext, _ core.H
 	if _, err := os.Stat(c.path); err != nil {
 		c.t.Errorf("AfterCompletion까지 파일이 있어야 합니다: %v", err)
 	}
-	form, err := ctx.(core.HttpRequestContext).MultipartForm()
+	request := ctx.(core.HTTPRequest)
+	form, err := request.MultipartForm()
 	if err != nil || form.Value["title"][0] != "body" {
-		c.t.Errorf("완료 훅에서 같은 multipart 결과를 읽어야 합니다: %v", err)
+		c.t.Errorf("완료 훅에서 multipart 결과를 읽어야 합니다: %v", err)
+	} else {
+		form.Value["title"][0] = "changed"
+		again, err := request.MultipartForm()
+		if err != nil || again.Value["title"][0] != "body" {
+			c.t.Errorf("공개 폼 뷰가 원본 필드를 바꿨습니다: %v", err)
+		}
 	}
 	if i.failAfter {
 		panic("completion panic")
@@ -287,8 +294,8 @@ func TestHTTPV3InputFailuresPreserveSourceAndCause(t *testing.T) {
 			if response.Code != tc.status || c.calls.Load() != 0 {
 				t.Fatalf("오류 입력 실행: %d %s", response.Code, response.Body.String())
 			}
-			var source *httperr.InputError
-			if !errors.As(c.executionErr, &source) || source.Source != "body" {
+			source, ok := httperr.InputSource(c.executionErr)
+			if !ok || source != "body" {
 				t.Fatalf("입력 출처를 보존해야 합니다: %v", c.executionErr)
 			}
 			if tc.broken != nil && !errors.Is(c.executionErr, tc.broken) {

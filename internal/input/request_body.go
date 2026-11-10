@@ -13,8 +13,8 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/NARUBROWN/spine/pkg/httperr"
-	"github.com/NARUBROWN/spine/pkg/jsonx"
+	"github.com/NARUBROWN/spine/internal/httpfailure"
+	"github.com/NARUBROWN/spine/internal/jsondecode"
 )
 
 const (
@@ -133,7 +133,7 @@ func (b *Body) Bind(target any) (err error) {
 	}
 	switch media {
 	case "application/json":
-		err = jsonx.Unmarshal(data, target)
+		err = jsondecode.Unmarshal(data, target)
 	case "application/xml", "text/xml":
 		err = xml.NewDecoder(bytes.NewReader(data)).Decode(target)
 	case "application/x-www-form-urlencoded":
@@ -252,7 +252,7 @@ func (b *Body) multipartError(err error) error {
 }
 
 func bodyHTTPError(status int, cause error) error {
-	return &httperr.HTTPError{Status: status, Message: http.StatusText(status), Cause: cause}
+	return &httpfailure.HTTPError{Status: status, Message: http.StatusText(status), Cause: cause}
 }
 
 type bodyContextReader struct {

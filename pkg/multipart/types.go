@@ -16,7 +16,7 @@ type UploadedFile struct {
 // UploadedFiles는 요청의 모든 업로드 파일을 제공합니다.
 //
 // Deprecated: input.Body[T]의 form 필드에 *mime/multipart.FileHeader 또는
-// []*mime/multipart.FileHeader를 선언하세요. 동적인 필드 전체 조회는 core.HttpRequestContext.MultipartForm을 사용하세요.
+// []*mime/multipart.FileHeader를 선언하세요. 동적인 필드 전체 조회는 core.HTTPRequest.MultipartForm을 사용하세요.
 type UploadedFiles struct {
 	Files []UploadedFile
 }

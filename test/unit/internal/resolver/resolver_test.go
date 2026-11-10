@@ -3,7 +3,6 @@ package resolver
 import (
 	"context"
 	"errors"
-	httpinput "github.com/NARUBROWN/spine/pkg/input"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -11,10 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/event/emission"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/runtime"
 	eventpublish "github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/NARUBROWN/spine/pkg/httperr"
+	httpinput "github.com/NARUBROWN/spine/pkg/input"
 	pkgmultipart "github.com/NARUBROWN/spine/pkg/multipart"
 	"github.com/NARUBROWN/spine/pkg/path"
 	"github.com/NARUBROWN/spine/pkg/query"
@@ -33,7 +34,7 @@ type fakeHttpCtx struct {
 	bindErr       error
 	multipartForm *multipart.Form
 	multipartErr  error
-	bus           core.EventBus
+	bus           emission.Bus
 }
 
 func newFakeHttpCtx() *fakeHttpCtx {
@@ -50,7 +51,7 @@ func newFakeHttpCtx() *fakeHttpCtx {
 
 // 실행 컨텍스트
 func (c *fakeHttpCtx) Context() context.Context  { return context.Background() }
-func (c *fakeHttpCtx) EventBus() core.EventBus   { return c.bus }
+func (c *fakeHttpCtx) EventBus() emission.Bus    { return c.bus }
 func (c *fakeHttpCtx) Method() string            { return c.method }
 func (c *fakeHttpCtx) Path() string              { return c.path }
 func (c *fakeHttpCtx) Params() map[string]string { return c.params }
@@ -283,11 +284,11 @@ func TestControllerContextResolver_Resolve(t *testing.T) {
 			if !ok || got != 7 {
 				t.Fatalf("컨텍스트가 store를 읽지 못했습니다: %v %v", got, ok)
 			}
-			execution := val.(spine.Ctx).ExecutionContext()
-			if got, ok := execution.Get("userID"); !ok || got != 7 {
+			view := val.(spine.Ctx).ExecutionContext()
+			if got, ok := view.Get("userID"); !ok || got != 7 {
 				t.Fatalf("실행 뷰가 같은 값을 읽지 못했습니다: %v %v", got, ok)
 			}
-			if _, ok := execution.(core.ExecutionContext); ok {
+			if _, ok := view.(execution.Context); ok {
 				t.Fatal("핸들러 실행 뷰에서 변경 가능한 코어 컨텍스트에 접근할 수 있습니다")
 			}
 		})

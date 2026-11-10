@@ -7,6 +7,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/NARUBROWN/spine/internal/openapi/resourcepath"
 	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
@@ -136,7 +137,7 @@ func DocumentScript(page, document, container, initialize string) string {
 }
 
 func ValidatePaths(page, document string) error {
-	if !boot.IsOpenAPIResourcePath(page) || page == "/" || !boot.IsOpenAPIResourcePath(document) {
+	if !resourcepath.Valid(page) || page == "/" || !resourcepath.Valid(document) {
 		return fmt.Errorf("Documentation UI and document paths must be static absolute paths, such as /docs and /openapi.json")
 	}
 	return nil

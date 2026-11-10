@@ -2,13 +2,14 @@ package endpoint
 
 import (
 	"fmt"
-	"github.com/NARUBROWN/spine/core"
+
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/resolver"
 	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 // CallableIssues는 새 콜백의 입력과 반환을 리스너 시작 전에 검사합니다.
-func CallableIssues(meta core.HandlerMeta, prefix string) []boot.ConfigIssue {
+func CallableIssues(meta execution.HandlerMeta, prefix string) []boot.ConfigIssue {
 	var issues []boot.ConfigIssue
 	for _, parameter := range resolver.HandlerParameters(meta, nil) {
 		supported := false

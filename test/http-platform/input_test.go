@@ -314,7 +314,7 @@ func (i *uploadInterceptor) AfterCompletion(ctx core.ExecutionContext, _ core.Ha
 		if _, err := os.Stat(c.path); err != nil {
 			c.t.Errorf("완료 훅의 파일 수명: %v", err)
 		}
-		form, err := ctx.(core.HttpRequestContext).MultipartForm()
+		form, err := ctx.(core.HTTPRequest).MultipartForm()
 		if err != nil || form.Value["title"][0] != "body" {
 			c.t.Errorf("완료 훅의 파싱 결과: %v", err)
 		}

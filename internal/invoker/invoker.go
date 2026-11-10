@@ -2,11 +2,11 @@ package invoker
 
 import (
 	"fmt"
-	"github.com/NARUBROWN/spine/core"
 	"reflect"
 	"sync"
 
 	"github.com/NARUBROWN/spine/internal/container"
+	"github.com/NARUBROWN/spine/internal/execution"
 )
 
 type Invoker struct {
@@ -122,7 +122,7 @@ func (i *Invoker) controllerValue(controllerType reflect.Type) (reflect.Value, e
 }
 
 // InvokeHandler는 콜백에 별도 receiver나 새 컨트롤러를 추가하지 않습니다.
-func (i *Invoker) InvokeHandler(meta core.HandlerMeta, args []any) ([]any, error) {
+func (i *Invoker) InvokeHandler(meta execution.HandlerMeta, args []any) ([]any, error) {
 	if !meta.Callback.IsValid() {
 		return i.Invoke(meta.ControllerType, meta.Method, args)
 	}

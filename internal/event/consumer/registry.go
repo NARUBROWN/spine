@@ -5,13 +5,13 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/router"
 )
 
 type Registration struct {
 	Topic string
-	Meta  core.HandlerMeta
+	Meta  execution.HandlerMeta
 }
 
 type Registry struct {

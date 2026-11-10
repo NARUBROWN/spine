@@ -2,13 +2,13 @@ package resolver
 
 import (
 	"fmt"
+	"github.com/NARUBROWN/spine/internal/inputerr"
 	"mime"
 	"reflect"
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/input"
-	"github.com/NARUBROWN/spine/pkg/httperr"
 )
 
 type DTOResolver struct {
@@ -23,11 +23,11 @@ func (r *DTOResolver) Supports(pm ParameterMeta) bool {
 	return !input.HasForm(pm.Type.Elem())
 }
 
-func (r *DTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error) {
+func (r *DTOResolver) Resolve(ctx execution.Context, parameterMeta ParameterMeta) (any, error) {
 	if !r.Supports(parameterMeta) {
 		return nil, fmt.Errorf("HTTP DTO inputs require an explicit input wrapper")
 	}
-	httpCtx, ok := ctx.(core.HttpRequestContext)
+	httpCtx, ok := ctx.(execution.HTTPRequestContext)
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")
 	}
@@ -36,7 +36,7 @@ func (r *DTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta Parameter
 	valuePtr := reflect.New(parameterMeta.Type.Elem())
 
 	if err := httpCtx.Bind(valuePtr.Interface()); err != nil {
-		return nil, &httperr.InputError{Source: "body", Cause: fmt.Errorf(
+		return nil, &inputerr.Error{Source: "body", Cause: fmt.Errorf(
 			"DTO binding failed (%s): %w",
 			parameterMeta.Type.Name(),
 			err,
@@ -50,7 +50,7 @@ func (r *DTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta Parameter
 	return valuePtr.Convert(parameterMeta.Type).Interface(), nil
 }
 
-func bodyFieldTag(ctx core.HttpRequestContext) string {
+func bodyFieldTag(ctx execution.HTTPRequestContext) string {
 	media, _, _ := mime.ParseMediaType(ctx.Header("Content-Type"))
 	if media == "multipart/form-data" || media == "application/x-www-form-urlencoded" {
 		return "form"

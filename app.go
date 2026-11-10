@@ -14,11 +14,12 @@ import (
 	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/bootstrap"
+	"github.com/NARUBROWN/spine/internal/componentregistration"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/ws"
+	"github.com/NARUBROWN/spine/pkg/api"
 	"github.com/NARUBROWN/spine/pkg/boot"
-	"github.com/NARUBROWN/spine/pkg/constructor"
 )
 
 type App interface {
@@ -30,7 +31,7 @@ type App interface {
 	//
 	// Deprecated: 새 HTTP 경로는 api.Controller의 RegisterRoutes 메서드에 등록하세요.
 	// 기존 등록은 전환 기간에 계속 사용할 수 있습니다.
-	Route(method string, path string, handler any, opts ...router.RouteOption)
+	Route(method string, path string, handler any, opts ...api.Option)
 	// 인터셉터 선언
 	Interceptor(interceptors ...core.Interceptor)
 	// InterceptorFor는 선택한 기본 전송 방식에 전역 인터셉터를 등록합니다.
@@ -158,7 +159,7 @@ func New(options ...Option) App {
 
 func (a *app) Constructor(constructors ...any) {
 	for _, value := range constructors {
-		if registration, ok := value.(constructor.Registration); ok {
+		if registration, ok := value.(componentregistration.Registration); ok {
 			a.componentRegistration(registration)
 		} else if t := reflect.TypeOf(value); t != nil && t.Kind() == reflect.Func {
 			a.constructors = append(a.constructors, value)
@@ -171,7 +172,7 @@ func (a *app) Constructor(constructors ...any) {
 	}
 }
 
-func (a *app) Route(method string, path string, handler any, opts ...router.RouteOption) {
+func (a *app) Route(method string, path string, handler any, opts ...api.Option) {
 	// HTTP 메서드를 대문자로 변환해 라우팅 시 대소문자 불일치 문제를 방지합니다.
 	method = strings.ToUpper(strings.TrimSpace(method))
 
@@ -182,7 +183,9 @@ func (a *app) Route(method string, path string, handler any, opts ...router.Rout
 	}
 
 	for _, opt := range opts {
-		opt(&spec)
+		if !router.ApplyOption(opt, &spec) {
+			panic("empty route option")
+		}
 	}
 
 	a.routes = append(a.routes, spec)

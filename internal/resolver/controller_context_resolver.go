@@ -3,7 +3,7 @@ package resolver
 import (
 	"reflect"
 
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/runtime"
 )
 
@@ -28,6 +28,6 @@ func (r *ControllerContextResolver) Supports(parameterMeta ParameterMeta) bool {
 	return resolvedType.AssignableTo(t)
 }
 
-func (r *ControllerContextResolver) Resolve(ctx core.ExecutionContext, _ ParameterMeta) (any, error) {
+func (r *ControllerContextResolver) Resolve(ctx execution.Context, _ ParameterMeta) (any, error) {
 	return runtime.NewControllerContext(ctx), nil
 }

@@ -25,7 +25,6 @@ func newTestExecutionContext(method string) *testExecutionContext {
 }
 
 func (c *testExecutionContext) Context() context.Context     { return context.Background() }
-func (c *testExecutionContext) EventBus() core.EventBus      { return nil }
 func (c *testExecutionContext) Method() string               { return c.method }
 func (c *testExecutionContext) Path() string                 { return "/" }
 func (c *testExecutionContext) Params() map[string]string    { return map[string]string{} }

@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	"github.com/NARUBROWN/spine/contract/description"
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/execution"
 )
 
 // RegistrationDescriber는 앱의 이벤트와 WebSocket 등록을 설명하는 선택적 기능입니다.
@@ -39,7 +39,7 @@ func (a *app) DescribeRegistrations() description.Registrations {
 	return result
 }
 
-func describeRegistrationHandler(meta core.HandlerMeta) description.Handler {
+func describeRegistrationHandler(meta execution.HandlerMeta) description.Handler {
 	receiver := meta.ControllerType.Elem()
 	return description.Handler{PackagePath: receiver.PkgPath(), Receiver: receiver.Name(), Method: meta.Method.Name}
 }

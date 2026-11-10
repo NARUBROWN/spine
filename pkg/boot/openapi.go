@@ -1,10 +1,6 @@
 package boot
 
-import (
-	"path"
-	"strings"
-	"unicode"
-)
+import "github.com/NARUBROWN/spine/internal/openapi/resourcepath"
 
 // OpenAPIOptions는 명시적으로 활성화하는 HTTP 명세 리소스를 설정합니다.
 // Enabled가 true일 때만 자동 생성하고 제공합니다. 기본값은 비활성화입니다.
@@ -46,13 +42,8 @@ func (o OpenAPIOptions) ValidateIssues(prefix string) []ConfigIssue {
 		return nil
 	}
 	p := o.DocumentPath()
-	if !IsOpenAPIResourcePath(p) {
+	if !resourcepath.Valid(p) {
 		return []ConfigIssue{{Path: prefix + ".Path", Code: "OPENAPI_PATH_INVALID", Message: "OpenAPI path must be a static absolute HTTP path.", Hint: "Use /openapi.json or another static path."}}
 	}
 	return nil
-}
-
-// IsOpenAPIResourcePath는 명세와 UI 리소스에 사용할 정적 경로를 검사합니다.
-func IsOpenAPIResourcePath(p string) bool {
-	return strings.HasPrefix(p, "/") && !strings.ContainsAny(p, ":*?#%\\\r\n\t ") && path.Clean(p) == p && strings.IndexFunc(p, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) < 0
 }

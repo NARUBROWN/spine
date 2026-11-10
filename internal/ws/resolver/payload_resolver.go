@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/resolver"
 )
 
@@ -15,8 +15,8 @@ func (r *PayloadResolver) Supports(meta resolver.ParameterMeta) bool {
 		meta.Type.Elem().Kind() == reflect.Uint8
 }
 
-func (r *PayloadResolver) Resolve(ctx core.ExecutionContext, meta resolver.ParameterMeta) (any, error) {
-	wsCtx, ok := ctx.(core.WebSocketContext)
+func (r *PayloadResolver) Resolve(ctx execution.Context, meta resolver.ParameterMeta) (any, error) {
+	wsCtx, ok := ctx.(execution.WebSocketContext)
 	if !ok {
 		return nil, fmt.Errorf("context is not a WebSocketContext")
 	}

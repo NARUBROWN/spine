@@ -41,11 +41,10 @@ func (r *Registry) add(method, path string, handler any, options []router.RouteO
 	}
 	spec := router.RouteSpec{Method: method, Path: path, Handler: handler, ControllerType: r.owner}
 	for _, option := range options {
-		if option == nil {
-			r.errors = append(r.errors, fmt.Errorf("nil route option for %s %s", method, path))
+		if !router.ApplyOption(option, &spec) {
+			r.errors = append(r.errors, fmt.Errorf("empty route option for %s %s", method, path))
 			continue
 		}
-		option(&spec)
 	}
 	spec.Interceptors = append(spec.Interceptors[:0:0], spec.Interceptors...)
 	spec.Tags = append([]string(nil), spec.Tags...)

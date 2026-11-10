@@ -9,87 +9,38 @@ type ContextCarrier interface {
 	Context() context.Context
 }
 
-type EventBusCarrier interface {
-	EventBus() EventBus
-}
-
-/*
-ExecutionContext
-- 파이프라인과 라우터 전용
-- HTTP, WebSocket과 컨슈머의 공통 실행 흐름에서 사용
-*/
+// ExecutionContext는 앱 인터셉터가 요청 정보와 실행별 저장소에 접근하는 계약입니다.
 type ExecutionContext interface {
 	ContextCarrier
-	EventBusCarrier
-
 	Method() string
 	Path() string
 	Params() map[string]string
 	Header(name string) string
 	PathKeys() []string
-	// SetRoute는 라우터가 찾은 요청별 파라미터와 키 순서를 저장합니다.
-	// 구현체는 입력을 복사하여 사용자 저장소 및 다른 요청과 분리합니다.
-	SetRoute(params map[string]string, pathKeys []string)
 	Queries() map[string][]string
 	Set(key string, value any)
 	Get(key string) (any, bool)
 }
 
-/*
-HttpRequestContext
-- HTTP 전용 컨텍스트 계약
-*/
-type HttpRequestContext interface {
-	ContextCarrier
-	EventBusCarrier
-
-	// 개별 접근
+// HTTPRequest는 HTTP 인터셉터가 요청과 동적 멀티파트 필드를 조회하는 계약입니다.
+type HTTPRequest interface {
+	ExecutionContext
 	Param(name string) string
 	Query(name string) string
-	Header(name string) string
-
-	// 전체 뷰 접근
-	Params() map[string]string
-	Queries() map[string][]string
 	Headers() map[string][]string
-
-	// 요청 본문
-	Bind(out any) error
-
-	// 멀티파트
-	MultipartForm() (*multipart.Form, error)
+	MultipartForm() (MultipartFields, error)
 }
 
-// HTTPResponseContext는 HTTP 응답 writer에 접근하는 실행 전용 계약입니다.
-// 파이프라인은 응답 staging 동안 writer를 교체하고 전송 전에 원래 writer로 복구합니다.
-// WS와 컨슈머 실행 컨텍스트에는 이 계약을 요구하지 않습니다.
+// MultipartFields는 HTTP 인터셉터가 조회한 현재 요청의 폼 필드 사본입니다.
+// 파일은 현재 요청이 완료될 때까지 열 수 있습니다.
+type MultipartFields struct {
+	Value map[string][]string
+	File  map[string][]*multipart.FileHeader
+}
+
+// HTTPResponseContext는 HTTP 인터셉터에 현재 응답 writer를 제공합니다.
 type HTTPResponseContext interface {
 	ResponseWriter() ResponseWriter
-	SetResponseWriter(ResponseWriter)
-}
-
-/*
-ConsumerRequestContext
-- 이벤트 컨슈머 전용 컨텍스트
-*/
-type ConsumerRequestContext interface {
-	ContextCarrier
-	EventBusCarrier
-
-	EventName() string
-	Payload() []byte
-}
-
-/*
-WebSocketContext
-- WebSocket 전용 ExecutionContext 확장
-*/
-type WebSocketContext interface {
-	ExecutionContext
-
-	ConnID() string
-	MessageType() int
-	Payload() []byte
 }
 
 /*
@@ -119,6 +70,10 @@ type WebSocketHandshakeContext interface {
 
 // WebSocketMessageContext는 메시지 처리와 원래 handshake 요청 정보를 함께 제공합니다.
 type WebSocketMessageContext interface {
-	WebSocketContext
+	ExecutionContext
 	WebSocketRequestContext
+	ConnID() string
+	MessageType() int
+	// Payload는 메시지 바이트의 독립 사본을 반환합니다.
+	Payload() []byte
 }

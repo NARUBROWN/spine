@@ -13,7 +13,7 @@ type Option = router.RouteOption
 
 func Tags(tags ...string) Option {
 	copyTags := append([]string(nil), tags...)
-	return func(s *router.RouteSpec) {
+	return router.NewOption(func(s *router.RouteSpec) {
 		for _, tag := range copyTags {
 			found := false
 			for _, prior := range s.Tags {
@@ -26,13 +26,17 @@ func Tags(tags ...string) Option {
 				s.Tags = append(s.Tags, tag)
 			}
 		}
-	}
+	})
 }
-func Summary(value string) Option     { return func(s *router.RouteSpec) { s.Summary = value } }
-func Description(value string) Option { return func(s *router.RouteSpec) { s.Description = value } }
+func Summary(value string) Option {
+	return router.NewOption(func(s *router.RouteSpec) { s.Summary = value })
+}
+func Description(value string) Option {
+	return router.NewOption(func(s *router.RouteSpec) { s.Description = value })
+}
 func Interceptors(values ...core.Interceptor) Option {
 	copied := append([]core.Interceptor(nil), values...)
-	return func(s *router.RouteSpec) { s.Interceptors = append(s.Interceptors, copied...) }
+	return router.NewOption(func(s *router.RouteSpec) { s.Interceptors = append(s.Interceptors, copied...) })
 }
 
 type Group struct {

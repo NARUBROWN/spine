@@ -3,7 +3,6 @@ package transport
 import (
 	"context"
 	"errors"
-	bodyinput "github.com/NARUBROWN/spine/internal/input"
 	"io"
 	"net/http"
 	"strings"
@@ -11,7 +10,8 @@ import (
 	"time"
 
 	adapter "github.com/NARUBROWN/spine/contract/http"
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/execution"
+	bodyinput "github.com/NARUBROWN/spine/internal/input"
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 )
@@ -144,7 +144,7 @@ func (s rawRouteScope) Method() string  { return "GET" }
 
 func TestHTTPRoutingSplitsRawPathBeforeDecoding(t *testing.T) {
 	r := router.NewRouter()
-	r.Register("GET", "/files/:name", core.HandlerMeta{})
+	r.Register("GET", "/files/:name", execution.HandlerMeta{})
 	for _, tc := range []struct{ path, want string }{
 		{"/files/a%2Fb", "a/b"}, {"/files/a%2fb", "a/b"}, {"/files/a%252Fb", "a%2Fb"},
 		{"/files/a%2F", "a/"}, {"/files/%E2%9C%93", "✓"}, {"/files/a%3Fb%23c", "a?b#c"},

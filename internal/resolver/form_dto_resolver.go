@@ -2,12 +2,12 @@ package resolver
 
 import (
 	"fmt"
+	"github.com/NARUBROWN/spine/internal/inputerr"
 	"reflect"
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/input"
-	"github.com/NARUBROWN/spine/pkg/httperr"
 )
 
 type FormDTOResolver struct {
@@ -22,11 +22,11 @@ func (r *FormDTOResolver) Supports(pm ParameterMeta) bool {
 	return input.HasForm(pm.Type.Elem())
 }
 
-func (r *FormDTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error) {
+func (r *FormDTOResolver) Resolve(ctx execution.Context, parameterMeta ParameterMeta) (any, error) {
 	if !r.Supports(parameterMeta) {
 		return nil, fmt.Errorf("HTTP DTO inputs require an explicit input wrapper")
 	}
-	httpCtx, ok := ctx.(core.HttpRequestContext)
+	httpCtx, ok := ctx.(execution.HTTPRequestContext)
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")
 	}
@@ -35,7 +35,7 @@ func (r *FormDTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta Param
 
 	// 요청별 공통 본문 파서에서 폼 값을 읽습니다.
 	if err := httpCtx.Bind(dto); err != nil {
-		return nil, &httperr.InputError{Source: "body", Cause: err}
+		return nil, &inputerr.Error{Source: "body", Cause: err}
 	}
 
 	if err := ValidateHTTPDTO(ctx.Context(), r.Validator, dto, "body", bodyFieldTag(httpCtx)); err != nil {

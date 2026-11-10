@@ -11,7 +11,9 @@ import (
 
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
+	"github.com/NARUBROWN/spine/internal/event/emission"
 	"github.com/NARUBROWN/spine/internal/event/hook"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/handler"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/resolver"
@@ -49,7 +51,7 @@ func newTestExecutionContext() *testExecutionContext {
 }
 
 func (c *testExecutionContext) Context() context.Context     { return context.Background() }
-func (c *testExecutionContext) EventBus() core.EventBus      { return &testEventBus{} }
+func (c *testExecutionContext) EventBus() emission.Bus       { return &testEventBus{} }
 func (c *testExecutionContext) Method() string               { return c.method }
 func (c *testExecutionContext) Path() string                 { return c.path }
 func (c *testExecutionContext) Params() map[string]string    { return c.params }
@@ -60,13 +62,13 @@ func (c *testExecutionContext) Set(key string, value any)    { c.store[key] = va
 func (c *testExecutionContext) Get(key string) (any, bool)   { v, ok := c.store[key]; return v, ok }
 
 type testRouter struct {
-	meta core.HandlerMeta
+	meta execution.HandlerMeta
 	err  error
 }
 
-func (r *testRouter) Route(ctx core.ExecutionContext) (core.HandlerMeta, error) {
+func (r *testRouter) Route(ctx execution.Context) (execution.HandlerMeta, error) {
 	if r.err != nil {
-		return core.HandlerMeta{}, r.err
+		return execution.HandlerMeta{}, r.err
 	}
 	return r.meta, nil
 }
@@ -76,12 +78,12 @@ type countingRouter struct {
 	err    error
 }
 
-func (r *countingRouter) Route(ctx core.ExecutionContext) (core.HandlerMeta, error) {
+func (r *countingRouter) Route(ctx execution.Context) (execution.HandlerMeta, error) {
 	r.called++
 	if r.err != nil {
-		return core.HandlerMeta{}, r.err
+		return execution.HandlerMeta{}, r.err
 	}
-	return core.HandlerMeta{}, nil
+	return execution.HandlerMeta{}, nil
 }
 
 type testInterceptor struct {
@@ -116,25 +118,25 @@ func (i *testInterceptor) AfterCompletion(ctx core.ExecutionContext, meta core.H
 
 type testArgumentResolver struct {
 	supports func(pm resolver.ParameterMeta) bool
-	resolve  func(ctx core.ExecutionContext, pm resolver.ParameterMeta) (any, error)
+	resolve  func(ctx execution.Context, pm resolver.ParameterMeta) (any, error)
 }
 
 func (r *testArgumentResolver) Supports(pm resolver.ParameterMeta) bool {
 	return r.supports(pm)
 }
-func (r *testArgumentResolver) Resolve(ctx core.ExecutionContext, pm resolver.ParameterMeta) (any, error) {
+func (r *testArgumentResolver) Resolve(ctx execution.Context, pm resolver.ParameterMeta) (any, error) {
 	return r.resolve(ctx, pm)
 }
 
 type testReturnHandler struct {
 	supports func(rt reflect.Type) bool
-	handle   func(v any, ctx core.ExecutionContext) error
+	handle   func(v any, ctx execution.Context) error
 }
 
 func (h *testReturnHandler) Supports(rt reflect.Type) bool {
 	return h.supports(rt)
 }
-func (h *testReturnHandler) Handle(v any, ctx core.ExecutionContext) error {
+func (h *testReturnHandler) Handle(v any, ctx execution.Context) error {
 	return h.handle(v, ctx)
 }
 
@@ -143,7 +145,7 @@ type testPostHook struct {
 	returnedErr error
 }
 
-func (h *testPostHook) AfterExecution(ctx core.ExecutionContext) error {
+func (h *testPostHook) AfterExecution(ctx execution.Context) error {
 	h.called = true
 	return h.returnedErr
 }
@@ -263,7 +265,7 @@ func (*invalidCookieController) Handle() httpx.Response[string] {
 	}
 }
 
-func newPipelineWithController(t *testing.T, methodName string, called *int) (*Pipeline, core.HandlerMeta) {
+func newPipelineWithController(t *testing.T, methodName string, called *int) (*Pipeline, execution.HandlerMeta) {
 	t.Helper()
 
 	ctr := container.New()
@@ -279,7 +281,7 @@ func newPipelineWithController(t *testing.T, methodName string, called *int) (*P
 		t.Fatalf("메서드를 찾을 수 없습니다: %s", methodName)
 	}
 
-	meta := core.HandlerMeta{
+	meta := execution.HandlerMeta{
 		ControllerType: controllerType,
 		Method:         method,
 	}
@@ -301,13 +303,13 @@ func TestExecute_SuccessFlow(t *testing.T) {
 
 	p.AddArgumentResolver(&testArgumentResolver{
 		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
-		resolve:  func(ctx core.ExecutionContext, pm resolver.ParameterMeta) (any, error) { return 7, nil },
+		resolve:  func(ctx execution.Context, pm resolver.ParameterMeta) (any, error) { return 7, nil },
 	})
 
 	handled := false
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
-		handle: func(v any, ctx core.ExecutionContext) error {
+		handle: func(v any, ctx execution.Context) error {
 			events = append(events, "handle:success")
 			handled = true
 			if v.(string) != "ok" {
@@ -361,13 +363,13 @@ func TestExecute_PostHookFailureDiscardsPreparedSuccessResponse(t *testing.T) {
 
 	p.AddArgumentResolver(&testArgumentResolver{
 		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
-		resolve:  func(ctx core.ExecutionContext, pm resolver.ParameterMeta) (any, error) { return 7, nil },
+		resolve:  func(ctx execution.Context, pm resolver.ParameterMeta) (any, error) { return 7, nil },
 	})
 
 	handled := false
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
-		handle: func(v any, ctx core.ExecutionContext) error {
+		handle: func(v any, ctx execution.Context) error {
 			handled = true
 			rw := ctx.(core.HTTPResponseContext).ResponseWriter()
 			return rw.WriteStatus(204)
@@ -430,7 +432,7 @@ func TestExecute_AbortByInterceptor(t *testing.T) {
 	resolverCalled := false
 	p.AddArgumentResolver(&testArgumentResolver{
 		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
-		resolve: func(ctx core.ExecutionContext, pm resolver.ParameterMeta) (any, error) {
+		resolve: func(ctx execution.Context, pm resolver.ParameterMeta) (any, error) {
 			resolverCalled = true
 			return 1, nil
 		},
@@ -501,17 +503,17 @@ func TestExecute_GlobalAfterCompletionReceivesResolvedMeta(t *testing.T) {
 	p.router = &testRouter{meta: meta}
 	p.AddArgumentResolver(&testArgumentResolver{
 		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
-		resolve:  func(ctx core.ExecutionContext, pm resolver.ParameterMeta) (any, error) { return 1, nil },
+		resolve:  func(ctx execution.Context, pm resolver.ParameterMeta) (any, error) { return 1, nil },
 	})
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
-		handle:   func(v any, ctx core.ExecutionContext) error { return nil },
+		handle:   func(v any, ctx execution.Context) error { return nil },
 	})
 
 	if err := p.Execute(newTestExecutionContext()); err != nil {
 		t.Fatalf("실행 실패: %v", err)
 	}
-	if got.Method.Name != meta.Method.Name || got.ControllerType != meta.ControllerType {
+	if got.MethodName != meta.Method.Name || got.ControllerType != meta.ControllerType {
 		t.Fatalf("전역 AfterCompletion은 실제 meta를 받아야 합니다. got=%+v want=%+v", got, meta)
 	}
 }
@@ -535,11 +537,11 @@ func TestExecute_ResponsePreparationFailureSkipsPostHooks(t *testing.T) {
 
 	p.AddArgumentResolver(&testArgumentResolver{
 		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
-		resolve:  func(ctx core.ExecutionContext, pm resolver.ParameterMeta) (any, error) { return 7, nil },
+		resolve:  func(ctx execution.Context, pm resolver.ParameterMeta) (any, error) { return 7, nil },
 	})
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
-		handle: func(v any, ctx core.ExecutionContext) error {
+		handle: func(v any, ctx execution.Context) error {
 			return errors.New("write failed")
 		},
 	})
@@ -607,11 +609,11 @@ func TestExecute_NoContentTransportErrorReachesAfterCompletion(t *testing.T) {
 	p, _ := newPipelineWithController(t, "Handle", &controllerCalled)
 	p.AddArgumentResolver(&testArgumentResolver{
 		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
-		resolve:  func(core.ExecutionContext, resolver.ParameterMeta) (any, error) { return 7, nil },
+		resolve:  func(execution.Context, resolver.ParameterMeta) (any, error) { return 7, nil },
 	})
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
-		handle: func(_ any, ctx core.ExecutionContext) error {
+		handle: func(_ any, ctx execution.Context) error {
 			return ctx.(core.HTTPResponseContext).ResponseWriter().WriteStatus(http.StatusNoContent)
 		},
 	})
@@ -652,7 +654,7 @@ func TestExecute_RecoversErrorResponseAndAfterCompletionPanics(t *testing.T) {
 	})
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Implements(reflect.TypeFor[error]()) },
-		handle: func(v any, ctx core.ExecutionContext) error {
+		handle: func(v any, ctx execution.Context) error {
 			panic(errorHandlerPanic)
 		},
 	})
@@ -675,7 +677,7 @@ func TestExecute_BeforeResponseErrorsFlowFromRouteToGlobal(t *testing.T) {
 
 	p.AddArgumentResolver(&testArgumentResolver{
 		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
-		resolve:  func(ctx core.ExecutionContext, pm resolver.ParameterMeta) (any, error) { return 7, nil },
+		resolve:  func(ctx execution.Context, pm resolver.ParameterMeta) (any, error) { return 7, nil },
 	})
 
 	events := []string{}
@@ -708,7 +710,7 @@ func TestExecute_BeforeResponseFailurePreventsSuccessWrite(t *testing.T) {
 
 	p.AddArgumentResolver(&testArgumentResolver{
 		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
-		resolve:  func(ctx core.ExecutionContext, pm resolver.ParameterMeta) (any, error) { return 7, nil },
+		resolve:  func(ctx execution.Context, pm resolver.ParameterMeta) (any, error) { return 7, nil },
 	})
 
 	ctx := newTestExecutionContext()
@@ -734,7 +736,7 @@ func TestExecute_BeforeResponseFailurePreventsSuccessWrite(t *testing.T) {
 	successHandled := false
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
-		handle: func(v any, ctx core.ExecutionContext) error {
+		handle: func(v any, ctx execution.Context) error {
 			successHandled = true
 			return ctx.(core.HTTPResponseContext).ResponseWriter().WriteString(200, v.(string))
 		},
@@ -763,7 +765,7 @@ func TestExecute_ResponsePreparationFailureReachesBeforeResponseBeforeCommit(t *
 		t.Fatal("Handle 메서드를 찾을 수 없습니다")
 	}
 	p := NewPipeline(
-		&testRouter{meta: core.HandlerMeta{ControllerType: controllerType, Method: method}},
+		&testRouter{meta: execution.HandlerMeta{ControllerType: controllerType, Method: method}},
 		invoker.NewInvoker(ctr),
 	)
 	p.AddReturnValueHandler(&handler.JSONReturnHandler{}, &handler.ErrorReturnHandler{})
@@ -807,7 +809,7 @@ func TestExecute_CookieValidationFailureReachesBeforeResponseBeforeCommit(t *tes
 		t.Fatal("Handle 메서드를 찾을 수 없습니다")
 	}
 	p := NewPipeline(
-		&testRouter{meta: core.HandlerMeta{ControllerType: controllerType, Method: method}},
+		&testRouter{meta: execution.HandlerMeta{ControllerType: controllerType, Method: method}},
 		invoker.NewInvoker(ctr),
 	)
 	p.AddReturnValueHandler(&handler.StringReturnHandler{}, &handler.ErrorReturnHandler{})
@@ -839,11 +841,11 @@ func TestExecute_StagedTransportWriteFailureIsReturned(t *testing.T) {
 	p, _ := newPipelineWithController(t, "Handle", &controllerCalled)
 	p.AddArgumentResolver(&testArgumentResolver{
 		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
-		resolve:  func(core.ExecutionContext, resolver.ParameterMeta) (any, error) { return 7, nil },
+		resolve:  func(execution.Context, resolver.ParameterMeta) (any, error) { return 7, nil },
 	})
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
-		handle: func(value any, ctx core.ExecutionContext) error {
+		handle: func(value any, ctx execution.Context) error {
 			rw := ctx.(core.HTTPResponseContext).ResponseWriter()
 			return rw.WriteString(http.StatusOK, value.(string))
 		},

@@ -2,9 +2,9 @@ package endpoint
 
 import (
 	"fmt"
-	"github.com/NARUBROWN/spine/core"
 	"reflect"
 
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/input"
 	"github.com/NARUBROWN/spine/internal/resolver"
 	"github.com/NARUBROWN/spine/pkg/boot"
@@ -13,10 +13,10 @@ import (
 // DTOParameterIssues는 한 핸들러 안에서 같은 입력 DTO를 중복 주입하지 않도록 합니다.
 // 실제 실행과 같은 리졸버 순서로 DTO를 식별하며 생성자나 요청 처리는 실행하지 않습니다.
 func DTOParameterIssues(method reflect.Method, prefix, routePath string) []boot.ConfigIssue {
-	return HandlerDTOParameterIssues(core.HandlerMeta{Method: method}, prefix, routePath)
+	return HandlerDTOParameterIssues(execution.HandlerMeta{Method: method}, prefix, routePath)
 }
 
-func HandlerDTOParameterIssues(meta core.HandlerMeta, prefix, routePath string) []boot.ConfigIssue {
+func HandlerDTOParameterIssues(meta execution.HandlerMeta, prefix, routePath string) []boot.ConfigIssue {
 	handlerName := meta.Method.Name
 	if meta.Callback.IsValid() {
 		handlerName = meta.HandlerName()
