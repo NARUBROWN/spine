@@ -14,6 +14,7 @@ import (
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 	"github.com/labstack/echo/v5"
 )
 
@@ -36,7 +37,7 @@ type responseBaselineState struct {
 	afterError     error
 }
 
-func (s *responseBaselineState) observe(phase string, ctx core.ExecutionContext) {
+func (s *responseBaselineState) observe(phase string, ctx contextapi.Ctx) {
 	event := responseBaselineEvent{phase: phase}
 	if s.response != nil {
 		event.transportCommit = s.response.Committed
@@ -45,8 +46,10 @@ func (s *responseBaselineState) observe(phase string, ctx core.ExecutionContext)
 		event.writtenBytes = s.recorder.Body.Len()
 		event.successHeader = s.recorder.Header().Get("X-Success")
 	}
-	if response, ok := ctx.(core.HTTPResponseContext); ok && response.ResponseWriter() != nil {
-		event.prepared = response.ResponseWriter().IsCommitted()
+	if ctx != nil {
+		if response, ok := ctx.HTTP(); ok && response.Response() != nil {
+			event.prepared = response.Response().IsCommitted()
+		}
 	}
 
 	s.events = append(s.events, event)
@@ -104,22 +107,22 @@ type responseBaselineInterceptor struct {
 	state *responseBaselineState
 }
 
-func (i *responseBaselineInterceptor) PreHandle(ctx core.ExecutionContext, _ core.HandlerMeta) error {
+func (i *responseBaselineInterceptor) PreHandle(ctx contextapi.Ctx, _ core.HandlerMeta) error {
 	i.state.observe("pre", ctx)
 	return nil
 }
 
-func (i *responseBaselineInterceptor) PostHandle(ctx core.ExecutionContext, _ core.HandlerMeta) {
+func (i *responseBaselineInterceptor) PostHandle(ctx contextapi.Ctx, _ core.HandlerMeta) {
 	i.state.observe("post", ctx)
 }
 
-func (i *responseBaselineInterceptor) BeforeResponse(ctx core.ExecutionContext, _ core.HandlerMeta, err error) error {
+func (i *responseBaselineInterceptor) BeforeResponse(ctx contextapi.Ctx, _ core.HandlerMeta, err error) error {
 	i.state.observe("before", ctx)
 	i.state.beforeError = err
 	return i.state.finalizerError
 }
 
-func (i *responseBaselineInterceptor) AfterCompletion(ctx core.ExecutionContext, _ core.HandlerMeta, err error) {
+func (i *responseBaselineInterceptor) AfterCompletion(ctx contextapi.Ctx, _ core.HandlerMeta, err error) {
 	i.state.observe("after", ctx)
 	i.state.afterError = err
 }

@@ -9,6 +9,7 @@ import (
 	"runtime/debug"
 
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/contextview"
 	"github.com/NARUBROWN/spine/internal/event/hook"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/handler"
@@ -53,9 +54,9 @@ func (p *Pipeline) Execute(ctx execution.Context) (finalErr error) {
 		defer store.ReleaseStore()
 	}
 	globalMeta := execution.HandlerMeta{}
-	var interceptorCtx core.ExecutionContext
+	var interceptorCtx contextview.Ctx
 	if len(p.interceptors) > 0 {
-		interceptorCtx = execution.InterceptorView(ctx)
+		interceptorCtx = execution.NewContext(ctx)
 	}
 	var routeInterceptors []core.Interceptor
 	var globalFinalizers []core.Interceptor
@@ -159,7 +160,7 @@ func (p *Pipeline) Execute(ctx execution.Context) (finalErr error) {
 
 	routeInterceptors = meta.Interceptors
 	if interceptorCtx == nil && len(routeInterceptors) > 0 {
-		interceptorCtx = execution.InterceptorView(ctx)
+		interceptorCtx = execution.NewContext(ctx)
 	}
 
 	// 라우트 인터셉터는 요청 본문과 멀티파트를 읽기 전에 실행한다.
@@ -241,7 +242,7 @@ func findReturnedError(results []any) error {
 }
 
 func runBeforeResponse(
-	ctx core.ExecutionContext,
+	ctx contextview.Ctx,
 	meta execution.HandlerMeta,
 	routeInterceptors []core.Interceptor,
 	globalInterceptors []core.Interceptor,
@@ -263,7 +264,7 @@ func runBeforeResponse(
 
 func callBeforeResponse(
 	interceptor core.Interceptor,
-	ctx core.ExecutionContext,
+	ctx contextview.Ctx,
 	meta execution.HandlerMeta,
 	executionErr error,
 ) (err error) {
@@ -277,7 +278,7 @@ func callBeforeResponse(
 
 func callAfterCompletion(
 	interceptor core.Interceptor,
-	ctx core.ExecutionContext,
+	ctx contextview.Ctx,
 	meta execution.HandlerMeta,
 	executionErr error,
 ) (err error) {

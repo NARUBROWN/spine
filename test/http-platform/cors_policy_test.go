@@ -14,6 +14,7 @@ import (
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	"github.com/NARUBROWN/spine/pkg/route"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type corsProbe struct{ calls atomic.Int32 }
@@ -30,25 +31,26 @@ func (p *corsProbe) Options() httpx.Response[string] {
 
 type varyProbe struct{}
 
-func (*varyProbe) PreHandle(ctx core.ExecutionContext, _ core.HandlerMeta) error {
-	ctx.(core.HTTPResponseContext).ResponseWriter().SetHeader("Vary", "Accept-Encoding")
+func (*varyProbe) PreHandle(ctx contextapi.Ctx, _ core.HandlerMeta) error {
+	httpView, _ := ctx.HTTP()
+	httpView.Response().SetHeader("Vary", "Accept-Encoding")
 	return nil
 }
-func (*varyProbe) PostHandle(core.ExecutionContext, core.HandlerMeta)                  {}
-func (*varyProbe) BeforeResponse(core.ExecutionContext, core.HandlerMeta, error) error { return nil }
-func (*varyProbe) AfterCompletion(core.ExecutionContext, core.HandlerMeta, error)      {}
+func (*varyProbe) PostHandle(contextapi.Ctx, core.HandlerMeta)                  {}
+func (*varyProbe) BeforeResponse(contextapi.Ctx, core.HandlerMeta, error) error { return nil }
+func (*varyProbe) AfterCompletion(contextapi.Ctx, core.HandlerMeta, error)      {}
 
 type corsAuthProbe struct{ calls atomic.Int32 }
 
-func (p *corsAuthProbe) PreHandle(_ core.ExecutionContext, _ core.HandlerMeta) error {
+func (p *corsAuthProbe) PreHandle(_ contextapi.Ctx, _ core.HandlerMeta) error {
 	p.calls.Add(1)
 	return nil
 }
-func (*corsAuthProbe) PostHandle(core.ExecutionContext, core.HandlerMeta) {}
-func (*corsAuthProbe) BeforeResponse(core.ExecutionContext, core.HandlerMeta, error) error {
+func (*corsAuthProbe) PostHandle(contextapi.Ctx, core.HandlerMeta) {}
+func (*corsAuthProbe) BeforeResponse(contextapi.Ctx, core.HandlerMeta, error) error {
 	return nil
 }
-func (*corsAuthProbe) AfterCompletion(core.ExecutionContext, core.HandlerMeta, error) {}
+func (*corsAuthProbe) AfterCompletion(contextapi.Ctx, core.HandlerMeta, error) {}
 
 func TestCORSPolicyRealHTTP(t *testing.T) {
 	for _, engine := range []string{"echo", "nethttp"} {

@@ -21,10 +21,10 @@ for contract in contract/description contract/http contract/event contract/valid
   fi
 done
 
-# 핸들러용 공개 컨텍스트는 코어와 내부 구현의 의존성이 아닙니다.
-handler_context=$(go list -deps ./core/... ./internal/... | awk '$0 == "github.com/NARUBROWN/spine/pkg/spine"')
+# 공개 인터셉터 계약은 spine.Ctx를 사용하며 내부 구현은 내부 뷰 계약을 사용합니다.
+handler_context=$(go list -f '{{join .Imports "\n"}}' ./internal/... | awk '$0 == "github.com/NARUBROWN/spine/pkg/spine"')
 if [ -n "$handler_context" ]; then
-  printf 'Core or internal packages depend on the public handler context package.\n' >&2
+  printf 'Internal packages depend on the public handler context package.\n' >&2
   exit 1
 fi
 

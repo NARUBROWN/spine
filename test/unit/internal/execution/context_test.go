@@ -1,4 +1,4 @@
-package runtime
+package execution
 
 import (
 	"context"
@@ -22,9 +22,9 @@ func (c *testExecutionContext) Queries() map[string][]string { return map[string
 func (c *testExecutionContext) Set(key string, value any)    { c.store[key] = value }
 func (c *testExecutionContext) Get(key string) (any, bool)   { v, ok := c.store[key]; return v, ok }
 
-func TestNewControllerContext_ReadsFromExecutionContext(t *testing.T) {
+func TestNewContext_ReadsFromExecutionContext(t *testing.T) {
 	ec := &testExecutionContext{store: map[string]any{"userID": 7}}
-	ctx := NewControllerContext(ec)
+	ctx := NewContext(ec)
 
 	got, ok := ctx.Get("userID")
 	if !ok || got.(int) != 7 {

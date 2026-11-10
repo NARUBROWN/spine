@@ -5,6 +5,7 @@ import (
 	"mime/multipart"
 
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/contextview"
 	"github.com/NARUBROWN/spine/internal/event/emission"
 )
 
@@ -59,3 +60,6 @@ func GoContext(ctx Context) context.Context {
 	}
 	return parent
 }
+
+// WebSocketRequestContext는 내부 upgrade 요청의 불변 정보 계약입니다.
+type WebSocketRequestContext = contextview.WebSocketRequestView

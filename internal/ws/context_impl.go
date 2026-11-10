@@ -8,7 +8,6 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/event/emission"
 	"github.com/NARUBROWN/spine/internal/event/publish"
 	"github.com/NARUBROWN/spine/internal/execution"
@@ -100,7 +99,7 @@ func (s *webSocketRequestSnapshot) RemoteAddr() string { return s.remoteAddr }
 func (s *webSocketRequestSnapshot) Host() string       { return s.host }
 func (s *webSocketRequestSnapshot) RequestURI() string { return s.requestURI }
 
-func NewWSExecutionContext(ctx context.Context, connID string, path string, messageType int, payload []byte, eventBus publish.EventBus, sendFn func(int, []byte) error, request ...core.WebSocketHandshakeContext) execution.WebSocketContext {
+func NewWSExecutionContext(ctx context.Context, connID string, path string, messageType int, payload []byte, eventBus publish.EventBus, sendFn func(int, []byte) error, request ...execution.WebSocketRequestContext) execution.WebSocketContext {
 	ctx = sendctx.With(ctx, sendFn)
 	requestSnapshot := &webSocketRequestSnapshot{
 		ctx:     ctx,
@@ -124,7 +123,7 @@ func NewWSExecutionContext(ctx context.Context, connID string, path string, mess
 	}
 }
 
-func snapshotWebSocketRequest(ctx context.Context, request core.WebSocketHandshakeContext) *webSocketRequestSnapshot {
+func snapshotWebSocketRequest(ctx context.Context, request execution.WebSocketRequestContext) *webSocketRequestSnapshot {
 	headers := make(http.Header)
 	for key, values := range request.Headers() {
 		headers[key] = append([]string(nil), values...)

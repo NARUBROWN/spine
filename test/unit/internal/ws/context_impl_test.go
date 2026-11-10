@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NARUBROWN/spine/core"
 	internalpublish "github.com/NARUBROWN/spine/internal/event/publish"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/pkg/event/publish"
@@ -158,7 +157,7 @@ func TestWSExecutionContext_ClonesCookiesFromCustomHandshakeContext(t *testing.T
 	)
 	request.cookies["session"] = "changed"
 
-	messageCtx, ok := ctx.(core.WebSocketMessageContext)
+	messageCtx, ok := ctx.(execution.WebSocketRequestContext)
 	if !ok {
 		t.Fatal("WebSocket message context 계약을 구현해야 합니다")
 	}
@@ -170,12 +169,15 @@ func TestWSExecutionContext_ClonesCookiesFromCustomHandshakeContext(t *testing.T
 func TestInterceptorMessageViewCopiesPayloadAndHidesExecution(t *testing.T) {
 	ctx := NewWSExecutionContext(context.Background(), "conn-1", "/ws/echo", pkgws.TextMessage,
 		[]byte("original"), nil, func(int, []byte) error { return nil })
-	public, ok := execution.InterceptorView(ctx).(core.WebSocketMessageContext)
+	public, ok := execution.NewContext(ctx).WebSocket()
 	if !ok {
 		t.Fatal("WebSocket 메시지 뷰가 없습니다")
 	}
 	if _, ok := public.(execution.Context); ok {
 		t.Fatal("공개 메시지 뷰가 내부 실행 계약을 구현합니다")
+	}
+	if _, ok := public.(interface{ Set(string, any) }); ok {
+		t.Fatal("WebSocket 뷰가 값 저장소를 노출합니다")
 	}
 	public.Payload()[0] = 'X'
 	if got := string(ctx.Payload()); got != "original" {
@@ -191,7 +193,7 @@ func (viewEvent) OccurredAt() time.Time { return time.Time{} }
 func TestInterceptorViewPublishesThroughGoContext(t *testing.T) {
 	ctx := NewWSExecutionContext(context.Background(), "conn-1", "/ws/echo", pkgws.TextMessage,
 		nil, nil, func(int, []byte) error { return nil })
-	publish.Event(execution.InterceptorView(ctx).Context(), viewEvent{})
+	publish.Event(execution.NewContext(ctx).ExecutionContext().Context(), viewEvent{})
 	events := ctx.EventBus().Drain()
 	if len(events) != 1 || events[0].Name() != "message.received" {
 		t.Fatalf("이벤트가 내부 버스에 전달되지 않았습니다: %v", events)

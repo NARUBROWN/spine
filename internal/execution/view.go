@@ -7,61 +7,84 @@ import (
 	"net/textproto"
 	"slices"
 
-	"github.com/NARUBROWN/spine/core"
+	httpcontract "github.com/NARUBROWN/spine/contract/http"
+	"github.com/NARUBROWN/spine/internal/contextview"
 )
 
-// InterceptorView는 실행 객체를 그대로 넘기지 않고 전송별 공개 기능을 제공합니다.
-func InterceptorView(ctx Context) core.ExecutionContext {
-	view := interceptorView{source: ctx}
-	if message, ok := ctx.(WebSocketContext); ok {
-		if request, ok := ctx.(core.WebSocketRequestContext); ok {
-			return webSocketView{interceptorView: view, request: request, message: message}
-		}
-	}
-	if response, ok := ctx.(HTTPResponseContext); ok {
-		responseView := httpResponseView{interceptorView: view, response: response}
-		if request, ok := ctx.(HTTPRequestContext); ok {
-			return httpView{httpResponseView: responseView, request: request}
-		}
-		return responseView
-	}
-	return view
+// NewContext는 내부 실행을 감싼 공통 공개 컨텍스트를 반환합니다.
+func NewContext(ctx Context) contextview.Ctx {
+	return publicContext{source: ctx}
 }
 
-type interceptorView struct{ source Context }
+type publicContext struct{ source Context }
 
-func (v interceptorView) Context() context.Context     { return GoContext(v.source) }
-func (v interceptorView) Method() string               { return v.source.Method() }
-func (v interceptorView) Path() string                 { return v.source.Path() }
-func (v interceptorView) Params() map[string]string    { return v.source.Params() }
-func (v interceptorView) Header(name string) string    { return v.source.Header(name) }
-func (v interceptorView) PathKeys() []string           { return v.source.PathKeys() }
-func (v interceptorView) Queries() map[string][]string { return v.source.Queries() }
-func (v interceptorView) Set(key string, value any)    { v.source.Set(key, value) }
-func (v interceptorView) Get(key string) (any, bool)   { return v.source.Get(key) }
+func (v publicContext) Get(key string) (any, bool) { return v.source.Get(key) }
+func (v publicContext) ExecutionContext() contextview.ExecutionContextView {
+	return executionView{source: v.source}
+}
+func (v publicContext) HTTP() (contextview.HTTPView, bool) {
+	request, ok := v.source.(HTTPRequestContext)
+	if !ok {
+		return nil, false
+	}
+	response, ok := v.source.(HTTPResponseContext)
+	if !ok {
+		return nil, false
+	}
+	return httpView{
+		source:   v.source,
+		request:  request,
+		response: response,
+	}, true
+}
+func (v publicContext) WebSocket() (contextview.WebSocketView, bool) {
+	message, ok := v.source.(WebSocketContext)
+	if !ok {
+		return nil, false
+	}
+	request, ok := v.source.(WebSocketRequestContext)
+	if !ok {
+		return nil, false
+	}
+	return webSocketView{
+		source:  v.source,
+		request: request,
+		message: message,
+	}, true
+}
 
-type httpResponseView struct {
-	interceptorView
+type executionView struct{ source Context }
+
+func (v executionView) Context() context.Context   { return GoContext(v.source) }
+func (v executionView) Get(key string) (any, bool) { return v.source.Get(key) }
+func (v executionView) Set(key string, value any)  { v.source.Set(key, value) }
+
+type httpView struct {
+	source   Context
+	request  HTTPRequestContext
 	response HTTPResponseContext
 }
 
-func (v httpResponseView) ResponseWriter() core.ResponseWriter { return v.response.ResponseWriter() }
-
-type httpView struct {
-	httpResponseView
-	request HTTPRequestContext
-}
+func (v httpView) Context() context.Context              { return GoContext(v.source) }
+func (v httpView) Request() contextview.HTTPRequestView  { return v }
+func (v httpView) Response() httpcontract.ResponseWriter { return v.response.ResponseWriter() }
+func (v httpView) Method() string                        { return v.source.Method() }
+func (v httpView) Path() string                          { return v.source.Path() }
+func (v httpView) Params() map[string]string             { return v.source.Params() }
+func (v httpView) PathKeys() []string                    { return v.source.PathKeys() }
+func (v httpView) Header(name string) string             { return v.request.Header(name) }
+func (v httpView) Queries() map[string][]string          { return v.request.Queries() }
 
 func (v httpView) Param(name string) string     { return v.request.Param(name) }
 func (v httpView) Query(name string) string     { return v.request.Query(name) }
 func (v httpView) Headers() map[string][]string { return v.request.Headers() }
-func (v httpView) MultipartForm() (core.MultipartFields, error) {
+func (v httpView) MultipartForm() (contextview.MultipartFields, error) {
 	form, err := v.request.MultipartForm()
 	if err != nil || form == nil {
-		return core.MultipartFields{}, err
+		return contextview.MultipartFields{}, err
 	}
 
-	fields := core.MultipartFields{
+	fields := contextview.MultipartFields{
 		Value: make(map[string][]string, len(form.Value)),
 		File:  make(map[string][]*multipart.FileHeader, len(form.File)),
 	}
@@ -83,14 +106,18 @@ func (v httpView) MultipartForm() (core.MultipartFields, error) {
 }
 
 type webSocketView struct {
-	interceptorView
-	request core.WebSocketRequestContext
+	source  Context
+	request WebSocketRequestContext
 	message WebSocketContext
 }
 
+func (v webSocketView) Context() context.Context          { return GoContext(v.source) }
 func (v webSocketView) ConnID() string                    { return v.message.ConnID() }
 func (v webSocketView) MessageType() int                  { return v.message.MessageType() }
 func (v webSocketView) Payload() []byte                   { return slices.Clone(v.message.Payload()) }
+func (v webSocketView) Path() string                      { return v.request.Path() }
+func (v webSocketView) Header(name string) string         { return v.request.Header(name) }
+func (v webSocketView) Queries() map[string][]string      { return v.request.Queries() }
 func (v webSocketView) Headers() map[string][]string      { return v.request.Headers() }
 func (v webSocketView) Query(name string) string          { return v.request.Query(name) }
 func (v webSocketView) Cookie(name string) (string, bool) { return v.request.Cookie(name) }

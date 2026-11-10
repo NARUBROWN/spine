@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"github.com/NARUBROWN/spine/internal/execution"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -85,13 +87,14 @@ func TestRuntimeStopClosesConnectionsConcurrently(t *testing.T) {
 	}
 }
 
-func (i *rejectingHandshakeInterceptor) PreHandshake(ctx core.WebSocketHandshakeContext, _ core.HandlerMeta) error {
+func (i *rejectingHandshakeInterceptor) PreHandshake(ctx contextapi.Ctx, _ core.HandlerMeta) error {
 	i.calls.Add(1)
-	i.lastHeader = ctx.Header("Authorization")
-	i.lastQuery = ctx.Query("token")
-	i.lastCookie, _ = ctx.Cookie("session")
-	i.lastRemote = ctx.RemoteAddr()
-	i.lastHost = ctx.Host()
+	request, _ := ctx.WebSocket()
+	i.lastHeader = request.Header("Authorization")
+	i.lastQuery = request.Query("token")
+	i.lastCookie, _ = request.Cookie("session")
+	i.lastRemote = request.RemoteAddr()
+	i.lastHost = request.Host()
 	return errors.New("unauthorized")
 }
 
@@ -109,15 +112,15 @@ type cancellationHandshakeInterceptor struct {
 	release  chan struct{}
 }
 
-func (i *cancellationHandshakeInterceptor) PreHandshake(ctx core.WebSocketHandshakeContext, _ core.HandlerMeta) error {
+func (i *cancellationHandshakeInterceptor) PreHandshake(ctx contextapi.Ctx, _ core.HandlerMeta) error {
 	close(i.started)
-	<-ctx.Context().Done()
+	<-ctx.ExecutionContext().Context().Done()
 	close(i.canceled)
 	<-i.release
-	return ctx.Context().Err()
+	return ctx.ExecutionContext().Context().Err()
 }
 
-func (i *capacityHandshakeInterceptor) PreHandshake(core.WebSocketHandshakeContext, core.HandlerMeta) error {
+func (i *capacityHandshakeInterceptor) PreHandshake(contextapi.Ctx, core.HandlerMeta) error {
 	call := i.calls.Add(1)
 	active := i.active.Add(1)
 	defer i.active.Add(-1)
@@ -325,7 +328,7 @@ func TestWSExecutionContext_PreservesImmutableHandshakeRequestSnapshot(t *testin
 	request.Header.Set("Authorization", "Bearer after")
 	request.URL.RawQuery = "token=after"
 
-	ctx, ok := messageContext.(core.WebSocketMessageContext)
+	ctx, ok := messageContext.(execution.WebSocketRequestContext)
 	if !ok {
 		t.Fatalf("message context = %T, want core.WebSocketMessageContext", messageContext)
 	}
@@ -429,4 +432,60 @@ type failingUpgradeAdapter struct{}
 func (failingUpgradeAdapter) Upgrade(w http.ResponseWriter, _ *http.Request) (wsadapter.Connection, error) {
 	http.Error(w, "upgrade rejected by test adapter", http.StatusBadRequest)
 	return nil, errors.New("upgrade rejected by test adapter")
+}
+
+type handshakeStoreProbe struct {
+	run func(contextapi.Ctx) error
+}
+
+func (p *handshakeStoreProbe) PreHandshake(ctx contextapi.Ctx, _ core.HandlerMeta) error {
+	return p.run(ctx)
+}
+
+func TestHandshakeContextStoreIsSharedAndReleased(t *testing.T) {
+	for _, outcome := range []string{"success", "error", "panic"} {
+		t.Run(outcome, func(t *testing.T) {
+			var retained contextapi.Ctx
+			read := false
+			writer := &handshakeStoreProbe{run: func(ctx contextapi.Ctx) error {
+				retained = ctx
+				if _, ok := ctx.HTTP(); ok {
+					t.Fatal("handshake가 HTTP 실행 뷰를 노출합니다")
+				}
+				socket, ok := ctx.WebSocket()
+				if !ok || socket.Path() != "/chat" || socket.Header("X-Request-ID") != "handshake" || socket.ConnID() != "" || socket.MessageType() != 0 || socket.Payload() != nil {
+					t.Fatal("handshake 뷰가 upgrade 전 요청 정보를 보존하지 않습니다")
+				}
+				ctx.ExecutionContext().Set("authenticated", true)
+				if outcome == "error" {
+					return errors.New("rejected")
+				}
+				if outcome == "panic" {
+					panic("handshake panic")
+				}
+				return nil
+			}}
+			reader := &handshakeStoreProbe{run: func(ctx contextapi.Ctx) error {
+				value, ok := ctx.ExecutionContext().Get("authenticated")
+				if !ok || value != true {
+					t.Fatal("후속 handshake 인터셉터가 앞선 값을 읽지 못했습니다")
+				}
+				read = true
+				return nil
+			}}
+			runtime := &Runtime{handshakeInterceptors: []core.WebSocketHandshakeInterceptor{writer, reader}}
+			request := httptest.NewRequest(http.MethodGet, "/chat", nil)
+			request.Header.Set("X-Request-ID", "handshake")
+			err := runtime.preHandshake(newWebSocketRequestSnapshot(request), Registration{})
+			if (err != nil) != (outcome != "success") || read != (outcome == "success") {
+				t.Fatalf("err=%v read=%v", err, read)
+			}
+			retained.ExecutionContext().Set("late", true)
+			for _, key := range []string{"authenticated", "late"} {
+				if _, ok := retained.ExecutionContext().Get(key); ok {
+					t.Fatalf("종료된 handshake 저장소에 값이 남았습니다: %s", key)
+				}
+			}
+		})
+	}
 }

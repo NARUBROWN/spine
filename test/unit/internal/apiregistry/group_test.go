@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/NARUBROWN/spine/core"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 func TestGroupsComposeAndFreeze(t *testing.T) {
@@ -45,12 +46,12 @@ func TestInvalidGroupPath(t *testing.T) {
 
 type groupInterceptor struct{ name string }
 
-func (*groupInterceptor) PreHandle(core.ExecutionContext, core.HandlerMeta) error { return nil }
-func (*groupInterceptor) PostHandle(core.ExecutionContext, core.HandlerMeta)      {}
-func (*groupInterceptor) BeforeResponse(core.ExecutionContext, core.HandlerMeta, error) error {
+func (*groupInterceptor) PreHandle(contextapi.Ctx, core.HandlerMeta) error { return nil }
+func (*groupInterceptor) PostHandle(contextapi.Ctx, core.HandlerMeta)      {}
+func (*groupInterceptor) BeforeResponse(contextapi.Ctx, core.HandlerMeta, error) error {
 	return nil
 }
-func (*groupInterceptor) AfterCompletion(core.ExecutionContext, core.HandlerMeta, error) {}
+func (*groupInterceptor) AfterCompletion(contextapi.Ctx, core.HandlerMeta, error) {}
 func TestGroupInterceptorsAreInheritedInOrder(t *testing.T) {
 	outer, inner, local := &groupInterceptor{"outer"}, &groupInterceptor{"inner"}, &groupInterceptor{"local"}
 	r := New(nil)

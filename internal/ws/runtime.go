@@ -16,6 +16,7 @@ import (
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/contextview"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/httpfailure"
 	"github.com/NARUBROWN/spine/internal/pipeline"
@@ -313,12 +314,15 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 	}
 }
 
-func (r *Runtime) preHandshake(ctx core.WebSocketHandshakeContext, reg Registration) error {
+func (r *Runtime) preHandshake(ctx execution.WebSocketRequestContext, reg Registration) error {
+	executionCtx := NewWSExecutionContext(ctx.Context(), "", ctx.Path(), 0, nil, nil, nil, ctx)
+	defer executionCtx.(interface{ ReleaseStore() }).ReleaseStore()
+	publicCtx := execution.NewContext(executionCtx)
 	for _, interceptor := range r.handshakeInterceptors {
 		if interceptor == nil {
 			continue
 		}
-		if err := callPreHandshake(interceptor, ctx, reg.Meta); err != nil {
+		if err := callPreHandshake(interceptor, publicCtx, reg.Meta); err != nil {
 			return err
 		}
 	}
@@ -327,14 +331,14 @@ func (r *Runtime) preHandshake(ctx core.WebSocketHandshakeContext, reg Registrat
 		if !ok {
 			continue
 		}
-		if err := callPreHandshake(handshakeInterceptor, ctx, reg.Meta); err != nil {
+		if err := callPreHandshake(handshakeInterceptor, publicCtx, reg.Meta); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func callPreHandshake(interceptor core.WebSocketHandshakeInterceptor, ctx core.WebSocketHandshakeContext, meta execution.HandlerMeta) (err error) {
+func callPreHandshake(interceptor core.WebSocketHandshakeInterceptor, ctx contextview.Ctx, meta execution.HandlerMeta) (err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			err = fmt.Errorf("websocket handshake interceptor panic: %v", recovered)

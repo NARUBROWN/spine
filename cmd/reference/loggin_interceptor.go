@@ -4,39 +4,44 @@ import (
 	"log"
 
 	"github.com/NARUBROWN/spine/core"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type LoggingInterceptor struct{}
 
 func (i *LoggingInterceptor) PreHandle(
-	ctx core.ExecutionContext,
+	ctx contextapi.Ctx,
 	meta core.HandlerMeta,
 ) error {
+	httpView, _ := ctx.HTTP()
+	request := httpView.Request()
 	log.Printf(
 		"[REQ] %s %s -> %s.%s",
-		ctx.Method(),
-		ctx.Path(),
+		request.Method(),
+		request.Path(),
 		meta.ControllerType.Name(),
 		meta.HandlerName(),
 	)
-	ctx.Set("test", "test")
+	ctx.ExecutionContext().Set("test", "test")
 
 	return nil
 }
 
 func (i *LoggingInterceptor) PostHandle(
-	ctx core.ExecutionContext,
+	ctx contextapi.Ctx,
 	meta core.HandlerMeta,
 ) {
+	httpView, _ := ctx.HTTP()
+	request := httpView.Request()
 	log.Printf(
 		"[RES] %s %s OK",
-		ctx.Method(),
-		ctx.Path(),
+		request.Method(),
+		request.Path(),
 	)
 }
 
 func (i *LoggingInterceptor) BeforeResponse(
-	ctx core.ExecutionContext,
+	ctx contextapi.Ctx,
 	meta core.HandlerMeta,
 	executionErr error,
 ) error {
@@ -44,15 +49,17 @@ func (i *LoggingInterceptor) BeforeResponse(
 }
 
 func (i *LoggingInterceptor) AfterCompletion(
-	ctx core.ExecutionContext,
+	ctx contextapi.Ctx,
 	meta core.HandlerMeta,
 	err error,
 ) {
 	if err != nil {
+		httpView, _ := ctx.HTTP()
+		request := httpView.Request()
 		log.Printf(
 			"[ERR] %s %s : %v",
-			ctx.Method(),
-			ctx.Path(),
+			request.Method(),
+			request.Path(),
 			err,
 		)
 	}

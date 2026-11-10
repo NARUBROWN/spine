@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/NARUBROWN/spine/core"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 const (
@@ -102,30 +103,31 @@ type CORSInterceptor struct {
 	configErr error
 }
 
-func (i *CORSInterceptor) PreHandle(ctx core.ExecutionContext, meta core.HandlerMeta) error {
+func (i *CORSInterceptor) PreHandle(ctx contextapi.Ctx, meta core.HandlerMeta) error {
 	if i.configErr != nil {
 		return i.configErr
 	}
-	response, ok := ctx.(core.HTTPResponseContext)
-	if !ok || response.ResponseWriter() == nil {
+	httpView, ok := ctx.HTTP()
+	if !ok || httpView.Response() == nil {
 		return nil
 	}
-	rw := response.ResponseWriter()
-	origin := ctx.Header("Origin")
-	requestedMethod := ctx.Header("Access-Control-Request-Method")
-	preflight := ctx.Method() == http.MethodOptions && origin != "" && requestedMethod != ""
+	rw := httpView.Response()
+	request := httpView.Request()
+	origin := request.Header("Origin")
+	requestedMethod := request.Header("Access-Control-Request-Method")
+	preflight := request.Method() == http.MethodOptions && origin != "" && requestedMethod != ""
 	// AddHeader는 기존 Vary를 지우지 않습니다. 여러 Vary 헤더는 같은 목록입니다.
 	rw.AddHeader("Vary", "Origin")
-	if ctx.Method() == http.MethodOptions {
+	if request.Method() == http.MethodOptions {
 		rw.AddHeader("Vary", "Access-Control-Request-Method")
 		rw.AddHeader("Vary", "Access-Control-Request-Headers")
 	}
-	allowed, err := i.allowedOrigin(ctx.Context(), origin)
+	allowed, err := i.allowedOrigin(ctx.ExecutionContext().Context(), origin)
 	if err != nil {
 		return fmt.Errorf("CORS origin decision: %w", err)
 	}
 	if preflight {
-		requestedHeaders, valid := parseRequestedHeaders(ctx.Header("Access-Control-Request-Headers"))
+		requestedHeaders, valid := parseRequestedHeaders(request.Header("Access-Control-Request-Headers"))
 		if !allowed || !httpToken(requestedMethod) || !i.allowedMethod(requestedMethod) || !valid || !i.allowedHeaders(requestedHeaders) {
 			if err := rw.WriteStatus(http.StatusForbidden); err != nil {
 				return err
@@ -224,8 +226,8 @@ func httpToken(value string) bool {
 	return true
 }
 
-func (i *CORSInterceptor) PostHandle(core.ExecutionContext, core.HandlerMeta) {}
-func (i *CORSInterceptor) BeforeResponse(core.ExecutionContext, core.HandlerMeta, error) error {
+func (i *CORSInterceptor) PostHandle(contextapi.Ctx, core.HandlerMeta) {}
+func (i *CORSInterceptor) BeforeResponse(contextapi.Ctx, core.HandlerMeta, error) error {
 	return nil
 }
-func (i *CORSInterceptor) AfterCompletion(core.ExecutionContext, core.HandlerMeta, error) {}
+func (i *CORSInterceptor) AfterCompletion(contextapi.Ctx, core.HandlerMeta, error) {}

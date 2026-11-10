@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	eventadapter "github.com/NARUBROWN/spine/contract/event"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 	"net"
 	"strings"
 	"sync"
@@ -667,17 +668,17 @@ type bootstrapTestInterceptor struct{ calls atomic.Int32 }
 
 type bootstrapHandshakeInterceptor struct{ bootstrapTestInterceptor }
 
-func (*bootstrapHandshakeInterceptor) PreHandshake(core.WebSocketHandshakeContext, core.HandlerMeta) error {
+func (*bootstrapHandshakeInterceptor) PreHandshake(contextapi.Ctx, core.HandlerMeta) error {
 	return nil
 }
 
-func (i *bootstrapTestInterceptor) PreHandle(core.ExecutionContext, core.HandlerMeta) error {
+func (i *bootstrapTestInterceptor) PreHandle(contextapi.Ctx, core.HandlerMeta) error {
 	i.calls.Add(1)
 	return nil
 }
-func (*bootstrapTestInterceptor) PostHandle(core.ExecutionContext, core.HandlerMeta) {}
-func (*bootstrapTestInterceptor) BeforeResponse(core.ExecutionContext, core.HandlerMeta, error) error {
+func (*bootstrapTestInterceptor) PostHandle(contextapi.Ctx, core.HandlerMeta) {}
+func (*bootstrapTestInterceptor) BeforeResponse(contextapi.Ctx, core.HandlerMeta, error) error {
 	return nil
 }
-func (*bootstrapTestInterceptor) AfterCompletion(core.ExecutionContext, core.HandlerMeta, error) {
+func (*bootstrapTestInterceptor) AfterCompletion(contextapi.Ctx, core.HandlerMeta, error) {
 }

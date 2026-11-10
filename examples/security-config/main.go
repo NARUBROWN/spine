@@ -13,16 +13,17 @@ import (
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/interceptor/cors"
 	"github.com/NARUBROWN/spine/pkg/boot"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type auditInterceptor struct{}
 
-func (*auditInterceptor) PreHandle(core.ExecutionContext, core.HandlerMeta) error { return nil }
-func (*auditInterceptor) PostHandle(core.ExecutionContext, core.HandlerMeta)      {}
-func (*auditInterceptor) BeforeResponse(core.ExecutionContext, core.HandlerMeta, error) error {
+func (*auditInterceptor) PreHandle(contextapi.Ctx, core.HandlerMeta) error { return nil }
+func (*auditInterceptor) PostHandle(contextapi.Ctx, core.HandlerMeta)      {}
+func (*auditInterceptor) BeforeResponse(contextapi.Ctx, core.HandlerMeta, error) error {
 	return nil
 }
-func (*auditInterceptor) AfterCompletion(core.ExecutionContext, core.HandlerMeta, error) {
+func (*auditInterceptor) AfterCompletion(contextapi.Ctx, core.HandlerMeta, error) {
 }
 
 func secureApp(rabbitURL string) (spine.App, boot.Options, error) {

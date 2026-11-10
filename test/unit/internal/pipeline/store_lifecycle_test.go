@@ -14,7 +14,6 @@ import (
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/internal/router"
-	"github.com/NARUBROWN/spine/internal/runtime"
 	"github.com/NARUBROWN/spine/internal/transport"
 	"github.com/NARUBROWN/spine/internal/ws"
 	"github.com/NARUBROWN/spine/pkg/spine"
@@ -29,27 +28,27 @@ func (storeScope) RawPath() string                     { return "/probe" }
 
 type storeObserver struct {
 	t         *testing.T
-	retained  core.ExecutionContext
+	retained  spine.Ctx
 	completed bool
 }
 
-func (o *storeObserver) PreHandle(ctx core.ExecutionContext, _ core.HandlerMeta) error {
+func (o *storeObserver) PreHandle(ctx spine.Ctx, _ core.HandlerMeta) error {
 	o.retained = ctx
-	ctx.Set("payload", make([]byte, 1024))
+	ctx.ExecutionContext().Set("payload", make([]byte, 1024))
 	if _, ok := any(ctx).(interface{ ReleaseStore() }); ok {
 		o.t.Error("공개 뷰가 저장값의 수명을 변경할 수 있습니다")
 	}
 	return nil
 }
-func (*storeObserver) PostHandle(core.ExecutionContext, core.HandlerMeta) {}
-func (*storeObserver) BeforeResponse(core.ExecutionContext, core.HandlerMeta, error) error {
+func (*storeObserver) PostHandle(spine.Ctx, core.HandlerMeta) {}
+func (*storeObserver) BeforeResponse(spine.Ctx, core.HandlerMeta, error) error {
 	return nil
 }
-func (o *storeObserver) AfterCompletion(ctx core.ExecutionContext, _ core.HandlerMeta, _ error) {
-	if _, ok := ctx.Get("payload"); !ok {
+func (o *storeObserver) AfterCompletion(ctx spine.Ctx, _ core.HandlerMeta, _ error) {
+	if _, ok := ctx.ExecutionContext().Get("payload"); !ok {
 		o.t.Error("완료 훅이 끝나기 전에 저장소가 정리됐습니다")
 	}
-	ctx.Set("completion", true)
+	ctx.ExecutionContext().Set("completion", true)
 	o.completed = true
 }
 
@@ -70,7 +69,28 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 			for _, outcome := range []string{"success", "error", "panic"} {
 				t.Run(outcome, func(t *testing.T) {
 					ctx := create()
-					var retainedHandler spine.Ctx = runtime.NewControllerContext(ctx)
+					public := execution.NewContext(ctx)
+					if _, ok := public.HTTP(); ok != (name == "http") {
+						t.Fatal("전송 종류와 HTTP 뷰 지원 여부가 다릅니다")
+					}
+					if _, ok := public.WebSocket(); ok != (name == "websocket") {
+						t.Fatal("전송 종류와 WebSocket 뷰 지원 여부가 다릅니다")
+					}
+					views := []any{public, public.ExecutionContext()}
+					if httpView, ok := public.HTTP(); ok {
+						views = append(views, httpView, httpView.Request())
+					}
+					if socket, ok := public.WebSocket(); ok {
+						views = append(views, socket)
+					}
+					for _, view := range views {
+						for _, method := range []string{"ReleaseStore", "SetRoute", "EventBus", "SetResponseWriter", "Bind"} {
+							if _, exposed := reflect.TypeOf(view).MethodByName(method); exposed {
+								t.Fatalf("공개 뷰 %T에 내부 제어 메서드가 노출됐습니다: %s", view, method)
+							}
+						}
+					}
+					var retainedHandler spine.Ctx = execution.NewContext(ctx)
 					observer := &storeObserver{t: t}
 					callback := func() error {
 						switch outcome {
@@ -89,9 +109,9 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 					if (err != nil) != (outcome != "success") || !observer.completed {
 						t.Fatalf("err=%v completed=%v", err, observer.completed)
 					}
-					observer.retained.Set("late", make([]byte, 1024))
+					observer.retained.ExecutionContext().Set("late", make([]byte, 1024))
 					for _, key := range []string{"payload", "completion", "late"} {
-						if _, ok := observer.retained.Get(key); ok {
+						if _, ok := observer.retained.ExecutionContext().Get(key); ok {
 							t.Fatalf("보관된 인터셉터 뷰에 값이 남았습니다: %s", key)
 						}
 						if _, ok := retainedHandler.ExecutionContext().Get(key); ok {

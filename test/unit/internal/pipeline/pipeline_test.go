@@ -21,6 +21,7 @@ import (
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	"github.com/NARUBROWN/spine/pkg/path"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type testEventBus struct{}
@@ -95,21 +96,21 @@ type testInterceptor struct {
 	after     func(core.HandlerMeta, error)
 }
 
-func (i *testInterceptor) PreHandle(ctx core.ExecutionContext, meta core.HandlerMeta) error {
+func (i *testInterceptor) PreHandle(ctx contextapi.Ctx, meta core.HandlerMeta) error {
 	*i.events = append(*i.events, "pre:"+i.name)
 	return i.preErr
 }
-func (i *testInterceptor) PostHandle(ctx core.ExecutionContext, meta core.HandlerMeta) {
+func (i *testInterceptor) PostHandle(ctx contextapi.Ctx, meta core.HandlerMeta) {
 	*i.events = append(*i.events, "post:"+i.name)
 }
-func (i *testInterceptor) BeforeResponse(ctx core.ExecutionContext, meta core.HandlerMeta, err error) error {
+func (i *testInterceptor) BeforeResponse(ctx contextapi.Ctx, meta core.HandlerMeta, err error) error {
 	*i.events = append(*i.events, "before:"+i.name)
 	if i.before != nil {
 		i.before(meta, err)
 	}
 	return i.beforeErr
 }
-func (i *testInterceptor) AfterCompletion(ctx core.ExecutionContext, meta core.HandlerMeta, err error) {
+func (i *testInterceptor) AfterCompletion(ctx contextapi.Ctx, meta core.HandlerMeta, err error) {
 	*i.events = append(*i.events, "after:"+i.name)
 	if i.after != nil {
 		i.after(meta, err)
@@ -371,7 +372,7 @@ func TestExecute_PostHookFailureDiscardsPreparedSuccessResponse(t *testing.T) {
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
 		handle: func(v any, ctx execution.Context) error {
 			handled = true
-			rw := ctx.(core.HTTPResponseContext).ResponseWriter()
+			rw := ctx.(execution.HTTPResponseContext).ResponseWriter()
 			return rw.WriteStatus(204)
 		},
 	})
@@ -614,7 +615,7 @@ func TestExecute_NoContentTransportErrorReachesAfterCompletion(t *testing.T) {
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
 		handle: func(_ any, ctx execution.Context) error {
-			return ctx.(core.HTTPResponseContext).ResponseWriter().WriteStatus(http.StatusNoContent)
+			return ctx.(execution.HTTPResponseContext).ResponseWriter().WriteStatus(http.StatusNoContent)
 		},
 	})
 	want := errors.New("transport write failed")
@@ -738,7 +739,7 @@ func TestExecute_BeforeResponseFailurePreventsSuccessWrite(t *testing.T) {
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
 		handle: func(v any, ctx execution.Context) error {
 			successHandled = true
-			return ctx.(core.HTTPResponseContext).ResponseWriter().WriteString(200, v.(string))
+			return ctx.(execution.HTTPResponseContext).ResponseWriter().WriteString(200, v.(string))
 		},
 	})
 
@@ -846,7 +847,7 @@ func TestExecute_StagedTransportWriteFailureIsReturned(t *testing.T) {
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
 		handle: func(value any, ctx execution.Context) error {
-			rw := ctx.(core.HTTPResponseContext).ResponseWriter()
+			rw := ctx.(execution.HTTPResponseContext).ResponseWriter()
 			return rw.WriteString(http.StatusOK, value.(string))
 		},
 	})

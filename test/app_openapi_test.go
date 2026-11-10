@@ -19,19 +19,20 @@ import (
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/pkg/boot"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type openAPIInterceptor struct{ calls atomic.Int32 }
 
-func (i *openAPIInterceptor) PreHandle(core.ExecutionContext, core.HandlerMeta) error {
+func (i *openAPIInterceptor) PreHandle(contextapi.Ctx, core.HandlerMeta) error {
 	i.calls.Add(1)
 	return nil
 }
-func (*openAPIInterceptor) PostHandle(core.ExecutionContext, core.HandlerMeta) {}
-func (*openAPIInterceptor) BeforeResponse(core.ExecutionContext, core.HandlerMeta, error) error {
+func (*openAPIInterceptor) PostHandle(contextapi.Ctx, core.HandlerMeta) {}
+func (*openAPIInterceptor) BeforeResponse(contextapi.Ctx, core.HandlerMeta, error) error {
 	return nil
 }
-func (*openAPIInterceptor) AfterCompletion(core.ExecutionContext, core.HandlerMeta, error) {}
+func (*openAPIInterceptor) AfterCompletion(contextapi.Ctx, core.HandlerMeta, error) {}
 
 func TestOpenAPIIsOffWithoutExplicitActivation(t *testing.T) {
 	for _, test := range []struct {

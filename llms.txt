@@ -523,7 +523,7 @@ func (c *AdminController) RegisterRoutes(r *api.Registry) {
 | `input.Body[SomeDTO]` without path/query/header/form tags | Bound request DTO | The request `Content-Type` selects the JSON, XML or form decoder. Malformed input returns HTTP 400. |
 | `input.Body[SomeForm]` with at least one `form` tag | Bound form DTO | The presence of a form tag selects form binding. |
 | `multipart.UploadedFiles` | Uploaded file descriptors | Call each file's `Open` and close the returned stream. |
-| `pkg/spine.Ctx` | Read-only view of values set by interceptors | Only `Get` is exposed; custom interfaces with extra methods are unsupported. |
+| `pkg/spine.Ctx` | Common handler and interceptor context | `ExecutionContext()` provides `Get`, `Set` and `Context()`. `HTTP()` and `WebSocket()` return supported transport views. Direct `Get` is deprecated. |
 
 Arbitrary primitive parameters and application service parameters are not controller arguments. Put services on the controller through constructor injection.
 
@@ -584,14 +584,14 @@ Expected errors serialize as `{"message":"..."}`. Generic errors return status 5
 
 ## Interceptors
 
-Every `core.Interceptor` must implement all four methods:
+Every `core.Interceptor` must implement all four methods with `spine.Ctx` from `github.com/NARUBROWN/spine/pkg/spine`. This replaces the previous core.ExecutionContext parameter and breaks old interceptor source signatures:
 
 ```go
 type Interceptor interface {
-	PreHandle(ctx core.ExecutionContext, meta core.HandlerMeta) error
-	PostHandle(ctx core.ExecutionContext, meta core.HandlerMeta)
-	BeforeResponse(ctx core.ExecutionContext, meta core.HandlerMeta, executionErr error) error
-	AfterCompletion(ctx core.ExecutionContext, meta core.HandlerMeta, err error)
+	PreHandle(ctx spine.Ctx, meta core.HandlerMeta) error
+	PostHandle(ctx spine.Ctx, meta core.HandlerMeta)
+	BeforeResponse(ctx spine.Ctx, meta core.HandlerMeta, executionErr error) error
+	AfterCompletion(ctx spine.Ctx, meta core.HandlerMeta, err error)
 }
 ```
 
@@ -600,8 +600,9 @@ type Interceptor interface {
 - `app.InterceptorFor(boot.InterceptorWebSocket, x)` applies only to WebSocket messages and handshake auth when implemented.
 - `boot.InterceptorAll` means HTTP plus WebSocket, not Kafka/RabbitMQ consumers.
 - Use `api.Interceptors` to apply interceptors to a route or group.
-- Use `core.HTTPRequest` for HTTP request and multipart access and `core.HTTPResponseContext.ResponseWriter()` for response access.
-- Call `publish.Event(ctx.Context(), event)` in `PreHandle` to queue an event from an interceptor. Read handler information with `meta.HandlerName()` and `meta.FunctionType()`. WebSocket message views return an independent payload copy. See [the migration guide](docs/migration/v0.7.2.md) for removed execution members.
+- Use `httpView, ok := ctx.HTTP()` and guard `ok`. `httpView.Request()` provides headers, params, query and multipart access; `httpView.Response()` returns the current response writer. HTTP and WebSocket views do not expose routing, body binding or writer replacement.
+- Call `publish.Event(ctx.ExecutionContext().Context(), event)` in `PreHandle` to queue an event from an interceptor. Read handler information with `meta.HandlerName()` and `meta.FunctionType()`. WebSocket message views return an independent payload copy. See [the migration guide](docs/migration/v0.7.2.md) for removed execution members.
+- `ctx.ExecutionContext().Set/Get` shares values throughout one execution, including handler writes read by later interceptor phases. Separate HTTP requests, event messages and WS messages are isolated. After `AfterCompletion`, retained views return `nil, false` and ignore writes. Clearing store references permits GC; it does not force a collection or clear app-owned references.
 - Reusing the same interceptor pointer across scopes merges its scopes and executes that instance once. Different instances of the same type execute independently.
 
 For CORS, prefer startup validation and scope it to HTTP:
@@ -628,7 +629,7 @@ CORS preflight policy: `cors.Config` supports `ExposeHeaders`, `MaxAge` in secon
 The Bun demo uses this safe boundary:
 
 1. `PreHandle` begins a transaction and stores `bun.Tx` in `ExecutionContext`.
-2. The controller reads it through `pkg/spine.Ctx.Get("tx")` and passes it as `bun.IDB` to the service/repository.
+2. The controller reads it through `ctx.ExecutionContext().Get("tx")` and passes it as `bun.IDB` to the service/repository.
 3. `BeforeResponse` rolls back when `executionErr != nil`; otherwise it commits.
 
 Response serialization, cookie validation, event dispatch, and post-processing happen before `BeforeResponse`, so their framework-controlled failures can trigger rollback. This also means a broker event can be published before the transaction commit, and a later commit failure cannot recall it. A database commit is atomic with neither broker publication nor the physical socket write. Use an outbox for database-plus-broker atomicity.
@@ -689,11 +690,11 @@ For a broadcast, save a delivery callback for each recipient that calls `ws.Send
 
 ### WebSocket handshake authentication
 
-Authentication before upgrade belongs in one interceptor instance that implements the four `core.Interceptor` methods plus `core.WebSocketHandshakeInterceptor.PreHandshake`. Register that instance with `app.InterceptorFor(boot.InterceptorWebSocket, auth)`. In `PreHandshake`, read headers/query/cookies from `core.WebSocketHandshakeContext` and return a 4xx `httperr` on rejection. Copy the complete constant-time token implementation from the chat demo's [`interceptor/auth_interceptor.go`](https://github.com/NARUBROWN/spine-simple-chat-demo/blob/b1fe598329eb79828eb4c84903c7fa3847d35914/interceptor/auth_interceptor.go), not a partial interface implementation.
+Authentication before upgrade belongs in one interceptor instance that implements the four `core.Interceptor` methods plus `core.WebSocketHandshakeInterceptor.PreHandshake`. Register that instance with `app.InterceptorFor(boot.InterceptorWebSocket, auth)`. In `PreHandshake(ctx spine.Ctx, meta core.HandlerMeta)`, obtain the request with `socket, ok := ctx.WebSocket()`, guard `ok`, read headers/query/cookies from `socket` and return a 4xx `httperr` on rejection. Copy the complete constant-time token implementation from the chat demo's [`interceptor/auth_interceptor.go`](https://github.com/NARUBROWN/spine-simple-chat-demo/blob/b1fe598329eb79828eb4c84903c7fa3847d35914/interceptor/auth_interceptor.go), not a partial interface implementation.
 
 A connection slot is reserved before `PreHandshake`; rejected handshakes release it. `PreHandshake` runs before HTTP upgrade. Message-level `PreHandle` still runs for every accepted message.
 
-Inside a message interceptor, type-assert `core.ExecutionContext` to `core.WebSocketMessageContext` to inspect the immutable handshake headers, query values, cookies, remote address, host, and request URI. These request-view interfaces are not controller handler parameters.
+In both handlers and interceptors, `socket, ok := ctx.WebSocket()` provides immutable handshake headers, query values, cookies, remote address, host and request URI plus message `ConnID()`, `MessageType()` and a copied `Payload()`. HTTP execution returns `nil, false` for this view; event execution returns `nil, false` for both transport views. Before upgrade, connection ID is empty, message type is zero and payload is nil. Handshake interceptors share one temporary store; each later message has a separate store.
 
 ### WebSocket runtime options
 
@@ -732,10 +733,10 @@ func (e OrderCreated) Name() string         { return "order.created" }
 func (e OrderCreated) OccurredAt() time.Time { return e.At }
 ```
 
-Queue it from an HTTP, WebSocket, or consumer handler's `context.Context`:
+Queue it from an HTTP, WebSocket, or consumer handler's `spine.Ctx`:
 
 ```go
-publish.Event(ctx, OrderCreated{
+publish.Event(ctx.ExecutionContext().Context(), OrderCreated{
 	EventID: eventID,
 	OrderID: orderID.Value,
 	At:      time.Now().UTC(),
@@ -744,7 +745,7 @@ publish.Event(ctx, OrderCreated{
 
 `publish.Event` adds the event to the current execution context. Spine dispatches queued events only after the handler succeeds and, for HTTP, after response preparation succeeds. The function returns no error. If no writer is configured, the handler can still succeed while nothing is delivered externally, so every publishing process must register an event platform factory with Publish enabled deliberately. The core serializes each queued domain event once before fanout. A failed publisher instance is retired after its active calls finish and recreated on the next publication; failed messages are not immediately resent.
 
-Use a consumer signature such as `func (c *OrderConsumer) OnCreated(ctx context.Context, eventName string, event OrderCreated) error`. Register `NewOrderConsumer` with `app.Constructor`, then check the error from `app.Consumers().Register("order.created", (*OrderConsumer).OnCreated)`. Consumer inputs are `context.Context`, event name `string`, raw `[]byte`, and a non-pointer struct decoded from JSON. A topic can have only one registered handler; make it idempotent by stable event ID.
+Use a consumer signature such as `func (c *OrderConsumer) OnCreated(ctx spine.Ctx, eventName string, event OrderCreated) error`. Register `NewOrderConsumer` with `app.Constructor`, then check the error from `app.Consumers().Register("order.created", (*OrderConsumer).OnCreated)`. Consumer inputs are `spine.Ctx` (standard context injection remains compatible), event name `string`, raw `[]byte`, and a non-pointer struct decoded from JSON. A topic can have only one registered handler; make it idempotent by stable event ID.
 
 ### Kafka configuration
 
@@ -892,7 +893,7 @@ Prepare collects each controller once per prepared application, freezes routes a
 DescribeHTTP before collection returns ErrRoutesNotCollected without constructors or external readiness.
 DescribePreparedHTTP returns the prepared snapshot. CLI runtime export does not call Prepare automatically.
 Validator FieldNameMapper supplies request-local wire names without replacing DTO types or mutating shared validators.
-Existing app.Route, DTO pointers, contexts, httpx returns, event and WebSocket methods remain supported.
+This describes the original controller-route candidate. The current v0.7.2 source removes unwrapped HTTP DTO pointers and internal core context interfaces; use input wrappers and spine.Ctx as described in docs/migration/v0.7.2.md.
 The matching CLI candidate analyzes Registry callbacks/helpers with go/types and generates RegisterRoutes for cores >=v0.7.0-preview.5.
 Older selected cores keep legacy generation. Local replacements and source tests do not prove public installation support.
 See docs/migration/controller-routes.md for the complete example and lifecycle limits. Publication still requires matching tags.

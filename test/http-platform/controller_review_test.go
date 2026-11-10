@@ -34,16 +34,16 @@ func (*reviewController) RegisterRoutes(r *api.Registry) {
 
 type handlerNameInterceptor struct{}
 
-func (*handlerNameInterceptor) PreHandle(ctx core.ExecutionContext, meta core.HandlerMeta) error {
+func (*handlerNameInterceptor) PreHandle(ctx handlerspine.Ctx, meta core.HandlerMeta) error {
 	_ = meta.HandlerName()
-	ctx.Set("review", "modern")
+	ctx.ExecutionContext().Set("review", "modern")
 	return nil
 }
-func (*handlerNameInterceptor) PostHandle(core.ExecutionContext, core.HandlerMeta) {}
-func (*handlerNameInterceptor) BeforeResponse(core.ExecutionContext, core.HandlerMeta, error) error {
+func (*handlerNameInterceptor) PostHandle(handlerspine.Ctx, core.HandlerMeta) {}
+func (*handlerNameInterceptor) BeforeResponse(handlerspine.Ctx, core.HandlerMeta, error) error {
 	return nil
 }
-func (*handlerNameInterceptor) AfterCompletion(core.ExecutionContext, core.HandlerMeta, error) {}
+func (*handlerNameInterceptor) AfterCompletion(handlerspine.Ctx, core.HandlerMeta, error) {}
 
 func TestLegacyAndControllerRoutesCoexistWithGlobalHandlerNames(t *testing.T) {
 	for _, platform := range []string{"echo", "nethttp"} {
@@ -98,7 +98,7 @@ func (c *boundaryController) RegisterRoutes(r *api.Registry) {
 
 type boundaryInterceptor struct{ handlerNameInterceptor }
 
-func (*boundaryInterceptor) PreHandle(ctx core.ExecutionContext, meta core.HandlerMeta) error {
+func (*boundaryInterceptor) PreHandle(ctx handlerspine.Ctx, meta core.HandlerMeta) error {
 	for _, name := range []string{"SetRoute", "SetResponseWriter", "EventBus"} {
 		if _, ok := reflect.TypeOf(ctx).MethodByName(name); ok {
 			return fmt.Errorf("public interceptor exposes %s", name)

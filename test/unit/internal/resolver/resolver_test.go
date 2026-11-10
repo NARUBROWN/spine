@@ -12,7 +12,6 @@ import (
 
 	"github.com/NARUBROWN/spine/internal/event/emission"
 	"github.com/NARUBROWN/spine/internal/execution"
-	"github.com/NARUBROWN/spine/internal/runtime"
 	eventpublish "github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	httpinput "github.com/NARUBROWN/spine/pkg/input"
@@ -270,7 +269,7 @@ func TestControllerContextResolver_Resolve(t *testing.T) {
 	type getOnly interface {
 		Get(string) (any, bool)
 	}
-	for _, typ := range []reflect.Type{reflect.TypeFor[spine.Ctx](), reflect.TypeFor[runtime.ControllerContext](), reflect.TypeFor[getOnly]()} {
+	for _, typ := range []reflect.Type{reflect.TypeFor[spine.Ctx](), reflect.TypeFor[getOnly]()} {
 		t.Run(typ.String(), func(t *testing.T) {
 			pm := ParameterMeta{Type: typ}
 			if !r.Supports(pm) {

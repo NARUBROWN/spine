@@ -24,6 +24,7 @@ import (
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	files "github.com/NARUBROWN/spine/pkg/multipart"
 	"github.com/NARUBROWN/spine/pkg/route"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 	"github.com/labstack/echo/v5"
 )
 
@@ -82,7 +83,7 @@ type inputV3Interceptor struct {
 	failAfter  bool
 }
 
-func (i *inputV3Interceptor) PreHandle(core.ExecutionContext, core.HandlerMeta) error {
+func (i *inputV3Interceptor) PreHandle(contextapi.Ctx, core.HandlerMeta) error {
 	i.controller.order = append(i.controller.order, "pre")
 	if i.reject {
 		return httperr.Unauthorized("authentication required")
@@ -90,7 +91,7 @@ func (i *inputV3Interceptor) PreHandle(core.ExecutionContext, core.HandlerMeta) 
 	return nil
 }
 
-func (i *inputV3Interceptor) BeforeResponse(_ core.ExecutionContext, _ core.HandlerMeta, _ error) error {
+func (i *inputV3Interceptor) BeforeResponse(_ contextapi.Ctx, _ core.HandlerMeta, _ error) error {
 	i.controller.order = append(i.controller.order, "before")
 	if i.controller.fail == "before" {
 		return errors.New("before response failed")
@@ -98,7 +99,7 @@ func (i *inputV3Interceptor) BeforeResponse(_ core.ExecutionContext, _ core.Hand
 	return nil
 }
 
-func (i *inputV3Interceptor) AfterCompletion(ctx core.ExecutionContext, _ core.HandlerMeta, executionErr error) {
+func (i *inputV3Interceptor) AfterCompletion(ctx contextapi.Ctx, _ core.HandlerMeta, executionErr error) {
 	c := i.controller
 	c.executionErr = executionErr
 	c.order = append(c.order, "after")
@@ -108,7 +109,8 @@ func (i *inputV3Interceptor) AfterCompletion(ctx core.ExecutionContext, _ core.H
 	if _, err := os.Stat(c.path); err != nil {
 		c.t.Errorf("AfterCompletion까지 파일이 있어야 합니다: %v", err)
 	}
-	request := ctx.(core.HTTPRequest)
+	httpView, _ := ctx.HTTP()
+	request := httpView.Request()
 	form, err := request.MultipartForm()
 	if err != nil || form.Value["title"][0] != "body" {
 		c.t.Errorf("완료 훅에서 multipart 결과를 읽어야 합니다: %v", err)
@@ -234,7 +236,7 @@ func TestHTTPV3AuthenticationRejectsBeforeCommonBodyRead(t *testing.T) {
 	}
 }
 
-func (*inputV3Interceptor) PostHandle(core.ExecutionContext, core.HandlerMeta) {}
+func (*inputV3Interceptor) PostHandle(contextapi.Ctx, core.HandlerMeta) {}
 
 func (c *inputV3Controller) FileOnly(files.UploadedFiles) httpx.Response[string] {
 	c.calls.Add(1)
@@ -294,7 +296,7 @@ func TestHTTPV3InputFailuresPreserveSourceAndCause(t *testing.T) {
 			if response.Code != tc.status || c.calls.Load() != 0 {
 				t.Fatalf("오류 입력 실행: %d %s", response.Code, response.Body.String())
 			}
-			source, ok := httperr.InputSource(c.executionErr)
+			source, ok := httperr.InputLocation(c.executionErr)
 			if !ok || source != "body" {
 				t.Fatalf("입력 출처를 보존해야 합니다: %v", c.executionErr)
 			}

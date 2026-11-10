@@ -14,6 +14,7 @@ import (
 	platform "github.com/NARUBROWN/spine-echo-platform"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/pkg/boot"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v5"
 )
@@ -22,18 +23,18 @@ type transportBaselineCounter struct {
 	calls atomic.Int32
 }
 
-func (c *transportBaselineCounter) PreHandle(core.ExecutionContext, core.HandlerMeta) error {
+func (c *transportBaselineCounter) PreHandle(contextapi.Ctx, core.HandlerMeta) error {
 	c.calls.Add(1)
 	return nil
 }
 
-func (*transportBaselineCounter) PostHandle(core.ExecutionContext, core.HandlerMeta) {}
+func (*transportBaselineCounter) PostHandle(contextapi.Ctx, core.HandlerMeta) {}
 
-func (*transportBaselineCounter) BeforeResponse(core.ExecutionContext, core.HandlerMeta, error) error {
+func (*transportBaselineCounter) BeforeResponse(contextapi.Ctx, core.HandlerMeta, error) error {
 	return nil
 }
 
-func (*transportBaselineCounter) AfterCompletion(core.ExecutionContext, core.HandlerMeta, error) {}
+func (*transportBaselineCounter) AfterCompletion(contextapi.Ctx, core.HandlerMeta, error) {}
 
 func TestAppIntegration_NativeRouteBaseline(t *testing.T) {
 	counter := &transportBaselineCounter{}

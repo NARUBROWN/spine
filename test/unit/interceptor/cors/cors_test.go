@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/NARUBROWN/spine/core"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type testExecutionContext struct {
@@ -300,4 +301,16 @@ func TestCORSConfigValidation(t *testing.T) {
 			t.Fatalf("%+v: %v", config, err)
 		}
 	}
+}
+
+func (c *testExecutionContext) ExecutionContext() contextapi.ExecutionContextView { return c }
+func (c *testExecutionContext) HTTP() (contextapi.HTTPView, bool)                 { return c, true }
+func (*testExecutionContext) WebSocket() (contextapi.WebSocketView, bool)         { return nil, false }
+func (c *testExecutionContext) Request() contextapi.HTTPRequestView               { return c }
+func (c *testExecutionContext) Response() core.ResponseWriter                     { return c.writer }
+func (*testExecutionContext) Param(string) string                                 { return "" }
+func (*testExecutionContext) Query(string) string                                 { return "" }
+func (*testExecutionContext) Headers() map[string][]string                        { return nil }
+func (*testExecutionContext) MultipartForm() (contextapi.MultipartFields, error) {
+	return contextapi.MultipartFields{}, nil
 }
