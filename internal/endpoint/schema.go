@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"math/big"
 	"mime/multipart"
@@ -73,6 +74,7 @@ func (c *catalog) schema(t reflect.Type, mode string) any {
 }
 
 func (c *catalog) schemaValue(t reflect.Type, mode string) any {
+	xmlInput := strings.HasSuffix(mode, "/xml")
 	if strings.HasSuffix(mode, "/form") {
 		if t == reflect.TypeFor[*multipart.FileHeader]() {
 			return map[string]any{"type": "string", "format": "binary"}
@@ -81,22 +83,27 @@ func (c *catalog) schemaValue(t reflect.Type, mode string) any {
 			return map[string]any{"type": "array", "items": map[string]any{"type": "string", "format": "binary"}}
 		}
 	}
-	if t == reflect.TypeFor[json.RawMessage]() {
+	if !xmlInput && t == reflect.TypeFor[json.RawMessage]() {
 		return map[string]any{}
 	}
-	if t == reflect.TypeFor[json.Number]() {
+	if !xmlInput && t == reflect.TypeFor[json.Number]() {
 		return map[string]any{"type": "number"}
 	}
 	if t == reflect.TypeFor[time.Time]() {
 		return map[string]any{"type": "string", "format": "date-time"}
 	}
 	if t.Kind() == reflect.Pointer {
-		if strings.HasSuffix(mode, "/path") {
+		if strings.HasSuffix(mode, "/path") || xmlInput {
 			return c.schema(t.Elem(), mode)
 		}
 		return nullable(c.schema(t.Elem(), mode))
 	}
-	if customCodec(t) {
+	if xmlInput && (t.Implements(reflect.TypeFor[xml.Unmarshaler]()) || reflect.PointerTo(t).Implements(reflect.TypeFor[xml.Unmarshaler]()) ||
+		t.Implements(reflect.TypeFor[encoding.TextUnmarshaler]()) || reflect.PointerTo(t).Implements(reflect.TypeFor[encoding.TextUnmarshaler]())) {
+		c.diagnostic("XML_SERIALIZATION_UNRESOLVED", t.String(), "Custom XML or text decoding requires an explicit schema.")
+		return map[string]any{}
+	}
+	if !xmlInput && customCodec(t) {
 		c.diagnostic("CUSTOM_SERIALIZATION_UNRESOLVED", t.String(), "Custom JSON or text serialization requires an explicit schema.")
 		return map[string]any{}
 	}
@@ -130,6 +137,9 @@ func (c *catalog) schemaValue(t reflect.Type, mode string) any {
 		return map[string]any{}
 	case reflect.Slice:
 		if t.Elem().Kind() == reflect.Uint8 && !strings.HasSuffix(mode, "/query") && !strings.HasSuffix(mode, "/header") {
+			if xmlInput {
+				return map[string]any{"type": "string"}
+			}
 			if strings.HasSuffix(mode, "/json") && !strings.HasPrefix(mode, "response/") {
 				return nullable(map[string]any{"anyOf": []any{
 					map[string]any{"type": "string", "contentEncoding": "base64"},
@@ -138,7 +148,11 @@ func (c *catalog) schemaValue(t reflect.Type, mode string) any {
 			}
 			return nullable(map[string]any{"type": "string", "contentEncoding": "base64"})
 		}
-		return nullable(map[string]any{"type": "array", "items": c.schema(t.Elem(), mode)})
+		sequence := map[string]any{"type": "array", "items": c.schema(t.Elem(), mode)}
+		if xmlInput {
+			return sequence
+		}
+		return nullable(sequence)
 	case reflect.Array:
 		if strings.HasSuffix(mode, "/json") && !strings.HasPrefix(mode, "response/") {
 			prefix := make([]any, t.Len())
@@ -153,6 +167,10 @@ func (c *catalog) schemaValue(t reflect.Type, mode string) any {
 		}
 		return map[string]any{"type": "array", "items": c.schema(t.Elem(), mode), "minItems": t.Len(), "maxItems": t.Len()}
 	case reflect.Map:
+		if xmlInput {
+			c.diagnostic("XML_TYPE_UNRESOLVED", t.String(), "The default XML decoder does not bind map elements.")
+			return map[string]any{}
+		}
 		key := t.Key()
 		if key.Kind() != reflect.String && !integerKind(key.Kind()) && !key.Implements(reflect.TypeFor[encoding.TextMarshaler]()) {
 			c.diagnostic("MAP_KEY_UNRESOLVED", t.String(), "The map key has no supported JSON object representation.")
@@ -220,6 +238,10 @@ func customCodec(t reflect.Type) bool {
 
 func (c *catalog) structure(t reflect.Type, mode string, planned ...[]input.Field) any {
 	fields := wireFields(t, strings.HasSuffix(mode, "/form"))
+	var xmlRoot map[string]any
+	if strings.HasSuffix(mode, "/xml") {
+		fields, xmlRoot = c.xmlFields(t)
+	}
 	for _, source := range []string{"path", "query", "header"} {
 		if strings.HasSuffix(mode, "/"+source) {
 			selected, err := input.Fields(t, source)
@@ -287,6 +309,9 @@ func (c *catalog) structure(t reflect.Type, mode string, planned ...[]input.Fiel
 		// Metadata describes the wire value and never changes runtime validation.
 		source := t.FieldByIndex(field.index)
 		annotation := map[string]any{}
+		if field.xmlAttribute {
+			annotation["xml"] = map[string]any{"attribute": true}
+		}
 		if description, ok := source.Tag.Lookup("description"); ok {
 			annotation["description"] = description
 		}
@@ -322,6 +347,9 @@ func (c *catalog) structure(t reflect.Type, mode string, planned ...[]input.Fiel
 	sort.Strings(required)
 	required = slices.Compact(required)
 	result := map[string]any{"type": "object", "properties": properties}
+	if xmlRoot != nil {
+		result["xml"] = xmlRoot
+	}
 	if len(required) > 0 {
 		result["required"] = required
 	}
@@ -595,6 +623,7 @@ type wireField struct {
 	index                      []int
 	typeOf                     reflect.Type
 	optional, quoted, indirect bool
+	xmlAttribute               bool
 }
 
 func wireFields(root reflect.Type, form bool) []wireField {

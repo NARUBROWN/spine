@@ -6,13 +6,14 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"mime/multipart"
 	"os"
 	"time"
 
+	"github.com/NARUBROWN/spine/pkg/api"
 	"github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
-	"github.com/NARUBROWN/spine/pkg/multipart"
 	"github.com/NARUBROWN/spine/pkg/spine"
 	"github.com/NARUBROWN/spine/pkg/ws"
 )
@@ -33,11 +34,11 @@ type CommonController struct{}
 
 type ChatController struct{}
 
-func NewUserController() *UserController {
+func (*UserController) Constructor() *UserController {
 	return &UserController{}
 }
 
-func NewCommonController() *CommonController {
+func (*CommonController) Constructor() *CommonController {
 	return &CommonController{}
 }
 
@@ -45,18 +46,31 @@ func NewChatController() *ChatController {
 	return &ChatController{}
 }
 
+func (c *UserController) RegisterRoutes(r *api.Registry) {
+	r.GET("/users/:id", c.GetUser, api.Interceptors(&LoggingInterceptor{}))
+	r.GET("/users", c.GetUserQuery)
+	r.POST("/upload", c.Upload)
+	r.POST("/orders/:orderId", c.CreateOrder)
+	r.POST("/stocks/:stockId", c.CreateStock)
+}
+
+func (c *CommonController) RegisterRoutes(r *api.Registry) {
+	r.GET("/headers", c.CheckHeader)
+	r.GET("/images/:id", c.GetAvatar)
+}
+
 type User struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
 }
 
-func (c *UserController) GetUser(ctx context.Context, p httpinput.Path[UserPath], spineCtx spine.Ctx) (User, error) {
+func (c *UserController) GetUser(ctx context.Context, p httpinput.Path[UserPath], spineCtx spine.Ctx) (httpx.Response[User], error) {
 	v, ok := spineCtx.Get("test")
 	if !ok {
-		return User{}, httperr.BadRequest("context does not contain content")
+		return httpx.Response[User]{}, httperr.BadRequest("context does not contain content")
 	}
 	log.Printf("%s", v)
-	return User{}, httperr.NotFound("user not found")
+	return httpx.Response[User]{}, httperr.NotFound("user not found")
 }
 
 type CreateUserRequest struct {
@@ -80,8 +94,9 @@ func (c *UserController) GetUserQuery(ctx context.Context, q httpinput.Query[Use
 }
 
 type CreatePostForm struct {
-	Title   string `form:"title"`
-	Content string `form:"content"`
+	Title   string                  `form:"title"`
+	Content string                  `form:"content"`
+	Files   []*multipart.FileHeader `form:"files"`
 }
 
 type UploadQuery struct {
@@ -92,9 +107,8 @@ type UploadQuery struct {
 func (c *UserController) Upload(
 	ctx context.Context,
 	form httpinput.Body[CreatePostForm],
-	files multipart.UploadedFiles,
 	q httpinput.Query[UploadQuery],
-) string {
+) httpx.Response[string] {
 	page, size := 1, 20
 	if q.Page != nil {
 		page = *q.Page
@@ -113,19 +127,19 @@ func (c *UserController) Upload(
 	fmt.Println("[QUERY] Page:", page)
 	fmt.Println("[QUERY] Size:", size)
 
-	fmt.Println("[FILES] Count:", len(files.Files))
-	for i, f := range files.Files {
+	fmt.Println("[FILES] Count:", len(form.Files))
+	for i, f := range form.Files {
 		fmt.Printf(
 			"[FILES] #%d field=%s name=%s size=%d contentType=%s\n",
 			i,
-			f.FieldName,
+			"files",
 			f.Filename,
 			f.Size,
-			f.ContentType,
+			f.Header.Get("Content-Type"),
 		)
 	}
 
-	return "OK"
+	return httpx.Response[string]{Body: "OK"}
 }
 
 func (c *UserController) CreateOrder(ctx context.Context, p httpinput.Path[OrderPath]) httpx.Response[string] {
@@ -162,11 +176,11 @@ type RequestHeaders struct {
 	ContentType string `header:"Content-Type"`
 }
 
-func (c *CommonController) CheckHeader(headers httpinput.Header[RequestHeaders]) Headers {
-	return Headers{
+func (c *CommonController) CheckHeader(headers httpinput.Header[RequestHeaders]) httpx.Response[Headers] {
+	return httpx.Response[Headers]{Body: Headers{
 		UserAgent:   headers.UserAgent,
 		ContentType: headers.ContentType,
-	}
+	}}
 }
 
 func (c *CommonController) GetAvatar() httpx.Binary {

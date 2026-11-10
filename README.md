@@ -12,7 +12,7 @@
 
 ## 현재 채널
 
-**Preview** | 공개 코어 태그 [`v0.7.2-preview.2`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.2)
+**Preview** | 공개 코어 태그 [`v0.7.2-preview.3`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.3)
 
 다른 채널 | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 
@@ -20,7 +20,7 @@
 
 - 요청 해석, 핸들러 실행, 반환 처리의 책임을 분리합니다.
 - 컨트롤러의 메서드 시그니처로 요청 입력과 응답 형식을 정의합니다.
-- `path.*`, `query.*`, `httperr.*`로 경로 매개변수, 쿼리, HTTP 오류의 의미를 표현합니다.
+- `input.Path`, `input.Query`, `input.Header`, `input.Body`, `httperr.*`로 경로 매개변수, 쿼리, HTTP 오류의 의미를 표현합니다.
 
 ## 권장 환경
 
@@ -29,7 +29,7 @@
 ## Spine CLI로 시작하기
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.4-preview.2
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.4-preview.5
 spine version
 spine new todo-api --module github.com/acme/todo-api --channel preview --no-interactive
 cd todo-api

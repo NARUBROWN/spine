@@ -35,12 +35,8 @@ type ExecutionContext interface {
 	Get(key string) (any, bool)
 }
 
-/*
-ControllerContext
-- 컨트롤러 전용 컨텍스트 뷰
-- ExecutionContext의 읽기 전용 퍼사드
-- 인터셉터에서 주입한 값을 컨트롤러에서 참조하는 공식 통로
-*/
+// ControllerContext는 실행 파이프라인에서 사용하는 읽기 전용 컨텍스트 계약입니다.
+// 애플리케이션 핸들러에서 인터셉터 값을 읽을 때는 pkg/spine의 Ctx를 사용하세요.
 type ControllerContext interface {
 	Get(key string) (any, bool)
 }

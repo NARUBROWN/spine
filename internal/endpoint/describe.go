@@ -172,6 +172,11 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 							}
 						}
 					}
+					if _, hasJSON := input.Content["application/json"]; hasJSON {
+						bodyXML := raw(c.schema(parameter.Type.Elem(), "request/xml"))
+						input.Content["application/xml"] = bodyXML
+						input.Content["text/xml"] = append(json.RawMessage(nil), bodyXML...)
+					}
 				case *resolver.UploadedFilesResolver:
 					input.Binding = "unresolved"
 					c.diagnostic("UPLOAD_FIELDS_UNRESOLVED", route.Handler, "UploadedFiles does not declare multipart field names.")

@@ -14,7 +14,7 @@ import (
 	rabbitmqplatform "github.com/NARUBROWN/spine-rabbitmq-platform"
 	"github.com/NARUBROWN/spine/interceptor/cors"
 	"github.com/NARUBROWN/spine/pkg/boot"
-	"github.com/NARUBROWN/spine/pkg/route"
+	"github.com/NARUBROWN/spine/pkg/constructor"
 )
 
 func main() {
@@ -39,56 +39,11 @@ func main() {
 	}
 	app := spine.New(appOptions...)
 
-	// 생성자 등록
 	app.Constructor(
-		NewUserController,
-		NewOrderConsumer,
-		NewCommonController,
-		NewChatController,
-	)
-
-	// 라우트 등록, 라우터 단위 인터셉터
-	app.Route(
-		"GET",
-		"/users/:id",
-		(*UserController).GetUser,
-		route.WithInterceptors(&LoggingInterceptor{}),
-	)
-
-	app.Route(
-		"GET",
-		"/users",
-		(*UserController).GetUserQuery,
-	)
-
-	app.Route(
-		"POST",
-		"/upload",
-		(*UserController).Upload,
-	)
-
-	app.Route(
-		"POST",
-		"/orders/:orderId",
-		(*UserController).CreateOrder,
-	)
-
-	app.Route(
-		"POST",
-		"/stocks/:stockId",
-		(*UserController).CreateStock,
-	)
-
-	app.Route(
-		"GET",
-		"/headers",
-		(*CommonController).CheckHeader,
-	)
-
-	app.Route(
-		"GET",
-		"/images/:id",
-		(*CommonController).GetAvatar,
+		constructor.Controller(&UserController{}),
+		constructor.Controller(&CommonController{}),
+		constructor.Custom(NewOrderConsumer),
+		constructor.Custom(NewChatController),
 	)
 
 	corsMaxAge := 600

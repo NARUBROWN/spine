@@ -253,7 +253,7 @@ remain on GOWORK=off. The integration and demo modules use their local replaceme
 
 ## Prepare an application without a listener
 
-`app.Prepare(ctx, options)` returns a `spine.PreparedApplication` with `Handler()` and `Close(ctx)`.
+`app.Prepare(ctx, options)` returns a `spine.PreparedApplication` with `HTTPAdapter()` and `Close(ctx)`. Obtain the optional HTTP handler with `spine.NetHTTPHandler(prepared)`.
 Prepare is part of the App interface returned by spine.New and platform.New. Ordinary managed execution
 continues to use app.Run(options).
 
@@ -264,7 +264,7 @@ cancellation is checked during initialization; after success the caller owns the
 Requests retain their original request context. User-owned instances, dialers and transports are not cloned.
 Cleanup covers framework-owned transports and event infrastructure; it does not automatically invoke Close on arbitrary DI objects.
 
-Handler is stable and nil when HTTP is disabled. Close rejects new Handler requests with 503, shuts down WS
+`spine.NetHTTPHandler(prepared)` returns an error when HTTP is disabled or the adapter lacks the capability. Close rejects new Handler requests with 503, shuts down WS
 and managed HTTP, waits for external Handler requests, then stops consumers/custom transports and publishers.
 Close starts one cleanup operation; its context bounds waiting only. Cleanup continues after a waiting timeout
 and subsequent calls can await completion. External HTTP servers retain ownership of their listeners, TLS and
@@ -282,13 +282,13 @@ See docs/migration/http-adapter-modules.md for the release migration.
 Use this map instead of searching the entire repository blindly:
 
 - `app.go`: public `spine.App` assembly API.
-- `application.go`: optional preparation API and listener-free Handler/Close ownership.
+- `application.go`: optional preparation API and listener-free preparation, NetHTTPHandler and Close ownership.
 - `pkg/boot`: HTTP, WebSocket, common event retry/settlement, lifecycle, and validation options.
-- Ordinary pointer DTOs use path/query/header tags for source-specific binding. `pkg/path` wrappers, `query.Values`, `header.Values` and `query.Pagination` are deprecated migration inputs; use ordinary query DTOs for new pagination. `pkg/multipart` provides uploads.
+- `pkg/input` provides Body, Path, Query and Header wrappers. Use an `input.Query[T]` DTO for pagination and a named multipart field in `input.Body[T]` for uploads.
 - `pkg/httpx`, `pkg/httperr`: supported HTTP outputs and expected HTTP errors.
 - `pkg/ws`: WebSocket connection identity and sending.
 - `pkg/event/publish`: domain-event contract and request-scoped publishing.
-- `pkg/route`: route-level interceptor options.
+- `pkg/api`: controller routing, groups and route-level interceptor options.
 - `core/interceptor.go`, `core/context.go`: interceptor and context contracts.
 - `contract/http`, `contract/event`, `contract/validator`: public standard-library-only contracts. HTTP, event factories and validators are connected to App assembly and runtime execution; native HTTP, broker and validation engines remain external.
 - `contract/validator`: `spine.validation/v1`, selected with `spine.WithValidator`. HTTP body/form DTOs and WebSocket/consumer message DTOs are validated after decoding, before handlers. Omission disables validation; explicit nil is rejected at preflight. HTTP rule failures return 400 with `message` and `fields`; WebSocket rule failures close with 1008; consumer failures follow existing NACK policy. Processing/configuration failures remain distinct from invalid DTOs. Concrete validation engines are external. See `contract/validator/README.md`.
@@ -368,7 +368,10 @@ import (
 	"time"
 
 	"github.com/NARUBROWN/spine-echo-platform"
+	"github.com/NARUBROWN/spine/pkg/api"
 	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/NARUBROWN/spine/pkg/constructor"
+	"github.com/NARUBROWN/spine/pkg/input"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 )
@@ -382,11 +385,11 @@ type HealthPath struct { ID int64 `path:"id"` }
 
 type HealthController struct{}
 
-func NewHealthController() *HealthController {
+func (*HealthController) Constructor() *HealthController {
 	return &HealthController{}
 }
 
-func (c *HealthController) Get(p *HealthPath) (httpx.Response[Health], error) {
+func (c *HealthController) Get(p input.Path[HealthPath]) (httpx.Response[Health], error) {
 	if p.ID <= 0 {
 		return httpx.Response[Health]{}, httperr.BadRequest("id must be positive")
 	}
@@ -395,10 +398,13 @@ func (c *HealthController) Get(p *HealthPath) (httpx.Response[Health], error) {
 	}, nil
 }
 
+func (c *HealthController) RegisterRoutes(r *api.Registry) {
+	r.GET("/health/:id", c.Get)
+}
+
 func main() {
 	app := platform.New()
-	app.Constructor(NewHealthController)
-	app.Route("GET", "/health/:id", (*HealthController).Get)
+	app.Constructor(constructor.Controller(&HealthController{}))
 
 	opts := boot.Options{
 		Address:                ":8080",
@@ -466,20 +472,24 @@ app.InterceptorFor(
 Register a route with:
 
 ```go
-app.Route("GET", "/users/:user_id", (*UserController).Get)
+func (c *UserController) RegisterRoutes(r *api.Registry) {
+    r.GET("/users/:user_id", c.Get)
+}
 ```
 
-HTTP methods are trimmed and uppercased. Route paths use `:name` parameters. Ordinary path DTO fields bind by exact tag name, independently of field or argument order:
+HTTP methods are trimmed and uppercased. Route paths use `:name` parameters. `input.Path[T]` DTO fields bind by exact tag name, independently of field or argument order:
 
 ```go
-app.Route("GET", "/orgs/:org_id/users/:user_id", (*UserController).Get)
+func (c *UserController) RegisterRoutes(r *api.Registry) {
+    r.GET("/orgs/:org_id/users/:user_id", c.Get)
+}
 
 type UserPath struct {
     UserID int64 `path:"user_id"`
     OrgID int64 `path:"org_id"`
 }
 
-func (c *UserController) Get(p *UserPath) httpx.Response[User] {
+func (c *UserController) Get(p input.Path[UserPath]) httpx.Response[User] {
     return httpx.Response[User]{Body: User{ID: p.UserID}}
 }
 ```
@@ -490,15 +500,12 @@ Static and parameter routes that overlap for the same method are rejected as amb
 HTTP: &boot.HTTPOptions{GlobalPrefix: "/api/v1"}
 ```
 
-Use `route.WithInterceptors` for route-only policies:
+Use `api.Interceptors` for route-only policies:
 
 ```go
-app.Route(
-	"POST",
-	"/admin/users",
-	(*AdminController).Create,
-	route.WithInterceptors(&AdminAuthInterceptor{}),
-)
+func (c *AdminController) RegisterRoutes(r *api.Registry) {
+	r.POST("/admin/users", c.Create, api.Interceptors(&AdminAuthInterceptor{}))
+}
 ```
 
 ### Supported HTTP inputs
@@ -506,17 +513,17 @@ app.Route(
 | Handler parameter | Value supplied by Spine | Important rule |
 |---|---|---|
 | `context.Context` | Request context plus request-scoped event publisher | Use this with `publish.Event` and database calls. |
-| `*PathDTO` with path tags | Fields bound to exact route variable names | Direct field access; required URL presence; conversion errors return 400; validator handles value constraints. |
+| `input.Path[PathDTO]` with path tags | Fields bound to exact route variable names | Direct field access; required URL presence; conversion errors return 400; validator handles value constraints. |
 | Deprecated `path.Int`, `path.String`, `path.Boolean` | Positional migration inputs | Kept during migration; cannot share a handler with any new path/query/header DTO. |
-| `*QueryDTO` with query tags | Query-only fields | Direct field access; conversion errors return 400; selected validator runs before the handler. |
+| `input.Query[QueryDTO]` with query tags | Query-only fields | Direct field access; conversion errors return 400; selected validator runs before the handler. |
 | Deprecated `query.Values` | Existing dynamic query view | First value and conversion fallback behavior remain; use a value parameter and migrate the handler to a query DTO. |
 | Deprecated `query.Pagination` | Existing `page` and `size` input | Missing or malformed numbers retain page 1 and size 20. Cannot share a handler with any new path/query/header DTO; migrate to a query DTO with explicit defaults and validation. |
-| `*HeadersDTO` with header tags | Header-only fields | Direct field access; header names are case-insensitive; keep this DTO separate from path, query and body. |
+| `input.Header[HeadersDTO]` with header tags | Header-only fields | Direct field access; header names are case-insensitive; keep this DTO separate from path, query and body. |
 | Deprecated `header.Values` | Existing dynamic header view | Get/Has and NewValues remain; use a value parameter and migrate the handler to a header DTO. |
-| `*SomeDTO` without path/query/header/form tags | Bound request DTO | HTTP DTOs must be pointers to structs; the Echo binder and request `Content-Type` select the body format. Malformed input returns HTTP 400. |
-| `*SomeForm` with at least one `form` tag | Bound form DTO | The presence of a form tag selects form binding. |
+| `input.Body[SomeDTO]` without path/query/header/form tags | Bound request DTO | The request `Content-Type` selects the JSON, XML or form decoder. Malformed input returns HTTP 400. |
+| `input.Body[SomeForm]` with at least one `form` tag | Bound form DTO | The presence of a form tag selects form binding. |
 | `multipart.UploadedFiles` | Uploaded file descriptors | Call each file's `Open` and close the returned stream. |
-| `pkg/spine.Ctx` or `core.ControllerContext` | Read-only view of values set by interceptors | Only `Get` is exposed; custom interfaces with extra methods are unsupported. |
+| `pkg/spine.Ctx` | Read-only view of values set by interceptors | Only `Get` is exposed; custom interfaces with extra methods are unsupported. |
 
 Arbitrary primitive parameters and application service parameters are not controller arguments. Put services on the controller through constructor injection.
 
@@ -640,15 +647,12 @@ an optional HTTPDescriber. Validation constraints come only from the registered 
 contract/validator.SchemaDescriber. Missing description support and dynamic/unsupported behavior remain
 explicit diagnostics. See contract/description/README.md for supported types and boundaries.
 
-Keep existing *DTO parameters, direct field access and httpx.Response[T] returns. Documentation does not
-require input wrappers or duplicate response declarations. Native DTO Bind remains platform-dependent;
-Separate path/query/header pointer DTOs bind only their declared source and validate before the handler. Path tags match route names exactly; required URL presence does not force a nonzero value. Without a validator, OpenAPI only lists registered paths and methods, with minimum structural placeholders. It omits input and response details. With a validator, detailed input schemas require SchemaDescriber; runtime status/media retain diagnostics.
+Use the corresponding input wrapper, direct field access and httpx.Response[T] returns.
+Separate path, query and header DTOs bind only their declared source and validate before the handler. Path tags match route names exactly; required URL presence does not force a nonzero value. Without a validator, OpenAPI only lists registered paths and methods, with minimum structural placeholders. It omits input and response details. With a validator, detailed input schemas require SchemaDescriber; runtime status/media retain diagnostics.
 query.Values/header.Values, their getter APIs and NewValues, and query.Pagination are Deprecated and retained during migration. In one handler, deprecated path/query/header inputs cannot coexist with any new path/query/header DTO, even across sources; body DTOs and contexts remain compatible. Deprecated query.Pagination follows the same mixing restriction while retaining its old parsing and documented page/size defaults. Dynamic legacy query/header keys are omitted from detailed parameters and reported as LEGACY_QUERY_VALUES_UNRESOLVED or LEGACY_HEADER_VALUES_UNRESOLVED. Migrate using docs/migration/structured-inputs.md; preserve missing values with pointer fields and handle defaults explicitly. No removal release is set.
 Form-tagged standard mime/multipart.FileHeader pointers and slices describe named file uploads; file DTOs
 advertise multipart/form-data. Dynamic UploadedFiles keeps an unresolved-field diagnostic.
-Managed Run prints the OpenAPI URL using the bound listener port only when enabled. CLI integration is deferred until the
-core input specification is finalized and will be tracked separately. test/openapi independently compares
-official structure, schemas and actual HTTP behavior.
+Managed Run prints the OpenAPI URL using the bound listener port only when enabled. Use CLI static export for offline analysis or runtime export with `--prepare` for registered controller routes. Preparation may initialize configured external dependencies.
 
 The Bun demo's existing Swaggo UI can remain on `/swagger/*` through platform.WithEcho. Its generated
 Swagger document remains separate from the runtime OpenAPI endpoint. Swagger UI and ReDoc integration

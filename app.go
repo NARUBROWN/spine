@@ -22,7 +22,9 @@ import (
 )
 
 type App interface {
-	// Constructor는 constructor의 역할 표식 또는 기존 생성자 함수를 등록합니다.
+	// Constructor는 constructor.Custom, Repository, Service, Controller, Interceptor의 역할 표식을 등록합니다.
+	// 역할 표식 없이 객체를 전달하는 호출 형태는 deprecated입니다. constructor.Custom(&T{})로 감싸세요.
+	// 기존 생성자 함수 등록은 호환을 위해 계속 지원합니다.
 	Constructor(constructors ...any)
 	// Route는 메서드 표현식으로 HTTP 경로를 등록합니다.
 	//

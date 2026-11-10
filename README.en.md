@@ -12,7 +12,7 @@ It does not hide how a request is resolved and executed.
 
 ## Current channel
 
-**Preview** | Published core tag [`v0.7.2-preview.2`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.2)
+**Preview** | Published core tag [`v0.7.2-preview.3`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.3)
 
 Other channels | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 
@@ -20,7 +20,7 @@ Other channels | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](htt
 
 - Fixed execution order and responsibilities
 - Method signature is the API contract
-- Semantic input types: `path.*`, `query.*`, `httperr.*`
+- Semantic input types: `input.Path`, `input.Query`, `input.Header`, `input.Body`, `httperr.*`
 
 ## Recommended environment
 
@@ -29,7 +29,7 @@ Other channels | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](htt
 ## Get started with Spine CLI
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.4-preview.2
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.4-preview.5
 spine version
 spine new todo-api --module github.com/acme/todo-api --channel preview --no-interactive
 cd todo-api
