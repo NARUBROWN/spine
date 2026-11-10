@@ -18,7 +18,7 @@ func (r *StdContextResolver) Resolve(ctx core.ExecutionContext, parameterMeta Pa
 	baseCtx := ctx.Context()
 	bus := ctx.EventBus()
 	if bus != nil {
-		return context.WithValue(baseCtx, publish.PublisherKey, bus), nil
+		return publish.WithPublisher(baseCtx, bus), nil
 	}
 	return baseCtx, nil
 }
