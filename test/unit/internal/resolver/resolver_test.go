@@ -266,7 +266,10 @@ func TestControllerContextResolver_Resolve(t *testing.T) {
 	ctx := newFakeHttpCtx()
 	ctx.store["userID"] = 7
 
-	for _, typ := range []reflect.Type{reflect.TypeFor[spine.Ctx](), reflect.TypeFor[runtime.ControllerContext]()} {
+	type getOnly interface {
+		Get(string) (any, bool)
+	}
+	for _, typ := range []reflect.Type{reflect.TypeFor[spine.Ctx](), reflect.TypeFor[runtime.ControllerContext](), reflect.TypeFor[getOnly]()} {
 		t.Run(typ.String(), func(t *testing.T) {
 			pm := ParameterMeta{Type: typ}
 			if !r.Supports(pm) {
@@ -280,7 +283,20 @@ func TestControllerContextResolver_Resolve(t *testing.T) {
 			if !ok || got != 7 {
 				t.Fatalf("컨텍스트가 store를 읽지 못했습니다: %v %v", got, ok)
 			}
+			execution := val.(spine.Ctx).ExecutionContext()
+			if got, ok := execution.Get("userID"); !ok || got != 7 {
+				t.Fatalf("실행 뷰가 같은 값을 읽지 못했습니다: %v %v", got, ok)
+			}
+			if _, ok := execution.(core.ExecutionContext); ok {
+				t.Fatal("핸들러 실행 뷰에서 변경 가능한 코어 컨텍스트에 접근할 수 있습니다")
+			}
 		})
+	}
+	strict := &ControllerContextResolver{RequireExecutionContext: true}
+	if strict.Supports(ParameterMeta{Type: reflect.TypeFor[getOnly]()}) ||
+		strict.Supports(ParameterMeta{Type: reflect.TypeFor[any]()}) ||
+		!strict.Supports(ParameterMeta{Type: reflect.TypeFor[spine.Ctx]()}) {
+		t.Fatal("전송 핸들러는 전체 컨텍스트 계약을 선언한 인자만 해석해야 합니다")
 	}
 }
 

@@ -3,7 +3,6 @@ package main
 import httpinput "github.com/NARUBROWN/spine/pkg/input"
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"mime/multipart"
@@ -64,8 +63,8 @@ type User struct {
 	Name string `json:"name"`
 }
 
-func (c *UserController) GetUser(ctx context.Context, p httpinput.Path[UserPath], spineCtx spine.Ctx) (httpx.Response[User], error) {
-	v, ok := spineCtx.Get("test")
+func (c *UserController) GetUser(ctx spine.Ctx, p httpinput.Path[UserPath]) (httpx.Response[User], error) {
+	v, ok := ctx.ExecutionContext().Get("test")
 	if !ok {
 		return httpx.Response[User]{}, httperr.BadRequest("context does not contain content")
 	}
@@ -77,7 +76,7 @@ type CreateUserRequest struct {
 	Name string `json:"name"`
 }
 
-func (c *UserController) CreateUser(ctx context.Context, req httpinput.Body[CreateUserRequest]) map[string]any {
+func (c *UserController) CreateUser(req httpinput.Body[CreateUserRequest]) map[string]any {
 	return map[string]any{
 		"name": req.Name,
 	}
@@ -87,7 +86,7 @@ type UserQuery struct {
 	Name string `query:"name"`
 }
 
-func (c *UserController) GetUserQuery(ctx context.Context, q httpinput.Query[UserQuery]) httpx.Response[string] {
+func (c *UserController) GetUserQuery(q httpinput.Query[UserQuery]) httpx.Response[string] {
 	return httpx.Response[string]{
 		Body: "OK",
 	}
@@ -105,7 +104,6 @@ type UploadQuery struct {
 }
 
 func (c *UserController) Upload(
-	ctx context.Context,
 	form httpinput.Body[CreatePostForm],
 	q httpinput.Query[UploadQuery],
 ) httpx.Response[string] {
@@ -142,8 +140,8 @@ func (c *UserController) Upload(
 	return httpx.Response[string]{Body: "OK"}
 }
 
-func (c *UserController) CreateOrder(ctx context.Context, p httpinput.Path[OrderPath]) httpx.Response[string] {
-	publish.Event(ctx, OrderCreated{
+func (c *UserController) CreateOrder(ctx spine.Ctx, p httpinput.Path[OrderPath]) httpx.Response[string] {
+	publish.Event(ctx.ExecutionContext().Context(), OrderCreated{
 		OrderID: p.OrderID,
 		At:      time.Now(),
 	})
@@ -153,8 +151,8 @@ func (c *UserController) CreateOrder(ctx context.Context, p httpinput.Path[Order
 	}
 }
 
-func (c *UserController) CreateStock(ctx context.Context, p httpinput.Path[StockPath]) httpx.Response[string] {
-	publish.Event(ctx, StockCreated{
+func (c *UserController) CreateStock(ctx spine.Ctx, p httpinput.Path[StockPath]) httpx.Response[string] {
+	publish.Event(ctx.ExecutionContext().Context(), StockCreated{
 		OrderID: p.StockID,
 		At:      time.Now(),
 	})
@@ -195,6 +193,6 @@ type ChatMessage struct {
 	Message string `json:"message"`
 }
 
-func (c *ChatController) OnMessage(ctx context.Context, connID ws.ConnectionID, msg ChatMessage) error {
-	return ws.Send(ctx, ws.TextMessage, []byte(msg.Message))
+func (c *ChatController) OnMessage(ctx spine.Ctx, connID ws.ConnectionID, msg ChatMessage) error {
+	return ws.Send(ctx.ExecutionContext().Context(), ws.TextMessage, []byte(msg.Message))
 }

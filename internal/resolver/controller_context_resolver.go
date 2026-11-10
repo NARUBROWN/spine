@@ -7,11 +7,17 @@ import (
 	"github.com/NARUBROWN/spine/internal/runtime"
 )
 
-type ControllerContextResolver struct{}
+type ControllerContextResolver struct {
+	// RequireExecutionContext는 전체 핸들러 컨텍스트 계약을 선언한 인자만 받습니다.
+	RequireExecutionContext bool
+}
 
 func (r *ControllerContextResolver) Supports(parameterMeta ParameterMeta) bool {
 	t := parameterMeta.Type
 	if t == nil || t.Kind() != reflect.Interface {
+		return false
+	}
+	if r.RequireExecutionContext && !t.Implements(reflect.TypeFor[runtime.ControllerContext]()) {
 		return false
 	}
 

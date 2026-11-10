@@ -5,7 +5,7 @@ import (
 	"reflect"
 
 	"github.com/NARUBROWN/spine/core"
-	"github.com/NARUBROWN/spine/pkg/event/publish"
+	"github.com/NARUBROWN/spine/internal/runtime"
 )
 
 type StdContextResolver struct{}
@@ -15,10 +15,5 @@ func (r *StdContextResolver) Supports(parameterMeta ParameterMeta) bool {
 }
 
 func (r *StdContextResolver) Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error) {
-	baseCtx := ctx.Context()
-	bus := ctx.EventBus()
-	if bus != nil {
-		return publish.WithPublisher(baseCtx, bus), nil
-	}
-	return baseCtx, nil
+	return runtime.HandlerGoContext(ctx), nil
 }

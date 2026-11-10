@@ -11,6 +11,7 @@ import (
 	eventadapter "github.com/NARUBROWN/spine/contract/event"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/event/publish"
+	handlerspine "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type publicEventFactory struct {
@@ -74,6 +75,10 @@ func (c *publicEventController) Handle(ctx context.Context, input publicInput) e
 	return c.handle(ctx, input)
 }
 
+func (c *publicEventController) HandleWithSpineCtx(ctx handlerspine.Ctx, input publicInput) error {
+	return c.handle(ctx.ExecutionContext().Context(), input)
+}
+
 type serializedEvent struct {
 	calls *atomic.Int32
 	err   error
@@ -93,6 +98,7 @@ func (e *serializedEvent) MarshalJSON() ([]byte, error) {
 func TestAppEventExecutesTrustedSubscriptionAndSerializesOnceBeforeAck(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
+	deadline, _ := ctx.Deadline()
 	var handlers, encoded, sends, acks, nacks, builds atomic.Int32
 	at := time.Unix(1_700_000_000, 0)
 	reader := &publicEventReader{deliveries: make(chan eventadapter.Delivery, 1)}
@@ -125,6 +131,9 @@ func TestAppEventExecutesTrustedSubscriptionAndSerializesOnceBeforeAck(t *testin
 		spine.WithEventAdapter("fanout", publicEventFactory{publish: true, publisher: func(context.Context) (eventadapter.Publisher, error) { return second, nil }}))
 	app.Constructor(func() *publicEventController {
 		return &publicEventController{handle: func(ctx context.Context, input publicInput) error {
+			if got, ok := ctx.Deadline(); !ok || !got.Equal(deadline) {
+				t.Errorf("핸들러 컨텍스트가 부모 제한 시간을 잃었습니다: %v", got)
+			}
 			if input.Value != "input" {
 				t.Error("메시지 DTO가 다릅니다")
 			}
@@ -133,7 +142,7 @@ func TestAppEventExecutesTrustedSubscriptionAndSerializesOnceBeforeAck(t *testin
 			return nil
 		}}
 	})
-	if err := app.Consumers().Register("trusted-route", (*publicEventController).Handle); err != nil {
+	if err := app.Consumers().Register("trusted-route", (*publicEventController).HandleWithSpineCtx); err != nil {
 		t.Fatal(err)
 	}
 	if err := app.RunContext(ctx, boot.Options{}); err != nil {

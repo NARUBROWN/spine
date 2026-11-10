@@ -453,6 +453,7 @@ func buildConsumerPipeline(container *container.Container, registry *consumer.Re
 
 	consumerPipeline.AddArgumentResolver(
 		&resolver.StdContextResolver{},
+		&resolver.ControllerContextResolver{RequireExecutionContext: true},
 		&eventResolver.EventNameResolver{},
 		&eventResolver.PayloadResolver{},
 		&eventResolver.DTOResolver{Validator: validator},
@@ -485,6 +486,7 @@ func buildWSPipeline(
 
 	wsPipeline.AddArgumentResolver(
 		&resolver.StdContextResolver{},
+		&resolver.ControllerContextResolver{RequireExecutionContext: true},
 		&wsResolver.ConnectionIDResolver{},
 		&wsResolver.PayloadResolver{},
 		&wsResolver.DTOResolver{Validator: validator},

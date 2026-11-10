@@ -13,6 +13,7 @@ import (
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/constructor"
 	"github.com/NARUBROWN/spine/pkg/httpx"
+	handlerspine "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type reviewController struct{}
@@ -22,13 +23,17 @@ func (*reviewController) Legacy() httpx.Response[string] {
 	return httpx.Response[string]{Body: "legacy"}
 }
 func (*reviewController) RegisterRoutes(r *api.Registry) {
-	r.GET("/modern", func() httpx.Response[string] { return httpx.Response[string]{Body: "modern"} })
+	r.GET("/modern", func(ctx handlerspine.Ctx) httpx.Response[string] {
+		value, _ := ctx.ExecutionContext().Get("review")
+		return httpx.Response[string]{Body: value.(string)}
+	})
 }
 
 type handlerNameInterceptor struct{}
 
-func (*handlerNameInterceptor) PreHandle(_ core.ExecutionContext, meta core.HandlerMeta) error {
+func (*handlerNameInterceptor) PreHandle(ctx core.ExecutionContext, meta core.HandlerMeta) error {
 	_ = meta.HandlerName()
+	ctx.Set("review", "modern")
 	return nil
 }
 func (*handlerNameInterceptor) PostHandle(core.ExecutionContext, core.HandlerMeta) {}
