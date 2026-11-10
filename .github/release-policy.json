@@ -52,7 +52,7 @@
     }
   },
   "ci_sources": {
-    "github.com/NARUBROWN/spine-echo-platform": "5fad6a286b1cf8e286eb17ca9d6415926670179a",
+    "github.com/NARUBROWN/spine-echo-platform": "e0ed7fab17bda14f92d74845314f781b754f6071",
     "github.com/NARUBROWN/spine-validator-playground": "fd13a60df886afb295852270e77ff4588b69a8e6",
     "github.com/NARUBROWN/spine-gorilla-platform": "c501e2f47603dde30e2b518cce15685274d25ed7",
     "github.com/NARUBROWN/spine-kafka-platform": "3016808daef7f0ffc71a619294a599640f5502ed",
