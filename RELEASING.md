@@ -1,6 +1,6 @@
 # Spine 릴리스 운영
 
-코어는 v0.7.2, 기존 다섯 플랫폼은 v0.2.0, net/http와 NATS는 v0.1.0을 대상으로 Preview, RC, 정식 채널을 발행합니다. 코어 후보마다 공개된 플랫폼 태그를 하나의 검증 조합으로 고정합니다. 플랫폼 채널과 버전은 독립적입니다. 패키지 버전 번호는 독립적입니다.
+코어는 v0.7.2, Echo는 v0.2.1, 나머지 기존 네 플랫폼은 v0.2.0, net/http와 NATS는 v0.1.0을 대상으로 Preview, RC, 정식 채널을 발행합니다. 코어 후보마다 공개된 플랫폼 태그를 하나의 검증 조합으로 고정합니다. 플랫폼 채널과 버전은 독립적입니다.
 
 모든 단계에서 태그를 발행하며 GitHub Release는 정식에서만 만듭니다. 예제 앱은 정식 태그를 사용하고 정식 발행 후 갱신합니다. 예제나 CLI 생성 레시피 갱신을 코어 후보 발행의 선행 조건으로 사용하지 않습니다.
 
@@ -10,8 +10,8 @@
 
 | 모듈 | Preview 버전 |
 | --- | --- |
-| Spine 코어 | `v0.7.2-preview.2` |
-| Echo | `v0.2.0-preview.4` |
+| Spine 코어 | `v0.7.2-preview.3` |
+| Echo | `v0.2.1-preview.1` |
 | Gorilla | `v0.2.0-preview.2` |
 | Kafka | `v0.2.0-preview.2` |
 | RabbitMQ | `v0.2.0-preview.2` |
@@ -19,7 +19,7 @@
 | net/http | `v0.1.0-preview.2` |
 | NATS | `v0.1.0-preview.1` |
 
-코어 `v0.7.2-preview.2`은 새 후보이며 플랫폼 태그는 기존 공개 버전입니다. 표의 태그가 있다는 사실만으로 호환성이 확인되는 것은 아닙니다. 코어가 고정한 공개 모듈을 함께 설치하고 전체 조합 검증을 통과해야 합니다. RC와 정식 조합도 독립된 플랫폼 태그를 지정하며 현재 정책은 위 태그를 재사용합니다. 정식 발행 전에는 Preview 플랫폼 태그를 그대로 사용하는 것이 적절한지 검토합니다.
+코어 `v0.7.2-preview.3`은 명시적 입력 래퍼로 전환한 Echo 테스트가 포함된 `v0.2.1-preview.1`을 사용합니다. 기존 코어 `v0.7.2-preview.2` 태그의 Echo 조합은 유지합니다. 위 조합은 공개 태그로 전체 검증을 통과해야 하며, RC와 정식 검증에도 같은 플랫폼 태그를 사용합니다.
 
 HTTP v3의 net/http 플랫폼을 독립 저장소와 여섯 번째 발행 모듈로 편입합니다. 소스 CI는 고정한 net/http 커밋을 사용하고 HTTP/TLS 비교 E2E를 실행합니다. 공개 조합 완료에는 고정한 net/http 태그의 설치와 조합 검증이 필요합니다. 원격 저장소 준비와 PR 게시는 후보 태그 발행을 뜻하지 않습니다.
 
@@ -67,7 +67,7 @@ Preview 전체 조합 완료 후 72시간이 지나야 RC를 발행할 수 있�
 채널별 의존 버전 변경은 전용 승격 브랜치에서 준비합니다. RC 예시는 다음과 같습니다.
 
 ```sh
-git switch -c promote/rc/v0.7.2-rc.1 v0.7.2-preview.2
+git switch -c promote/rc/v0.7.2-rc.1 v0.7.2-preview.3
 python3 scripts/release/pin_channel.py --channel rc
 python3 scripts/release/pin_channel.py --channel rc --apply
 ```
