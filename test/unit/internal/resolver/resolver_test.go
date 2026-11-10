@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/runtime"
 	eventpublish "github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	pkgmultipart "github.com/NARUBROWN/spine/pkg/multipart"
@@ -265,7 +266,7 @@ func TestControllerContextResolver_Resolve(t *testing.T) {
 	ctx := newFakeHttpCtx()
 	ctx.store["userID"] = 7
 
-	for _, typ := range []reflect.Type{reflect.TypeFor[spine.Ctx](), reflect.TypeFor[core.ControllerContext]()} {
+	for _, typ := range []reflect.Type{reflect.TypeFor[spine.Ctx](), reflect.TypeFor[runtime.ControllerContext]()} {
 		t.Run(typ.String(), func(t *testing.T) {
 			pm := ParameterMeta{Type: typ}
 			if !r.Supports(pm) {
@@ -285,7 +286,7 @@ func TestControllerContextResolver_Resolve(t *testing.T) {
 
 func TestControllerContextResolver_DoesNotClaimUnsupportedExtendedInterface(t *testing.T) {
 	type extended interface {
-		core.ControllerContext
+		spine.Ctx
 		Principal() string
 	}
 

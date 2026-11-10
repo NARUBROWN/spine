@@ -17,6 +17,7 @@ import (
 	"github.com/NARUBROWN/spine/pkg/header"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	"github.com/NARUBROWN/spine/pkg/query"
+	handlerctx "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type legacyContextKey struct{}
@@ -34,7 +35,7 @@ type legacyValuesResult struct {
 	User    string `json:"user"`
 }
 
-func (*legacyValuesController) Get(ctx context.Context, view core.ControllerContext, q query.Values, h header.Values, page query.Pagination) httpx.Response[legacyValuesResult] {
+func (*legacyValuesController) Get(ctx context.Context, view handlerctx.Ctx, q query.Values, h header.Values, page query.Pagination) httpx.Response[legacyValuesResult] {
 	user, _ := view.Get("user")
 	return httpx.Response[legacyValuesResult]{Body: legacyValuesResult{
 		Tag: q.String("tag"), Count: q.Int("count", 7), Enabled: q.GetBoolByKey("enabled", false),

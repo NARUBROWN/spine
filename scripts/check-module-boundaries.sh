@@ -21,6 +21,13 @@ for contract in contract/description contract/http contract/event contract/valid
   fi
 done
 
+# 핸들러용 공개 컨텍스트는 코어와 내부 구현의 의존성이 아닙니다.
+handler_context=$(go list -deps ./core/... ./internal/... | awk '$0 == "github.com/NARUBROWN/spine/pkg/spine"')
+if [ -n "$handler_context" ]; then
+  printf 'Core or internal packages depend on the public handler context package.\n' >&2
+  exit 1
+fi
+
 # 커널과 계약은 외부 모듈 없이 표준 라이브러리만 사용합니다.
 kernel=$(go run ./scripts/test list -deps -test -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./...)
 unexpected=$(printf '%s\n' "$kernel" | awk 'NF && $0 !~ /^github.com\/NARUBROWN\/spine([\/._ ]|$)/')

@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/header"
 	"github.com/NARUBROWN/spine/pkg/path"
 	"github.com/NARUBROWN/spine/pkg/query"
+	handlerctx "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type legacyInputController struct{}
@@ -29,7 +29,7 @@ func (*legacyInputController) PathPath(path.Int, httpinput.Path[pathContract])  
 func (*legacyInputController) NewFirst(httpinput.Query[repeatedQuery], header.Values)       {}
 func (*legacyInputController) QueryPointer(*query.Values)                                   {}
 func (*legacyInputController) HeaderPointer(*header.Values)                                 {}
-func (*legacyInputController) Legacy(context.Context, core.ControllerContext, path.Int, query.Values, header.Values, query.Pagination, httpinput.Body[repeatedBody]) {
+func (*legacyInputController) Legacy(context.Context, handlerctx.Ctx, path.Int, query.Values, header.Values, query.Pagination, httpinput.Body[repeatedBody]) {
 }
 func (*legacyInputController) Typed(httpinput.Path[pathContract], httpinput.Query[repeatedQuery], httpinput.Header[repeatedHeader]) {
 }
