@@ -22,6 +22,7 @@ import (
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/NARUBROWN/spine/pkg/httpx"
+	"github.com/NARUBROWN/spine/pkg/input"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/segmentio/kafka-go"
 )
@@ -39,8 +40,8 @@ func (liveDomainEvent) OccurredAt() time.Time { return time.Now() }
 
 type liveEventHTTPController struct{ topic string }
 
-func (c *liveEventHTTPController) Emit(ctx context.Context, input *liveEventInput) httpx.Response[string] {
-	publish.Event(ctx, liveDomainEvent{ID: input.ID, topic: c.topic})
+func (c *liveEventHTTPController) Emit(ctx context.Context, body input.Body[liveEventInput]) httpx.Response[string] {
+	publish.Event(ctx, liveDomainEvent{ID: body.ID, topic: c.topic})
 	return httpx.Response[string]{Body: "accepted"}
 }
 

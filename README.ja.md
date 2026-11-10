@@ -12,9 +12,9 @@
 
 ## 現在のチャネル
 
-**RC** | 公開済みコアタグ [`v0.7.1-rc.1`](https://github.com/NARUBROWN/spine/tree/v0.7.1-rc.1)
+**Preview** | 公開済みコアタグ [`v0.7.2-preview.2`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.2)
 
-他のチャネル | [Preview](https://github.com/NARUBROWN/spine/tree/preview) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
+他のチャネル | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 
 ## コアコンセプト
 
@@ -29,12 +29,10 @@
 ## Spine CLI で始める
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.3-rc.3
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.4-preview.2
 spine version
-spine new todo-api --module github.com/acme/todo-api --channel rc --no-interactive
+spine new todo-api --module github.com/acme/todo-api --channel preview --no-interactive
 cd todo-api
-go get github.com/NARUBROWN/spine@v0.7.1-rc.1 github.com/NARUBROWN/spine-echo-platform@v0.2.0-rc.1
-go mod tidy
 spine dev
 ```
 
@@ -44,7 +42,7 @@ curl http://localhost:8080/health
 
 使用するコアとプラットフォームのバージョンは生成された `go.mod` で確認してください。
 
-本番環境では Stable を使用してください。`--channel rc` は公開された RC と正式版のうち最新のタグを選ぶため、正式版のコアが選ばれる場合があります。上の `go get` でコアと Echo プラットフォームを検証対象の RC タグに固定します。
+`--channel preview` は更新される開発ブランチを参照します。
 
 ## リンク
 
@@ -56,7 +54,7 @@ curl http://localhost:8080/health
 
 ---
 
-Spine `v0.7.1` の[コントローラーでのルート登録例](docs/migration/controller-routes.md)を参照してください。
+Spine `v0.7.2` の[コントローラーでのルート登録例](docs/migration/controller-routes.md)を参照してください。
 
 ## 企業導入の無償技術サポート
 

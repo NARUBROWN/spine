@@ -20,7 +20,13 @@ func (*InputDTOResolver) Supports(parameter ParameterMeta) bool {
 }
 
 func (r *InputDTOResolver) Resolve(ctx core.ExecutionContext, parameter ParameterMeta) (any, error) {
-	plan, _, err := input.Inspect(parameter.Type)
+	if !r.Supports(parameter) {
+		return nil, fmt.Errorf("HTTP DTO inputs require an explicit input wrapper")
+	}
+	plan, supported, err := input.Inspect(parameter.Type)
+	if !supported {
+		return nil, fmt.Errorf("use input.Path, input.Query or input.Header for HTTP DTO inputs")
+	}
 	t, source, fields := plan.Payload, plan.Source, plan.Fields
 	if err != nil {
 		return nil, err

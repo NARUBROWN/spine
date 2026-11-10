@@ -21,7 +21,7 @@ func Wrapper(t reflect.Type) (string, bool) {
 	if t == nil || t.PkgPath() != "github.com/NARUBROWN/spine/pkg/input" {
 		return "", false
 	}
-	for _, entry := range []struct{ name, source string }{{"Path[", "path"}, {"Query[", "query"}, {"Body[", "body"}} {
+	for _, entry := range []struct{ name, source string }{{"Path[", "path"}, {"Query[", "query"}, {"Header[", "header"}, {"Body[", "body"}} {
 		if strings.HasPrefix(t.Name(), entry.name) {
 			return entry.source, true
 		}

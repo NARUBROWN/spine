@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"errors"
+	httpinput "github.com/NARUBROWN/spine/pkg/input"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -200,7 +201,7 @@ type formTagged struct {
 
 func TestDTOResolver_SupportsAndResolve(t *testing.T) {
 	r := &DTOResolver{}
-	pm := ParameterMeta{Type: reflect.TypeOf(&dtoSample{})}
+	pm := ParameterMeta{Type: reflect.TypeFor[httpinput.Body[dtoSample]]()}
 	ctx := newFakeHttpCtx()
 	ctx.bindValue = dtoSample{Name: "abc", Age: 10}
 
@@ -212,7 +213,7 @@ func TestDTOResolver_SupportsAndResolve(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DTOResolver Resolve 실패: %v", err)
 	}
-	dto := val.(*dtoSample)
+	dto := val.(httpinput.Body[dtoSample])
 	if dto.Name != "abc" || dto.Age != 10 {
 		t.Fatalf("바인딩 결과가 잘못되었습니다: %+v", dto)
 	}
@@ -220,7 +221,7 @@ func TestDTOResolver_SupportsAndResolve(t *testing.T) {
 
 func TestDTOResolver_RejectsFormTaggedStruct(t *testing.T) {
 	r := &DTOResolver{}
-	pm := ParameterMeta{Type: reflect.TypeOf(&formTagged{})}
+	pm := ParameterMeta{Type: reflect.TypeFor[httpinput.Body[formTagged]]()}
 	if r.Supports(pm) {
 		t.Fatal("form 태그가 있는 struct는 DTOResolver가 지원하지 않아야 합니다")
 	}
@@ -228,7 +229,7 @@ func TestDTOResolver_RejectsFormTaggedStruct(t *testing.T) {
 
 func TestDTOResolver_BindErrorPropagates(t *testing.T) {
 	r := &DTOResolver{}
-	pm := ParameterMeta{Type: reflect.TypeOf(&dtoSample{})}
+	pm := ParameterMeta{Type: reflect.TypeFor[httpinput.Body[dtoSample]]()}
 	ctx := newFakeHttpCtx()
 	ctx.bindErr = errors.New("bind fail")
 
@@ -240,7 +241,7 @@ func TestDTOResolver_BindErrorPropagates(t *testing.T) {
 
 func TestFormDTOResolver_SupportsAndResolve(t *testing.T) {
 	r := &FormDTOResolver{}
-	pm := ParameterMeta{Type: reflect.TypeOf(&formTagged{})}
+	pm := ParameterMeta{Type: reflect.TypeFor[httpinput.Body[formTagged]]()}
 	ctx := newFakeHttpCtx()
 	ctx.bindValue = formTagged{Name: "kim"}
 
@@ -252,7 +253,7 @@ func TestFormDTOResolver_SupportsAndResolve(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FormDTOResolver Resolve 실패: %v", err)
 	}
-	dto := val.(*formTagged)
+	dto := val.(httpinput.Body[formTagged])
 	if dto.Name != "kim" {
 		t.Fatalf("폼 DTO 값이 잘못되었습니다: %+v", dto)
 	}

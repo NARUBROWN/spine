@@ -20,6 +20,7 @@ import (
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/NARUBROWN/spine/pkg/httpx"
+	"github.com/NARUBROWN/spine/pkg/input"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -38,8 +39,8 @@ func (e orderEvent) OccurredAt() time.Time { return time.Now() }
 
 type senderController struct{}
 
-func (*senderController) Send(ctx context.Context, input *order) httpx.Response[string] {
-	publish.Event(ctx, orderEvent{order: *input, topic: "order.created"})
+func (*senderController) Send(ctx context.Context, body input.Body[order]) httpx.Response[string] {
+	publish.Event(ctx, orderEvent{order: *body, topic: "order.created"})
 	return httpx.Response[string]{Body: "accepted"}
 }
 

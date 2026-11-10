@@ -1,5 +1,7 @@
 package test
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"bytes"
 	"context"
@@ -38,15 +40,15 @@ type inputV3Controller struct {
 	executionErr error
 }
 
-func (c *inputV3Controller) FormFirst(form *inputV3Form, upload files.UploadedFiles) httpx.Response[string] {
+func (c *inputV3Controller) FormFirst(form httpinput.Body[inputV3Form], upload files.UploadedFiles) httpx.Response[string] {
 	return c.handle(form, upload)
 }
 
-func (c *inputV3Controller) FilesFirst(upload files.UploadedFiles, form *inputV3Form) httpx.Response[string] {
+func (c *inputV3Controller) FilesFirst(upload files.UploadedFiles, form httpinput.Body[inputV3Form]) httpx.Response[string] {
 	return c.handle(form, upload)
 }
 
-func (c *inputV3Controller) handle(form *inputV3Form, upload files.UploadedFiles) httpx.Response[string] {
+func (c *inputV3Controller) handle(form httpinput.Body[inputV3Form], upload files.UploadedFiles) httpx.Response[string] {
 	c.calls.Add(1)
 	c.order = append(c.order, "controller")
 	if form.Title != "body" || len(upload.Files) != 1 {
@@ -231,7 +233,7 @@ func (c *inputV3Controller) FileOnly(files.UploadedFiles) httpx.Response[string]
 	c.calls.Add(1)
 	return httpx.Response[string]{}
 }
-func (c *inputV3Controller) JSON(*httpBaselineDTO) httpx.Response[string] {
+func (c *inputV3Controller) JSON(httpinput.Body[httpBaselineDTO]) httpx.Response[string] {
 	c.calls.Add(1)
 	return httpx.Response[string]{}
 }

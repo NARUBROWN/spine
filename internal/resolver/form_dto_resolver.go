@@ -15,23 +15,17 @@ type FormDTOResolver struct {
 }
 
 func (r *FormDTOResolver) Supports(pm ParameterMeta) bool {
-	if pm.Type.Kind() != reflect.Ptr {
+	source, wrapped := input.Wrapper(pm.Type)
+	if !wrapped || source != "body" || pm.Type.Kind() != reflect.Pointer || pm.Type.Elem().Kind() != reflect.Struct {
 		return false
 	}
-
-	if _, _, ok := input.DTO(pm.Type); ok {
-		return false
-	}
-
-	elem := pm.Type.Elem()
-	if elem.Kind() != reflect.Struct {
-		return false
-	}
-
-	return input.HasForm(elem)
+	return input.HasForm(pm.Type.Elem())
 }
 
 func (r *FormDTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error) {
+	if !r.Supports(parameterMeta) {
+		return nil, fmt.Errorf("HTTP DTO inputs require an explicit input wrapper")
+	}
 	httpCtx, ok := ctx.(core.HttpRequestContext)
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")
@@ -47,5 +41,5 @@ func (r *FormDTOResolver) Resolve(ctx core.ExecutionContext, parameterMeta Param
 	if err := ValidateHTTPDTO(ctx.Context(), r.Validator, dto, "body", bodyFieldTag(httpCtx)); err != nil {
 		return nil, err
 	}
-	return dto, nil
+	return reflect.ValueOf(dto).Convert(parameterMeta.Type).Interface(), nil
 }

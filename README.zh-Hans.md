@@ -12,9 +12,9 @@
 
 ## 当前渠道
 
-**RC** | 已发布的核心标签 [`v0.7.1-rc.1`](https://github.com/NARUBROWN/spine/tree/v0.7.1-rc.1)
+**Preview** | 已发布的核心标签 [`v0.7.2-preview.2`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.2)
 
-其他渠道 | [Preview](https://github.com/NARUBROWN/spine/tree/preview) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
+其他渠道 | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 
 ## 核心理念
 
@@ -29,12 +29,10 @@
 ## 使用 Spine CLI 开始
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.3-rc.3
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.4-preview.2
 spine version
-spine new todo-api --module github.com/acme/todo-api --channel rc --no-interactive
+spine new todo-api --module github.com/acme/todo-api --channel preview --no-interactive
 cd todo-api
-go get github.com/NARUBROWN/spine@v0.7.1-rc.1 github.com/NARUBROWN/spine-echo-platform@v0.2.0-rc.1
-go mod tidy
 spine dev
 ```
 
@@ -44,7 +42,7 @@ curl http://localhost:8080/health
 
 请在生成的 `go.mod` 中查看应用使用的核心和平台版本。
 
-生产环境请使用 Stable。`--channel rc` 选择已发布的 RC 和正式版中最新的标签，因此生成的应用可能使用正式版核心。上面的 `go get` 将核心和 Echo 平台固定为要验证的 RC 标签。
+`--channel preview` 会解析持续更新的开发分支。
 
 ## 链接
 
@@ -56,7 +54,7 @@ curl http://localhost:8080/health
 
 ---
 
-请参阅 Spine `v0.7.1` 的[控制器路由注册示例](docs/migration/controller-routes.md)。
+请参阅 Spine `v0.7.2` 的[控制器路由注册示例](docs/migration/controller-routes.md)。
 
 ## 企业采用免费技术支持
 

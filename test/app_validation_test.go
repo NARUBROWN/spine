@@ -1,5 +1,7 @@
 package test
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"context"
 	"encoding/json"
@@ -30,12 +32,12 @@ type validationForm struct {
 
 type validationController struct{ calls atomic.Int32 }
 
-func (c *validationController) Body(dto *echoRequest) httpx.Response[string] {
+func (c *validationController) Body(dto httpinput.Body[echoRequest]) httpx.Response[string] {
 	c.calls.Add(1)
 	return httpx.Response[string]{Body: dto.Name}
 }
 
-func (c *validationController) Form(dto *validationForm) httpx.Response[string] {
+func (c *validationController) Form(dto httpinput.Body[validationForm]) httpx.Response[string] {
 	c.calls.Add(1)
 	return httpx.Response[string]{Body: dto.Name}
 }

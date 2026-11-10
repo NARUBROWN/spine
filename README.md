@@ -12,9 +12,9 @@
 
 ## 현재 채널
 
-**RC** | 공개 코어 태그 [`v0.7.1-rc.1`](https://github.com/NARUBROWN/spine/tree/v0.7.1-rc.1)
+**Preview** | 공개 코어 태그 [`v0.7.2-preview.2`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.2)
 
-다른 채널 | [Preview](https://github.com/NARUBROWN/spine/tree/preview) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
+다른 채널 | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 
 ## 핵심 아이디어
 
@@ -29,12 +29,10 @@
 ## Spine CLI로 시작하기
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.3-rc.3
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.4-preview.2
 spine version
-spine new todo-api --module github.com/acme/todo-api --channel rc --no-interactive
+spine new todo-api --module github.com/acme/todo-api --channel preview --no-interactive
 cd todo-api
-go get github.com/NARUBROWN/spine@v0.7.1-rc.1 github.com/NARUBROWN/spine-echo-platform@v0.2.0-rc.1
-go mod tidy
 spine dev
 ```
 
@@ -44,7 +42,7 @@ curl http://localhost:8080/health
 
 현재 앱이 사용하는 코어와 플랫폼은 생성된 `go.mod`에서 확인하세요.
 
-운영에는 Stable을 사용하세요. `--channel rc`는 공개 RC와 정식 태그 중 최신 버전을 선택하므로, 정식 버전이 선택될 수 있습니다. 위의 `go get`은 검증할 코어와 Echo 플랫폼을 RC 태그로 고정합니다.
+미리보기의 `--channel preview`는 이동하는 개발 브랜치를 조회합니다.
 
 ## 문서와 예제
 
@@ -54,7 +52,7 @@ curl http://localhost:8080/health
 - [Kafka MSA 예제](https://github.com/NARUBROWN/spine-simple-msa-demo): 주문 서버와 재고 워커의 이벤트 처리
 - [WebSocket 채팅 예제](https://github.com/NARUBROWN/spine-simple-chat-demo): 인증과 방별 메시지 전송
 
-Spine `v0.7.1`의 [컨트롤러 경로 등록 예제](docs/migration/controller-routes.md)를 참고하세요.
+Spine `v0.7.2`의 [컨트롤러 경로 등록 예제](docs/migration/controller-routes.md)를 참고하세요.
 
 ## 기업 도입 무상 기술 지원
 

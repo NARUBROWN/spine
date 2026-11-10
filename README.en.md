@@ -12,9 +12,9 @@ It does not hide how a request is resolved and executed.
 
 ## Current channel
 
-**RC** | Published core tag [`v0.7.1-rc.1`](https://github.com/NARUBROWN/spine/tree/v0.7.1-rc.1)
+**Preview** | Published core tag [`v0.7.2-preview.2`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.2)
 
-Other channels | [Preview](https://github.com/NARUBROWN/spine/tree/preview) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
+Other channels | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 
 ## Core ideas
 
@@ -29,12 +29,10 @@ Other channels | [Preview](https://github.com/NARUBROWN/spine/tree/preview) | [S
 ## Get started with Spine CLI
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.3-rc.3
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.4-preview.2
 spine version
-spine new todo-api --module github.com/acme/todo-api --channel rc --no-interactive
+spine new todo-api --module github.com/acme/todo-api --channel preview --no-interactive
 cd todo-api
-go get github.com/NARUBROWN/spine@v0.7.1-rc.1 github.com/NARUBROWN/spine-echo-platform@v0.2.0-rc.1
-go mod tidy
 spine dev
 ```
 
@@ -44,7 +42,7 @@ curl http://localhost:8080/health
 
 Check the generated `go.mod` for the core and platform versions used by the app.
 
-Use Stable for production. `--channel rc` selects the latest published RC or stable tag, so the generated app may use a stable core. The `go get` command above pins the core and Echo platform to the RC tags under test.
+`--channel preview` resolves moving development branches.
 
 ## Links
 
@@ -56,7 +54,7 @@ Use Stable for production. `--channel rc` selects the latest published RC or sta
 
 ---
 
-See the [controller route registration example](docs/migration/controller-routes.md) for Spine `v0.7.1`.
+See the [controller route registration example](docs/migration/controller-routes.md) for Spine `v0.7.2`.
 
 ## Free enterprise adoption support
 
