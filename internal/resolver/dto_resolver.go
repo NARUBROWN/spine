@@ -3,7 +3,9 @@ package resolver
 import (
 	"fmt"
 	"mime"
+	"net/http"
 	"reflect"
+	"slices"
 	"sync"
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
@@ -46,9 +48,23 @@ func resolveBodyDTO(ctx execution.Context, parameter ParameterMeta, validator va
 			plan.validation, _ = DescribeValidation(describer, payload)
 		}
 		plan.mediaTypes = input.BodyMediaTypes(payload, plan.validation)
+		plan.restricted = !slices.Equal(plan.mediaTypes, input.BodyMediaTypes(payload, validation.SchemaDescription{}))
 		available, _ = mediaCache.LoadOrStore(payload, plan)
 	}
 	plan := available.(bodyMediaPlan)
+	// 필수 필드 때문에 형식이 제한된 DTO는 빈 본문에서도 해당 계약을 지킵니다.
+	// 일반 DTO의 빈 본문 여부와 기본 형식 검사는 공통 바인더가 판정합니다.
+	if contentType := httpCtx.Header("Content-Type"); plan.restricted && contentType != "" {
+		media, _, err := mime.ParseMediaType(contentType)
+		if err != nil {
+			return nil, &inputerr.Error{Source: "body", Cause: httpfailure.BadRequest("Invalid Content-Type")}
+		}
+		if !slices.Contains(plan.mediaTypes, media) {
+			return nil, &inputerr.Error{Source: "body", Cause: &httpfailure.HTTPError{
+				Status: http.StatusUnsupportedMediaType, Message: "Unsupported Media Type",
+			}}
+		}
+	}
 	dto := reflect.New(payload)
 	if err := httpCtx.Bind(dto.Interface(), plan.mediaTypes); err != nil {
 		return nil, &inputerr.Error{Source: "body", Cause: err}
@@ -69,4 +85,5 @@ func resolveBodyDTO(ctx execution.Context, parameter ParameterMeta, validator va
 type bodyMediaPlan struct {
 	mediaTypes []string
 	validation validation.SchemaDescription
+	restricted bool
 }
