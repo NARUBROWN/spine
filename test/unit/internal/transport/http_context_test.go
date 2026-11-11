@@ -20,6 +20,11 @@ import (
 
 type stateWriter struct{ adapter.ResponseWriter }
 
+type publicationProbe struct{}
+
+func (publicationProbe) Name() string          { return "publication-probe" }
+func (publicationProbe) OccurredAt() time.Time { return time.Time{} }
+
 func TestHTTPContextParallelViewsShareOnePublisher(t *testing.T) {
 	request := NewHTTPContext(testScope{ctx: context.Background()}, 0)
 	view := execution.NewContext(request)
@@ -38,9 +43,16 @@ func TestHTTPContextParallelViewsShareOnePublisher(t *testing.T) {
 	workers.Wait()
 	close(publishers)
 	for got := range publishers {
-		if got == nil || got != request.EventBus() {
-			t.Fatal("모든 공개 뷰가 같은 요청 publisher를 사용해야 합니다")
+		if got == nil {
+			t.Fatal("공개 뷰에 발행 기능이 없습니다")
 		}
+		if _, ok := got.(emission.Bus); ok {
+			t.Fatal("공개 뷰가 내부 큐 제어를 노출합니다")
+		}
+		got.Publish(publicationProbe{})
+	}
+	if events := request.EventBus().Drain(); len(events) != cap(publishers) {
+		t.Fatalf("같은 요청 큐에 쌓인 이벤트 수: %d", len(events))
 	}
 }
 

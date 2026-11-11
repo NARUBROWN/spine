@@ -21,8 +21,17 @@ type Bus interface {
 
 type publisherKey struct{}
 
+type publisherView struct{ publisher Publisher }
+
+func (v publisherView) Publish(events ...DomainEvent) {
+	v.publisher.Publish(events...)
+}
+
 func WithPublisher(ctx context.Context, publisher Publisher) context.Context {
-	return context.WithValue(ctx, publisherKey{}, publisher)
+	if publisher == nil {
+		return context.WithValue(ctx, publisherKey{}, nil)
+	}
+	return context.WithValue(ctx, publisherKey{}, publisherView{publisher: publisher})
 }
 
 func FromContext(ctx context.Context) Publisher {

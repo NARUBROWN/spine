@@ -1,9 +1,11 @@
 package endpoint
 
 import (
+	"encoding"
+	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"reflect"
-	"slices"
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/internal/configuration"
@@ -29,28 +31,12 @@ func HandlerValidationParameterIssues(meta execution.HandlerMeta, prefix string,
 	}
 	var issues []configuration.ConfigIssue
 	for i := offset; i < signature.NumIn(); i++ {
-		t, source, ok := input.DTO(signature.In(i))
-		if !ok {
-			continue
+		parameter := signature.In(i)
+		t, source, ok := input.DTO(parameter)
+		if plan, wrapped, err := input.Inspect(parameter); err == nil && wrapped && plan.Source == "body" {
+			t, source, ok = plan.Payload, "body", true
 		}
-		var excluded [][]int
-		var walk func(reflect.Type, []int)
-		walk = func(current reflect.Type, prefix []int) {
-			for j := 0; j < current.NumField(); j++ {
-				f := current.Field(j)
-				if !f.IsExported() {
-					continue
-				}
-				index := append(append([]int(nil), prefix...), j)
-				if f.Tag.Get(source) == "-" {
-					excluded = append(excluded, index)
-				} else if f.Anonymous && f.Type.Kind() == reflect.Struct && f.Tag.Get(source) == "" {
-					walk(f.Type, index)
-				}
-			}
-		}
-		walk(t, nil)
-		if len(excluded) == 0 {
+		if !ok || !hasExcludedInputField(t, source, make(map[reflect.Type]bool)) {
 			continue
 		}
 		declaration, err := describeValidation(describer, t)
@@ -58,22 +44,67 @@ func HandlerValidationParameterIssues(meta execution.HandlerMeta, prefix string,
 			continue
 		}
 		for _, field := range declaration.Fields {
-			if !field.Required {
-				continue
-			}
-			for _, index := range excluded {
-				if len(field.Index) >= len(index) && slices.Equal(field.Index[:len(index)], index) {
-					issues = append(issues, configuration.ConfigIssue{
-						Path: fmt.Sprintf("%s.Parameters[%d]", prefix, i-offset), Code: "HTTP_INPUT_VALIDATION_CONFLICT",
-						Message: fmt.Sprintf("Handler %s excludes a %s field at index %v that its validator requires.", name, source, field.Index),
-						Hint:    "Bind the field or remove its required validation constraint.",
-					})
-					break
-				}
+			if field.Required && excludedInputField(t, source, field.Index) {
+				issues = append(issues, configuration.ConfigIssue{
+					Path: fmt.Sprintf("%s.Parameters[%d]", prefix, i-offset), Code: "HTTP_INPUT_VALIDATION_CONFLICT",
+					Message: fmt.Sprintf("Handler %s excludes a %s field at index %v that its validator requires.", name, source, field.Index),
+					Hint:    "Bind the field or remove its required validation constraint.",
+				})
 			}
 		}
 	}
 	return issues
+}
+
+func hasExcludedInputField(t reflect.Type, source string, seen map[reflect.Type]bool) bool {
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct || seen[t] || source == "body" && customBodyDecoder(t) {
+		return false
+	}
+	seen[t] = true
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		if field.IsExported() && (inputFieldExcluded(field, source) || hasExcludedInputField(field.Type, source, seen)) {
+			return true
+		}
+	}
+	return false
+}
+
+func inputFieldExcluded(field reflect.StructField, source string) bool {
+	if source == "body" {
+		return field.Tag.Get("json") == "-" && field.Tag.Get("xml") == "-" && field.Tag.Get("form") == "-"
+	}
+	return field.Tag.Get(source) == "-"
+}
+
+func customBodyDecoder(t reflect.Type) bool {
+	pointer := reflect.PointerTo(t)
+	return pointer.Implements(reflect.TypeFor[json.Unmarshaler]()) ||
+		pointer.Implements(reflect.TypeFor[xml.Unmarshaler]()) ||
+		pointer.Implements(reflect.TypeFor[encoding.TextUnmarshaler]())
+}
+
+func excludedInputField(t reflect.Type, source string, index []int) bool {
+	for _, position := range index {
+		if t.Kind() == reflect.Pointer {
+			t = t.Elem()
+		}
+		if t.Kind() != reflect.Struct || position < 0 || position >= t.NumField() {
+			return false
+		}
+		field := t.Field(position)
+		if source == "body" && customBodyDecoder(t) {
+			return false
+		}
+		if inputFieldExcluded(field, source) {
+			return true
+		}
+		t = field.Type
+	}
+	return false
 }
 
 func describeValidation(describer validation.SchemaDescriber, t reflect.Type) (result validation.SchemaDescription, err error) {

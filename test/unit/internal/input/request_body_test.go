@@ -95,6 +95,9 @@ func TestRequestBodyFormatsAndErrorStatus(t *testing.T) {
 		{"scalar_null", "application/json", `{"count":null}`, 400, 0},
 		{"multiple_json_values", "application/json", `{} {}`, 400, 0},
 		{"malformed_xml", "application/xml", `<item>`, 400, 0},
+		{"truncated_xml_tail", "application/xml", `<item/><`, 400, 0},
+		{"multiple_xml_roots", "text/xml", `<item/><item/>`, 400, 0},
+		{"xml_with_trailing_comment", "application/xml", `<item><count>4</count></item><!-- done -->`, 0, 4},
 		{"unsupported", "text/plain", `payload`, 415, 0},
 		{"missing_type", "", `{}`, 415, 0},
 		{"invalid_type", "application/json; =bad", `{}`, 400, 0},
@@ -117,6 +120,26 @@ func TestRequestBodyFormatsAndErrorStatus(t *testing.T) {
 				if !errors.As(err, &cause) {
 					t.Fatal("JSON null 원인을 보존해야 합니다")
 				}
+			}
+		})
+	}
+}
+
+func TestMultipartLookupPreservesOtherBodyFormats(t *testing.T) {
+	for _, example := range []struct{ media, body string }{
+		{"application/json", `{"count":4}`},
+		{"application/x-www-form-urlencoded", "count=4"},
+	} {
+		t.Run(example.media, func(t *testing.T) {
+			body := newBodyForTest(t, t.Context(), strings.NewReader(example.body), example.media, BodyOptions{})
+			if _, err := body.MultipartForm(); !errors.Is(err, http.ErrNotMultipart) {
+				t.Fatalf("멀티파트 조회 오류: %v", err)
+			}
+			var dto struct {
+				Count int `json:"count" form:"count"`
+			}
+			if err := body.Bind(&dto); err != nil || dto.Count != 4 {
+				t.Fatalf("정상 본문 바인딩: %+v, 오류: %v", dto, err)
 			}
 		})
 	}

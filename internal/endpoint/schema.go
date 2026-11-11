@@ -204,9 +204,6 @@ func (c *catalog) schemaValue(t reflect.Type, mode string) any {
 
 func integerKind(k reflect.Kind) bool { return k >= reflect.Int && k <= reflect.Uintptr }
 
-func fileField(t reflect.Type) bool {
-	return t == reflect.TypeFor[*multipart.FileHeader]() || t == reflect.TypeFor[[]*multipart.FileHeader]() || t == reflect.TypeFor[[]multipart.FileHeader]()
-}
 func nullable(schema any) any {
 	return map[string]any{"anyOf": []any{schema, map[string]any{"type": "null"}}}
 }

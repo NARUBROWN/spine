@@ -42,7 +42,7 @@ func Describe(routes []router.RouteSpec, options *configuration.HTTPOptions, val
 			return result, err
 		}
 		inputIssues = append(inputIssues, HandlerDTOParameterIssues(meta, fmt.Sprintf("Routes[%d]", index), spec.Path)...)
-		inputIssues = append(inputIssues, StringResponseIssues(meta, fmt.Sprintf("Routes[%d]", index))...)
+		inputIssues = append(inputIssues, ResponseTypeIssues(meta, fmt.Sprintf("Routes[%d]", index))...)
 	}
 	if err := configuration.ValidationError(inputIssues...); err != nil {
 		return result, err
@@ -156,18 +156,11 @@ func Describe(routes []router.RouteSpec, options *configuration.HTTPOptions, val
 						break
 					}
 					input.Content = map[string]json.RawMessage{"application/json": raw(c.schema(parameter.Type.Elem(), "request/json"))}
-					if id, ok := c.ids[schemaKey{parameter.Type.Elem(), "request/json"}]; ok {
-						if schema, ok := c.schemas[id].(map[string]any); ok {
-							if names, ok := schema["required"].([]string); ok {
-								input.Required = len(names) > 0
-							}
-						}
-					}
 					if _, ok := candidate.(*resolver.FormDTOResolver); ok {
 						form := raw(c.schema(parameter.Type.Elem(), "request/form"))
 						input.Content["application/x-www-form-urlencoded"], input.Content["multipart/form-data"] = form, append(json.RawMessage(nil), form...)
 						for _, field := range wireFields(parameter.Type.Elem(), true) {
-							if fileField(field.typeOf) {
+							if inputbinding.FormFileType(field.typeOf) {
 								input.Content = map[string]json.RawMessage{"multipart/form-data": form}
 								break
 							}
@@ -177,6 +170,19 @@ func Describe(routes []router.RouteSpec, options *configuration.HTTPOptions, val
 						bodyXML := raw(c.schema(parameter.Type.Elem(), "request/xml"))
 						input.Content["application/xml"] = bodyXML
 						input.Content["text/xml"] = append(json.RawMessage(nil), bodyXML...)
+					}
+					for media := range input.Content {
+						mode := "request/json"
+						switch media {
+						case "application/x-www-form-urlencoded", "multipart/form-data":
+							mode = "request/form"
+						case "application/xml", "text/xml":
+							mode = "request/xml"
+						}
+						if schema, ok := c.schemas[c.ids[schemaKey{parameter.Type.Elem(), mode}]].(map[string]any); ok {
+							names, _ := schema["required"].([]string)
+							input.Required = input.Required || len(names) > 0
+						}
 					}
 				case *resolver.UploadedFilesResolver:
 					input.Binding = "unresolved"

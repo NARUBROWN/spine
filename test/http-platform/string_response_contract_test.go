@@ -19,6 +19,9 @@ type aliasedResponseText = string
 type responseRecord struct {
 	Name string `json:"name"`
 }
+type unencodableRecord struct {
+	Channel chan int `json:"channel"`
+}
 type stringContractController struct {
 	handler func(*stringContractController) any
 }
@@ -44,7 +47,11 @@ func (*stringContractController) Record() httpx.Response[responseRecord] {
 	return httpx.Response[responseRecord]{Body: responseRecord{Name: "record"}}
 }
 
-func TestStringResponseContractRejectsDefinedStringsBeforeServing(t *testing.T) {
+func (*stringContractController) Unencodable() httpx.Response[unencodableRecord] {
+	return httpx.Response[unencodableRecord]{}
+}
+
+func TestResponseContractRejectsUnsupportedTypesBeforeServing(t *testing.T) {
 	for _, platform := range []string{"nethttp", "echo"} {
 		for _, registration := range []string{"registry", "legacy"} {
 			for _, test := range []struct {
@@ -54,6 +61,7 @@ func TestStringResponseContractRejectsDefinedStringsBeforeServing(t *testing.T) 
 				wantBody    string
 				unsupported bool
 			}{
+				{"unencodable", (*stringContractController).Unencodable, func(c *stringContractController) any { return c.Unencodable }, "", true},
 				{"defined", (*stringContractController).Defined, func(c *stringContractController) any { return c.Defined }, "", true},
 				{"defined-pointer", (*stringContractController).DefinedPointer, func(c *stringContractController) any { return c.DefinedPointer }, "", true},
 				{"plain", (*stringContractController).Plain, func(c *stringContractController) any { return c.Plain }, "plain", false},
@@ -74,7 +82,7 @@ func TestStringResponseContractRejectsDefinedStringsBeforeServing(t *testing.T) 
 							t.Helper()
 							var configError *boot.ConfigError
 							if !errors.As(err, &configError) || len(configError.Issues) == 0 || configError.Issues[0].Code != "HTTP_RETURN_UNSUPPORTED" {
-								t.Fatalf("정의 문자열 응답을 사전에 거부해야 합니다: %v", err)
+								t.Fatalf("지원하지 않는 응답 타입을 사전에 거부해야 합니다: %v", err)
 							}
 						}
 						if registration == "legacy" {

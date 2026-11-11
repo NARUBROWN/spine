@@ -23,10 +23,11 @@ import (
 )
 
 type facadeState struct {
-	mu       sync.Mutex
-	retained map[string]contextapi.Ctx
-	phases   map[string][]string
-	done     sync.Map
+	mu        sync.Mutex
+	retained  map[string]contextapi.Ctx
+	responses map[string]contextapi.HTTPResponseView
+	phases    map[string][]string
+	done      sync.Map
 }
 
 func (s *facadeState) retain(ctx contextapi.Ctx) {
@@ -34,6 +35,9 @@ func (s *facadeState) retain(ctx contextapi.Ctx) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.retained[requestID.(string)] = ctx
+	if response, ok := ctx.HTTPResponseContext(); ok {
+		s.responses[requestID.(string)] = response
+	}
 }
 
 type facadeResult struct {
@@ -58,7 +62,12 @@ func (c *secondFacadeController) ReadRetained(ctx contextapi.Ctx, path input.Pat
 	c.state.retain(ctx)
 	c.state.mu.Lock()
 	previous := c.state.retained[path.RequestID]
+	expiredResponse := c.state.responses[path.RequestID]
 	c.state.mu.Unlock()
+	expiredResponse.SetHeader("X-Expired-Response", "leak")
+	if err := expiredResponse.WriteString(http.StatusAccepted, "expired"); err == nil {
+		panic("만료된 뷰가 응답에 쓸 수 있습니다")
+	}
 	previous.ExecutionContext().Set("value", "revived")
 	value, found := previous.ExecutionContext().Get("value")
 	_, currentFound := ctx.ExecutionContext().Get("value")
@@ -161,7 +170,7 @@ func (o *facadeObserver) AfterCompletion(ctx contextapi.Ctx, _ core.HandlerMeta,
 func TestCommonContextSharesWithinExecutionAndIsolatesControllers(t *testing.T) {
 	for _, provider := range []string{"echo", "nethttp"} {
 		t.Run(provider, func(t *testing.T) {
-			state := &facadeState{retained: make(map[string]contextapi.Ctx), phases: make(map[string][]string)}
+			state := &facadeState{retained: make(map[string]contextapi.Ctx), responses: make(map[string]contextapi.HTTPResponseView), phases: make(map[string][]string)}
 			app := spine.New(spine.WithHTTPAdapter(platformFactory(provider, nativeHooks{})))
 			second := &secondFacadeController{state: state}
 			app.Constructor(
@@ -199,7 +208,7 @@ func TestCommonContextSharesWithinExecutionAndIsolatesControllers(t *testing.T) 
 				}
 				body, err := io.ReadAll(response.Body)
 				response.Body.Close()
-				if err != nil || response.StatusCode != wantStatus {
+				if err != nil || response.StatusCode != wantStatus || response.Header.Get("X-Expired-Response") != "" {
 					t.Fatalf("status=%d body=%s err=%v", response.StatusCode, body, err)
 				}
 				select {

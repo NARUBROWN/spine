@@ -24,9 +24,16 @@ func CheckBody(t reflect.Type) error {
 			return walk(current.Elem())
 		case reflect.Struct:
 			for _, form := range []bool{false, true} {
-				_, conflicts := BodyFields(current, form)
+				fields, conflicts := BodyFields(current, form)
 				if len(conflicts) > 0 {
 					return fmt.Errorf("body DTO %s repeats input key %q", current, conflicts[0])
+				}
+				if form && current == t {
+					for _, field := range fields {
+						if !FormFileType(field.Type) && !supported(field.Type) {
+							return fmt.Errorf("unsupported form field %s: %s", field.Name, field.Type)
+						}
+					}
 				}
 			}
 			for i := 0; i < current.NumField(); i++ {

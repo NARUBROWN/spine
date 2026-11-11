@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	eventResolver "github.com/NARUBROWN/spine/internal/event/consumer/resolver"
 	"github.com/NARUBROWN/spine/internal/event/hook"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/internal/resolver"
@@ -113,6 +115,18 @@ func Validate(config Config) error {
 func validate(config Config) ([]configuration.OpenAPIResource, error) {
 	issues := controllerProviderIssues(config)
 	issues = append(issues, componentValidationIssues(config)...)
+	if config.ConsumerRegistry != nil {
+		resolvers := consumerArgumentResolvers(config.Validator)
+		for i, registration := range config.ConsumerRegistry.Registrations() {
+			issues = append(issues, messageParameterIssues(registration.Meta, resolvers, fmt.Sprintf("Consumers[%d]", i), "EVENT_PARAMETER_UNSUPPORTED")...)
+		}
+	}
+	if config.WebSocketRegistry != nil {
+		resolvers := webSocketArgumentResolvers(config.Validator)
+		for i, registration := range config.WebSocketRegistry.Registrations() {
+			issues = append(issues, messageParameterIssues(registration.Meta, resolvers, fmt.Sprintf("WebSockets[%d]", i), "WEBSOCKET_PARAMETER_UNSUPPORTED")...)
+		}
+	}
 	var openAPIResources []configuration.OpenAPIResource
 	if config.ShutdownTimeout < 0 {
 		issues = append(issues, configuration.ConfigIssue{
@@ -167,7 +181,7 @@ func validate(config Config) ([]configuration.OpenAPIResource, error) {
 	for i, route := range config.Routes {
 		if meta, err := spineRouter.Meta(route); err == nil {
 			issues = append(issues, endpoint.HandlerDTOParameterIssues(meta, fmt.Sprintf("Routes[%d]", i), route.Path)...)
-			issues = append(issues, endpoint.StringResponseIssues(meta, fmt.Sprintf("Routes[%d]", i))...)
+			issues = append(issues, endpoint.ResponseTypeIssues(meta, fmt.Sprintf("Routes[%d]", i))...)
 		}
 		if _, err := spineRouter.Meta(route); err != nil {
 			issues = append(issues, configuration.ConfigIssue{
@@ -452,15 +466,18 @@ func buildConsumerPipeline(container *container.Container, registry *consumer.Re
 		consumerPipeline.AddPostExecutionHook(dispatchHook)
 	}
 
-	consumerPipeline.AddArgumentResolver(
+	consumerPipeline.AddArgumentResolver(consumerArgumentResolvers(validator)...)
+	return consumerPipeline
+}
+
+func consumerArgumentResolvers(validator validation.Validator) []resolver.ArgumentResolver {
+	return []resolver.ArgumentResolver{
 		&resolver.StdContextResolver{},
 		&resolver.ControllerContextResolver{RequireExecutionContext: true},
 		&eventResolver.EventNameResolver{},
 		&eventResolver.PayloadResolver{},
 		&eventResolver.DTOResolver{Validator: validator},
-	)
-
-	return consumerPipeline
+	}
 }
 
 func buildWSPipeline(
@@ -485,13 +502,32 @@ func buildWSPipeline(
 		wsPipeline.AddPostExecutionHook(dispatchHook)
 	}
 
-	wsPipeline.AddArgumentResolver(
+	wsPipeline.AddArgumentResolver(webSocketArgumentResolvers(validator)...)
+	return wsPipeline
+}
+
+func webSocketArgumentResolvers(validator validation.Validator) []resolver.ArgumentResolver {
+	return []resolver.ArgumentResolver{
 		&resolver.StdContextResolver{},
 		&resolver.ControllerContextResolver{RequireExecutionContext: true},
 		&wsResolver.ConnectionIDResolver{},
 		&wsResolver.PayloadResolver{},
 		&wsResolver.DTOResolver{Validator: validator},
-	)
+	}
+}
 
-	return wsPipeline
+func messageParameterIssues(meta execution.HandlerMeta, resolvers []resolver.ArgumentResolver, prefix, code string) []configuration.ConfigIssue {
+	var issues []configuration.ConfigIssue
+	for _, parameter := range resolver.HandlerParameters(meta, nil) {
+		if !slices.ContainsFunc(resolvers, func(candidate resolver.ArgumentResolver) bool {
+			return candidate.Supports(parameter)
+		}) {
+			issues = append(issues, configuration.ConfigIssue{
+				Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: code,
+				Message: fmt.Sprintf("No resolver supports %s.", parameter.Type),
+				Hint:    "Use a supported context, message identifier, raw bytes, or struct payload.",
+			})
+		}
+	}
+	return issues
 }

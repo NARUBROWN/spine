@@ -38,9 +38,10 @@ func main() {
 		appOptions = append(appOptions, spine.WithEventAdapter("rabbitmq", factory))
 	}
 	app := spine.New(appOptions...)
+	publishEnabled := (config.Kafka != nil && config.Kafka.Publish) || (config.RabbitMQ != nil && config.RabbitMQ.Publish)
 
 	app.Constructor(
-		constructor.Controller(&UserController{}),
+		constructor.Controller(&UserController{publishEnabled: publishEnabled}),
 		constructor.Controller(&CommonController{}),
 		constructor.Custom(NewOrderConsumer),
 		constructor.Custom(NewChatController),

@@ -115,7 +115,7 @@ func (b *Body) Bind(target any) (err error) {
 		return b.decodeError(err)
 	}
 	if media == "multipart/form-data" {
-		form, err := b.multipartForm(media, params)
+		form, err := b.multipartForm(params)
 		if err != nil {
 			return err
 		}
@@ -135,7 +135,7 @@ func (b *Body) Bind(target any) (err error) {
 	case "application/json":
 		err = jsondecode.Unmarshal(data, target)
 	case "application/xml", "text/xml":
-		err = xml.NewDecoder(bytes.NewReader(data)).Decode(target)
+		err = decodeXML(data, target)
 	case "application/x-www-form-urlencoded":
 		var values url.Values
 		values, err = url.ParseQuery(string(data))
@@ -144,6 +144,35 @@ func (b *Body) Bind(target any) (err error) {
 		}
 	}
 	return b.decodeError(err)
+}
+
+func decodeXML(data []byte, target any) error {
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	for {
+		token, err := decoder.Token()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		switch value := token.(type) {
+		case xml.Comment:
+			continue
+		case xml.ProcInst:
+			if value.Target != "xml" {
+				continue
+			}
+		case xml.CharData:
+			if len(bytes.Trim(value, " \t\r\n")) == 0 {
+				continue
+			}
+		}
+		return fmt.Errorf("unexpected XML content after the root element")
+	}
 }
 
 // MultipartForm은 요청별 파싱 결과와 오류를 캐시합니다. 파일과 폼 리졸버의 순서는 무관합니다.
@@ -162,18 +191,16 @@ func (b *Body) MultipartForm() (*multipart.Form, error) {
 	}
 	media, params, err := mime.ParseMediaType(b.contentType)
 	if err != nil {
-		b.formParsed, b.formErr = true, b.decodeError(err)
-		return nil, b.formErr
+		return nil, b.decodeError(err)
 	}
-	return b.multipartForm(media, params)
+	if media != "multipart/form-data" {
+		return nil, b.decodeError(http.ErrNotMultipart)
+	}
+	return b.multipartForm(params)
 }
 
-func (b *Body) multipartForm(media string, params map[string]string) (*multipart.Form, error) {
+func (b *Body) multipartForm(params map[string]string) (*multipart.Form, error) {
 	b.formParsed = true
-	if media != "multipart/form-data" {
-		b.formErr = b.decodeError(http.ErrNotMultipart)
-		return nil, b.formErr
-	}
 	boundary := params["boundary"]
 	if boundary == "" {
 		b.formErr = b.decodeError(http.ErrMissingBoundary)

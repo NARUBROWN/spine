@@ -4,11 +4,17 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/NARUBROWN/spine/internal/event/emission"
 	"github.com/NARUBROWN/spine/internal/event/publish"
 	"github.com/NARUBROWN/spine/internal/execution"
 )
+
+type publicationProbe struct{}
+
+func (publicationProbe) Name() string          { return "publication-probe" }
+func (publicationProbe) OccurredAt() time.Time { return time.Time{} }
 
 func TestConsumerContextParallelViewsShareOnePublisher(t *testing.T) {
 	for _, supplied := range []publish.EventBus{nil, publish.NewEventBus()} {
@@ -28,11 +34,17 @@ func TestConsumerContextParallelViewsShareOnePublisher(t *testing.T) {
 		close(start)
 		workers.Wait()
 		close(publishers)
-		want := request.EventBus()
 		for got := range publishers {
-			if got == nil || got != want || supplied != nil && got != supplied {
-				t.Fatal("병렬 뷰와 주입된 버스가 같은 publisher를 사용해야 합니다")
+			if got == nil {
+				t.Fatal("공개 뷰에 발행 기능이 없습니다")
 			}
+			if _, ok := got.(emission.Bus); ok {
+				t.Fatal("공개 뷰가 내부 큐 제어를 노출합니다")
+			}
+			got.Publish(publicationProbe{})
+		}
+		if events := request.EventBus().Drain(); len(events) != cap(publishers) {
+			t.Fatalf("같은 요청 큐에 쌓인 이벤트 수: %d", len(events))
 		}
 	}
 }

@@ -24,6 +24,7 @@ type HTTPContext struct {
 	scope                adapter.HTTPContext
 	bus                  emission.Bus
 	busOnce              sync.Once
+	writerMu             sync.Mutex
 	writer               core.ResponseWriter
 	params               map[string]string
 	pathKeys             []string
@@ -41,8 +42,28 @@ func NewHTTPContext(scope adapter.HTTPContext, multipartMemoryBytes int64) *HTTP
 	return &HTTPContext{scope: scope, writer: scope.Writer(), multipartMemoryBytes: multipartMemoryBytes}
 }
 
-func (c *HTTPContext) ResponseWriter() core.ResponseWriter          { return c.writer }
-func (c *HTTPContext) SetResponseWriter(writer core.ResponseWriter) { c.writer = writer }
+func (c *HTTPContext) ResponseWriter() core.ResponseWriter {
+	c.writerMu.Lock()
+	defer c.writerMu.Unlock()
+	return c.writer
+}
+
+func (c *HTTPContext) SetResponseWriter(writer core.ResponseWriter) {
+	c.writerMu.Lock()
+	defer c.writerMu.Unlock()
+	c.writer = writer
+}
+
+// UseResponseWriter는 공개 뷰의 호출이 요청 정리보다 먼저 끝나도록 보장합니다.
+func (c *HTTPContext) UseResponseWriter(use func(core.ResponseWriter)) bool {
+	c.writerMu.Lock()
+	defer c.writerMu.Unlock()
+	if c.writer == nil {
+		return false
+	}
+	use(c.writer)
+	return true
+}
 func (c *HTTPContext) SetRoute(params map[string]string, pathKeys []string) {
 	c.params = maps.Clone(params)
 	c.pathKeys = slices.Clone(pathKeys)
@@ -95,6 +116,7 @@ func (c *HTTPContext) prepareBody() error {
 
 // Cleanup은 완료 훅 뒤 공통 파서가 만든 파일만 회수합니다. 원본 스트림은 플랫폼 소유입니다.
 func (c *HTTPContext) Cleanup() error {
+	c.SetResponseWriter(nil)
 	c.closed = true
 	if c.body == nil {
 		return nil

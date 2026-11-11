@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/pipelinecontrol"
 	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 )
 
@@ -134,7 +135,7 @@ func (i *CORSInterceptor) PreHandle(ctx contextapi.Ctx, meta core.HandlerMeta) e
 			if err := rw.WriteStatus(http.StatusForbidden); err != nil {
 				return err
 			}
-			return core.ErrAbortPipeline
+			return pipelinecontrol.ErrAbort
 		}
 	}
 	if allowed {
@@ -156,7 +157,7 @@ func (i *CORSInterceptor) PreHandle(ctx contextapi.Ctx, meta core.HandlerMeta) e
 		if err := rw.WriteStatus(http.StatusNoContent); err != nil {
 			return err
 		}
-		return core.ErrAbortPipeline
+		return pipelinecontrol.ErrAbort
 	}
 	return nil
 }

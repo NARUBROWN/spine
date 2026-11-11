@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"mime/multipart"
+	"net/http"
 	"os"
 	"time"
 
@@ -27,14 +28,14 @@ type StockPath struct {
 	StockID int64 `path:"stockId"`
 }
 
-type UserController struct{}
+type UserController struct{ publishEnabled bool }
 
 type CommonController struct{}
 
 type ChatController struct{}
 
-func (*UserController) Constructor() *UserController {
-	return &UserController{}
+func (c *UserController) Constructor() *UserController {
+	return &UserController{publishEnabled: c.publishEnabled}
 }
 
 func (*CommonController) Constructor() *CommonController {
@@ -140,7 +141,10 @@ func (c *UserController) Upload(
 	return httpx.Response[string]{Body: "OK"}
 }
 
-func (c *UserController) CreateOrder(ctx spine.Ctx, p httpinput.Path[OrderPath]) httpx.Response[string] {
+func (c *UserController) CreateOrder(ctx spine.Ctx, p httpinput.Path[OrderPath]) (httpx.Response[string], error) {
+	if !c.publishEnabled {
+		return httpx.Response[string]{}, &httperr.HTTPError{Status: http.StatusServiceUnavailable, Message: "Event publishing is not configured."}
+	}
 	publish.Event(ctx.ExecutionContext().Context(), OrderCreated{
 		OrderID: p.OrderID,
 		At:      time.Now(),
@@ -148,10 +152,13 @@ func (c *UserController) CreateOrder(ctx spine.Ctx, p httpinput.Path[OrderPath])
 
 	return httpx.Response[string]{
 		Body: "OK",
-	}
+	}, nil
 }
 
-func (c *UserController) CreateStock(ctx spine.Ctx, p httpinput.Path[StockPath]) httpx.Response[string] {
+func (c *UserController) CreateStock(ctx spine.Ctx, p httpinput.Path[StockPath]) (httpx.Response[string], error) {
+	if !c.publishEnabled {
+		return httpx.Response[string]{}, &httperr.HTTPError{Status: http.StatusServiceUnavailable, Message: "Event publishing is not configured."}
+	}
 	publish.Event(ctx.ExecutionContext().Context(), StockCreated{
 		OrderID: p.StockID,
 		At:      time.Now(),
@@ -159,7 +166,7 @@ func (c *UserController) CreateStock(ctx spine.Ctx, p httpinput.Path[StockPath])
 
 	return httpx.Response[string]{
 		Body: "OK",
-	}
+	}, nil
 }
 
 // Headers는 CheckHeader가 반환하는 응답 DTO입니다.

@@ -15,6 +15,7 @@ import (
 	"github.com/NARUBROWN/spine/internal/handler"
 	"github.com/NARUBROWN/spine/internal/httpfailure"
 	"github.com/NARUBROWN/spine/internal/invoker"
+	"github.com/NARUBROWN/spine/internal/pipelinecontrol"
 	"github.com/NARUBROWN/spine/internal/resolver"
 	"github.com/NARUBROWN/spine/internal/router"
 )
@@ -134,7 +135,7 @@ func (p *Pipeline) Execute(ctx execution.Context) (finalErr error) {
 	// 글로벌 인터셉터는 라우팅 전에 먼저 실행한다.
 	for _, it := range p.interceptors {
 		if err := it.PreHandle(interceptorCtx, globalMeta.View()); err != nil {
-			if errors.Is(err, core.ErrAbortPipeline) {
+			if errors.Is(err, pipelinecontrol.ErrAbort) {
 				// 인터셉터가 의도적으로 요청을 종료함(응답은 이미 작성됨)
 				return nil
 			}
@@ -167,7 +168,7 @@ func (p *Pipeline) Execute(ctx execution.Context) (finalErr error) {
 	// 인증되지 않은 요청이 인자 해석 비용이나 부수 효과를 유발하면 안 된다.
 	for _, it := range routeInterceptors {
 		if err := it.PreHandle(interceptorCtx, meta.View()); err != nil {
-			if errors.Is(err, core.ErrAbortPipeline) {
+			if errors.Is(err, pipelinecontrol.ErrAbort) {
 				// 인터셉터가 의도적으로 요청을 종료함(응답은 이미 작성됨)
 				return nil
 			}

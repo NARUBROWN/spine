@@ -49,12 +49,10 @@ func collectControllers(ctx context.Context, config *Config, container *containe
 		if isNilHTTPValue(value) {
 			return fmt.Errorf("controller %s is nil", owner)
 		}
-		registry := apiregistry.New(owner)
-		if err := registerController(value.(api.Controller), registry); err != nil {
-			return fmt.Errorf("controller %s RegisterRoutes: %w", owner, err)
-		}
-		routes, err := apiregistry.Freeze(registry)
-		if err != nil {
+		registry, collector := apiregistry.New(owner)
+		registerErr := registerController(value.(api.Controller), registry)
+		routes, freezeErr := collector.Freeze(registry)
+		if err := errors.Join(registerErr, freezeErr); err != nil {
 			return fmt.Errorf("controller %s RegisterRoutes: %w", owner, err)
 		}
 		config.Routes = append(config.Routes, routes...)
@@ -87,7 +85,7 @@ func validateCollectedRoutes(config Config, resources []configuration.OpenAPIRes
 		if meta.Callback.IsValid() {
 			issues = append(issues, endpoint.CallableIssues(meta, prefix)...)
 		} else {
-			issues = append(issues, endpoint.StringResponseIssues(meta, prefix)...)
+			issues = append(issues, endpoint.ResponseTypeIssues(meta, prefix)...)
 		}
 		path, err := joinPath(config.HTTP.GlobalPrefix, spec.Path)
 		if err != nil {

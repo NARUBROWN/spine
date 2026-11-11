@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -105,19 +106,50 @@ func (v httpRequestView) MultipartForm() (contextview.MultipartFields, error) {
 // httpResponseView는 staging 변경 뒤에도 현재 writer에 위임합니다.
 type httpResponseView struct{ response HTTPResponseContext }
 
-func (v httpResponseView) writer() httpcontract.ResponseWriter { return v.response.ResponseWriter() }
-func (v httpResponseView) SetHeader(key, value string)         { v.writer().SetHeader(key, value) }
-func (v httpResponseView) AddHeader(key, value string)         { v.writer().AddHeader(key, value) }
-func (v httpResponseView) IsCommitted() bool                   { return v.writer().IsCommitted() }
-func (v httpResponseView) WriteStatus(status int) error        { return v.writer().WriteStatus(status) }
+var errResponseUnavailable = errors.New("HTTP response is no longer available")
+
+func (v httpResponseView) useWriter(use func(httpcontract.ResponseWriter)) bool {
+	if request, ok := v.response.(interface {
+		UseResponseWriter(func(httpcontract.ResponseWriter)) bool
+	}); ok {
+		return request.UseResponseWriter(use)
+	}
+	writer := v.response.ResponseWriter()
+	if writer == nil {
+		return false
+	}
+	use(writer)
+	return true
+}
+
+func (v httpResponseView) write(write func(httpcontract.ResponseWriter) error) (err error) {
+	if !v.useWriter(func(writer httpcontract.ResponseWriter) { err = write(writer) }) {
+		return errResponseUnavailable
+	}
+	return err
+}
+
+func (v httpResponseView) SetHeader(key, value string) {
+	v.useWriter(func(writer httpcontract.ResponseWriter) { writer.SetHeader(key, value) })
+}
+func (v httpResponseView) AddHeader(key, value string) {
+	v.useWriter(func(writer httpcontract.ResponseWriter) { writer.AddHeader(key, value) })
+}
+func (v httpResponseView) IsCommitted() (committed bool) {
+	v.useWriter(func(writer httpcontract.ResponseWriter) { committed = writer.IsCommitted() })
+	return committed
+}
+func (v httpResponseView) WriteStatus(status int) error {
+	return v.write(func(writer httpcontract.ResponseWriter) error { return writer.WriteStatus(status) })
+}
 func (v httpResponseView) WriteJSON(status int, body json.RawMessage) error {
-	return v.writer().WriteJSON(status, body)
+	return v.write(func(writer httpcontract.ResponseWriter) error { return writer.WriteJSON(status, body) })
 }
 func (v httpResponseView) WriteString(status int, body string) error {
-	return v.writer().WriteString(status, body)
+	return v.write(func(writer httpcontract.ResponseWriter) error { return writer.WriteString(status, body) })
 }
 func (v httpResponseView) WriteBytes(status int, body []byte) error {
-	return v.writer().WriteBytes(status, body)
+	return v.write(func(writer httpcontract.ResponseWriter) error { return writer.WriteBytes(status, body) })
 }
 
 type webSocketView struct {
