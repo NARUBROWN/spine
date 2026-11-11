@@ -74,7 +74,7 @@ func (c *fakeHttpCtx) Query(name string) string {
 	return ""
 }
 func (c *fakeHttpCtx) Headers() map[string][]string { return c.headers }
-func (c *fakeHttpCtx) Bind(out any) error {
+func (c *fakeHttpCtx) Bind(out any, _ ...[]string) error {
 	if c.bindErr != nil {
 		return c.bindErr
 	}

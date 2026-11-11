@@ -34,7 +34,7 @@ type HTTPRequestContext interface {
 	Params() map[string]string
 	Queries() map[string][]string
 	Headers() map[string][]string
-	Bind(out any) error
+	Bind(out any, allowedMedia ...[]string) error
 	MultipartForm() (*multipart.Form, error)
 }
 

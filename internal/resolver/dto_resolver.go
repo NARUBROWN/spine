@@ -3,9 +3,7 @@ package resolver
 import (
 	"fmt"
 	"mime"
-	"net/http"
 	"reflect"
-	"slices"
 	"sync"
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
@@ -51,24 +49,13 @@ func resolveBodyDTO(ctx execution.Context, parameter ParameterMeta, validator va
 		available, _ = mediaCache.LoadOrStore(payload, plan)
 	}
 	plan := available.(bodyMediaPlan)
-	var media string
-	if contentType := httpCtx.Header("Content-Type"); contentType != "" {
-		var err error
-		media, _, err = mime.ParseMediaType(contentType)
-		if err != nil {
-			return nil, &inputerr.Error{Source: "body", Cause: httpfailure.BadRequest("Invalid Content-Type")}
-		}
-		if !slices.Contains(plan.mediaTypes, media) {
-			return nil, &inputerr.Error{Source: "body", Cause: &httpfailure.HTTPError{
-				Status: http.StatusUnsupportedMediaType, Message: "Unsupported Media Type",
-			}}
-		}
-	} else if len(plan.mediaTypes) > 0 {
-		media = plan.mediaTypes[0]
-	}
 	dto := reflect.New(payload)
-	if err := httpCtx.Bind(dto.Interface()); err != nil {
+	if err := httpCtx.Bind(dto.Interface(), plan.mediaTypes); err != nil {
 		return nil, &inputerr.Error{Source: "body", Cause: err}
+	}
+	media, _, _ := mime.ParseMediaType(httpCtx.Header("Content-Type"))
+	if media == "" && len(plan.mediaTypes) > 0 {
+		media = plan.mediaTypes[0]
 	}
 	if input.ActiveUnbindableBodyField(dto.Elem(), media, plan.validation) {
 		return nil, &inputerr.Error{Source: "body", Cause: httpfailure.BadRequest("The request body format cannot supply a required field in the provided object")}

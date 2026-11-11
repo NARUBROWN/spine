@@ -12,6 +12,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"slices"
 
 	"github.com/NARUBROWN/spine/internal/httpfailure"
 	"github.com/NARUBROWN/spine/internal/jsondecode"
@@ -79,7 +80,8 @@ func NewBody(ctx context.Context, reader io.Reader, contentType string, options 
 
 // Bind는 본문만 한 번 바인딩합니다. URL 쿼리나 라우팅 결과는 받지 않습니다.
 // 폼 DTO와 MultipartForm은 같은 파싱 결과를 사용하며 실패한 파싱도 반복하지 않습니다.
-func (b *Body) Bind(target any) (err error) {
+// allowedMedia를 지정하면 빈 본문 확인 뒤, 디코더 실행 전에 허용 형식을 검사합니다.
+func (b *Body) Bind(target any, allowedMedia ...[]string) (err error) {
 	if err := b.active(); err != nil {
 		return err
 	}
@@ -93,19 +95,14 @@ func (b *Body) Bind(target any) (err error) {
 	defer func() { b.bindErr = err }()
 
 	// 파일 리졸버가 먼저 파싱했다면 스트림의 EOF를 빈 본문으로 오인하지 않습니다.
-	if b.formParsed {
-		form, err := b.MultipartForm()
-		if err != nil {
-			return err
+	if !b.formParsed {
+		if _, err := b.reader.Peek(1); err != nil {
+			if errors.Is(err, io.EOF) {
+				b.empty = true
+				return nil
+			}
+			return b.readError(err)
 		}
-		return b.decodeError(bindBodyForm(b.ctx, target, form.Value, form.File))
-	}
-	if _, err := b.reader.Peek(1); err != nil {
-		if errors.Is(err, io.EOF) {
-			b.empty = true
-			return nil
-		}
-		return b.readError(err)
 	}
 	media, params, err := mime.ParseMediaType(b.contentType)
 	if err != nil {
@@ -113,6 +110,16 @@ func (b *Body) Bind(target any) (err error) {
 			return bodyHTTPError(http.StatusUnsupportedMediaType, err)
 		}
 		return b.decodeError(err)
+	}
+	if len(allowedMedia) > 0 && !slices.Contains(allowedMedia[0], media) {
+		return bodyHTTPError(http.StatusUnsupportedMediaType, nil)
+	}
+	if b.formParsed {
+		form, err := b.MultipartForm()
+		if err != nil {
+			return err
+		}
+		return b.decodeError(bindBodyForm(b.ctx, target, form.Value, form.File))
 	}
 	if media == "multipart/form-data" {
 		form, err := b.multipartForm(params)

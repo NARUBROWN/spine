@@ -94,11 +94,11 @@ func (c *HTTPContext) RawQuery() string { return c.scope.RawQuery() }
 
 func (c *HTTPContext) Header(name string) string    { return c.scope.Header(name) }
 func (c *HTTPContext) Headers() map[string][]string { return c.scope.Headers() }
-func (c *HTTPContext) Bind(out any) error {
+func (c *HTTPContext) Bind(out any, allowedMedia ...[]string) error {
 	if err := c.prepareBody(); err != nil {
 		return err
 	}
-	return normalizeInputError(c.body.Bind(out))
+	return normalizeInputError(c.body.Bind(out, allowedMedia...))
 }
 
 func (c *HTTPContext) prepareBody() error {

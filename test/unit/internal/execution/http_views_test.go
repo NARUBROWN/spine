@@ -20,7 +20,7 @@ func (*requestOnlyContext) Query(string) string { return "active" }
 func (*requestOnlyContext) Headers() map[string][]string {
 	return map[string][]string{"X-Request-ID": {"request"}}
 }
-func (*requestOnlyContext) Bind(any) error                            { return nil }
+func (*requestOnlyContext) Bind(any, ...[]string) error               { return nil }
 func (c *requestOnlyContext) MultipartForm() (*multipart.Form, error) { return c.form, nil }
 
 type responseOnlyContext struct {
