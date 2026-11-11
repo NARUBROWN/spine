@@ -12,11 +12,11 @@
 
 ## 현재 채널
 
-**Preview** | 공개 코어 태그 [`v0.7.2-preview.3`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.3)
+**Stable** | 공개 코어 태그 [`v0.7.5`](https://github.com/NARUBROWN/spine/tree/v0.7.5)
 
-소스의 다음 후보는 `v0.7.5-preview.1`이며, 대상 정식 버전은 `v0.7.5`입니다. API 호환성 변경과 전환 방법은 [마이그레이션 안내](docs/migration/v0.7.5.md)를 참고하세요. 아직 태그를 발행하지 않았습니다.
+API 호환성 변경과 전환 방법은 [v0.7.5 마이그레이션 안내](docs/migration/v0.7.5.md)를 참고하세요.
 
-다른 채널 | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
+다른 채널 | [Preview](https://github.com/NARUBROWN/spine/tree/preview) | [RC](https://github.com/NARUBROWN/spine/tree/rc)
 
 ## 핵심 아이디어
 
@@ -31,9 +31,9 @@
 ## Spine CLI로 시작하기
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.4-preview.5
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.4
 spine version
-spine new todo-api --module github.com/acme/todo-api --channel preview --no-interactive
+spine new todo-api --module github.com/acme/todo-api --channel main --no-interactive
 cd todo-api
 spine dev
 ```
@@ -43,8 +43,6 @@ curl http://localhost:8080/health
 ```
 
 현재 앱이 사용하는 코어와 플랫폼은 생성된 `go.mod`에서 확인하세요.
-
-미리보기의 `--channel preview`는 이동하는 개발 브랜치를 조회합니다.
 
 ## 문서와 예제
 
