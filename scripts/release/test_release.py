@@ -288,6 +288,30 @@ class ReleasePolicyTests(unittest.TestCase):
                     else:
                         command.assert_not_called()
 
+    def test_core_candidate_records_successful_rerun_attempt(self):
+        plan = self.plan()
+        plan["workflow_run_attempt"] = "1"
+        version = plan["version"]
+        self.github.tags[version] = SOURCE
+        report = {"scope": "core", "result": "passed", "components": plan["components"],
+                  "source_sha": SOURCE, "version": version, "selected_modules": {POLICY["module"]: version}}
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            plan_path = directory / "plan.json"
+            report_path = directory / "report.json"
+            manifest_path = directory / "manifest.json"
+            plan_path.write_text(json.dumps(plan))
+            report_path.write_text(json.dumps(report))
+            argv = ["release.py", "record-core", "--plan", str(plan_path),
+                    "--report", str(report_path), "--manifest", str(manifest_path)]
+            with patch.object(sys, "argv", argv), patch.object(release, "GitHub", return_value=self.github), patch.dict(
+                    os.environ, {"GITHUB_REPOSITORY": self.github.repository, "GITHUB_RUN_ATTEMPT": "3"}):
+                release.main()
+            manifest = json.loads(manifest_path.read_text())
+        self.assertEqual(manifest["workflow_run_attempt"], "3")
+        self.assertEqual(manifest["workflow_run_id"], plan["workflow_run_id"])
+        self.assertEqual(manifest["validation"], report)
+
     def test_exported_candidate_manifest_promotes_without_a_github_release(self):
         with patch.dict(os.environ, {"GITHUB_RUN_ID": "1", "GITHUB_RUN_ATTEMPT": "1"}):
             for channel, next_channel, source_sha, version in [
@@ -349,6 +373,31 @@ class ReleasePolicyTests(unittest.TestCase):
     def test_public_checks_cannot_silently_skip_brokers(self):
         with self.assertRaises(release.ReleaseError):
             verify_public.verify({}, Path("."), Path("."), {}, "unused")
+
+    def test_new_tag_waits_only_for_a_missing_public_checksum(self):
+        module = POLICY["module"]
+        version = "v0.7.5"
+        command = ["go", "mod", "download", "-json", f"{module}@{version}"]
+        missing = subprocess.CompletedProcess(
+            command, 1, f"{module}@{version}: verifying module: reading https://sum.golang.org/lookup/"
+            "github.com/!n!a!r!u!b!r!o!w!n/spine@v0.7.5: 404 Not Found", "")
+        success = subprocess.CompletedProcess(command, 0, "{}", "")
+        invalid = subprocess.CompletedProcess(command, 1, "", "checksum mismatch")
+
+        for attempts, expected_delays, fails in (
+                ([missing, success], [15], False),
+                ([missing] * 5, [15, 30, 60, 120], True),
+                ([invalid], [], True)):
+            with self.subTest(expected_delays=expected_delays), patch.object(
+                    verify_public.subprocess, "run", side_effect=attempts) as download, patch.object(
+                    verify_public.time, "sleep") as sleep:
+                if fails:
+                    with self.assertRaises(release.ReleaseError):
+                        verify_public.wait_for_public_tag(module, version, Path("."), {})
+                else:
+                    verify_public.wait_for_public_tag(module, version, Path("."), {})
+                self.assertEqual(download.call_count, len(attempts))
+                self.assertEqual([call.args[0] for call in sleep.call_args_list], expected_delays)
 
     def test_public_go_tests_allow_testless_packages_but_require_completed_tests(self):
         passing = [{"Action":"run","Test":"TestOK"},{"Action":"pass","Test":"TestOK"}]

@@ -469,7 +469,8 @@ def finish(github, plan, report, manifest_path="release-manifest.json"):
         for key in ("source_sha", "source_fingerprint", "components", "bootstrap_evidence", "platform_evidence"):
             if plan.get(key) != fresh.get(key):
                 raise ReleaseError("Candidate evidence changed during component verification")
-    manifest = dict(plan, validation=report)
+    manifest = dict(plan, workflow_run_attempt=os.environ.get("GITHUB_RUN_ATTEMPT", "1"),
+                    validation=report)
     path = Path(manifest_path).resolve()
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     # 후보는 태그와 Actions artifact로 검증 기록을 남기고 정식 버전만 GitHub Release를 공개합니다.
@@ -560,7 +561,8 @@ def main():
                 raise ReleaseError("Public verification results for the core candidate do not match the plan")
             if not selected_modules_match(plan, report, "core"):
                 raise ReleaseError("The public consumer did not select the planned core version")
-            Path(args.manifest).write_text(json.dumps(dict(plan, validation=report), ensure_ascii=False, indent=2)+"\n")
+            manifest = dict(plan, workflow_run_attempt=os.environ.get("GITHUB_RUN_ATTEMPT", "1"), validation=report)
+            Path(args.manifest).write_text(json.dumps(manifest, ensure_ascii=False, indent=2)+"\n")
         else:
             finish(github, plan, json.loads(Path(args.report).read_text(encoding="utf-8")), args.manifest)
 
