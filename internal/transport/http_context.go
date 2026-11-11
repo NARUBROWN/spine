@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	adapter "github.com/NARUBROWN/spine/contract/http"
-	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/event/emission"
 	"github.com/NARUBROWN/spine/internal/event/publish"
 	"github.com/NARUBROWN/spine/internal/execution"
@@ -25,7 +24,7 @@ type HTTPContext struct {
 	bus                  emission.Bus
 	busOnce              sync.Once
 	writerMu             sync.Mutex
-	writer               core.ResponseWriter
+	writer               adapter.ResponseWriter
 	params               map[string]string
 	pathKeys             []string
 	multipartMemoryBytes int64
@@ -42,20 +41,20 @@ func NewHTTPContext(scope adapter.HTTPContext, multipartMemoryBytes int64) *HTTP
 	return &HTTPContext{scope: scope, writer: scope.Writer(), multipartMemoryBytes: multipartMemoryBytes}
 }
 
-func (c *HTTPContext) ResponseWriter() core.ResponseWriter {
+func (c *HTTPContext) ResponseWriter() adapter.ResponseWriter {
 	c.writerMu.Lock()
 	defer c.writerMu.Unlock()
 	return c.writer
 }
 
-func (c *HTTPContext) SetResponseWriter(writer core.ResponseWriter) {
+func (c *HTTPContext) SetResponseWriter(writer adapter.ResponseWriter) {
 	c.writerMu.Lock()
 	defer c.writerMu.Unlock()
 	c.writer = writer
 }
 
 // UseResponseWriter는 공개 뷰의 호출이 요청 정리보다 먼저 끝나도록 보장합니다.
-func (c *HTTPContext) UseResponseWriter(use func(core.ResponseWriter)) bool {
+func (c *HTTPContext) UseResponseWriter(use func(adapter.ResponseWriter)) bool {
 	c.writerMu.Lock()
 	defer c.writerMu.Unlock()
 	if c.writer == nil {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/NARUBROWN/spine/internal/inputerr"
+	"reflect"
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
 )
@@ -42,4 +43,13 @@ func ValidateHTTPDTO(ctx context.Context, validator validation.Validator, dto an
 		return &inputerr.Error{Source: source, Cause: err}
 	}
 	return err
+}
+
+func DescribeValidation(describer validation.SchemaDescriber, t reflect.Type) (result validation.SchemaDescription, err error) {
+	defer func() {
+		if recover() != nil {
+			err = fmt.Errorf("validation description panicked")
+		}
+	}()
+	return describer.DescribeSchema(t)
 }

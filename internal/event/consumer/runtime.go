@@ -195,7 +195,7 @@ func (r *Runtime) Start(ctx context.Context) {
 					reqCtx := NewRequestContext(ctx, msg, nil)
 
 					// 핸들러 실행
-					if err := r.pipeline.Execute(reqCtx); err != nil {
+					if err := r.pipeline.ExecuteRegistered(reqCtx, reg.Meta); err != nil {
 						log.Printf(
 							"[Event Consumer] Handler execution failed (%s): %v",
 							reg.Topic,

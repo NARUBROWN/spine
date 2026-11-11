@@ -2,7 +2,9 @@ package ws
 
 import (
 	"fmt"
+	"net/url"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/NARUBROWN/spine/internal/execution"
@@ -26,8 +28,9 @@ func NewRegistry() *Registry {
 }
 
 func (r *Registry) Register(path string, handler any) error {
-	if path == "" {
-		return fmt.Errorf("ws: path cannot be empty")
+	parsed, err := url.ParseRequestURI(path)
+	if err != nil || !strings.HasPrefix(path, "/") || parsed.Path != path || parsed.RawQuery != "" || strings.ContainsAny(path, ":*{}") || strings.Contains(path, "//") {
+		return fmt.Errorf("ws: path must be an absolute static path: %q", path)
 	}
 	if handler == nil {
 		return fmt.Errorf("ws: handler cannot be nil")
@@ -40,6 +43,11 @@ func (r *Registry) Register(path string, handler any) error {
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	for _, registration := range r.registrations {
+		if registration.Path == path {
+			return fmt.Errorf("ws: path already registered: %s", path)
+		}
+	}
 	r.registrations = append(r.registrations, Registration{
 		Path: path,
 		Meta: meta,

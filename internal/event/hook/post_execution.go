@@ -1,6 +1,7 @@
 package hook
 
 import (
+	"errors"
 	"github.com/NARUBROWN/spine/internal/event/publish"
 	"github.com/NARUBROWN/spine/internal/execution"
 )
@@ -9,6 +10,8 @@ import (
 type PostExecutionHook interface {
 	AfterExecution(ctx execution.Context) error
 }
+
+var ErrPublisherUnavailable = errors.New("event publisher is unavailable")
 
 type EventDispatchHook struct {
 	Dispatcher publish.EventDispatcher
@@ -20,5 +23,8 @@ func (h *EventDispatchHook) AfterExecution(ctx execution.Context) error {
 		return nil
 	}
 
+	if h.Dispatcher == nil {
+		return ErrPublisherUnavailable
+	}
 	return h.Dispatcher.Dispatch(ctx.Context(), events)
 }

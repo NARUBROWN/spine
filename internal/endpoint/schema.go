@@ -21,6 +21,7 @@ import (
 	"github.com/NARUBROWN/spine/contract/description"
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/internal/input"
+	"github.com/NARUBROWN/spine/internal/resolver"
 )
 
 type schemaKey struct {
@@ -257,7 +258,7 @@ func (c *catalog) structure(t reflect.Type, mode string, planned ...[]input.Fiel
 	constraints := map[string]validation.FieldSchema{}
 	if strings.HasPrefix(mode, "request/") && c.validator != nil {
 		if describer, ok := c.validator.(validation.SchemaDescriber); ok {
-			decl, err := describeValidation(describer, t)
+			decl, err := resolver.DescribeValidation(describer, t)
 			if err != nil {
 				c.diagnostic("VALIDATION_DESCRIPTION_FAILED", t.String(), "The registered validator could not describe this type.")
 			} else {

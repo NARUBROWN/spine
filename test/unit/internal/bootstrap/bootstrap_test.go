@@ -23,6 +23,7 @@ import (
 type testController struct{}
 
 func (c *testController) Handle() string { return "ok" }
+func (*testController) Consume()         {}
 
 type testTransport struct {
 	initErr    error
@@ -366,7 +367,7 @@ func TestRun_DoesNotExposeHTTPListenerWhenEventReaderStartupFails(t *testing.T) 
 	_ = httpReservation.Close()
 
 	registry := consumer.NewRegistry()
-	if err := registry.Register("orders", (*testController).Handle); err != nil {
+	if err := registry.Register("orders", (*testController).Consume); err != nil {
 		t.Fatalf("register consumer: %v", err)
 	}
 	err = Run(Config{
@@ -392,7 +393,7 @@ func TestRun_DoesNotExposeHTTPListenerWhenEventReaderStartupFails(t *testing.T) 
 
 func TestRequiresShutdownSignalForEveryBlockingRuntimeShape(t *testing.T) {
 	registry := consumer.NewRegistry()
-	if err := registry.Register("topic", (*testController).Handle); err != nil {
+	if err := registry.Register("topic", (*testController).Consume); err != nil {
 		t.Fatalf("register consumer: %v", err)
 	}
 

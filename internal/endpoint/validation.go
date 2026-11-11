@@ -2,8 +2,6 @@ package endpoint
 
 import (
 	"encoding"
-	"encoding/json"
-	"encoding/xml"
 	"fmt"
 	"reflect"
 
@@ -11,6 +9,7 @@ import (
 	"github.com/NARUBROWN/spine/internal/configuration"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/input"
+	"github.com/NARUBROWN/spine/internal/resolver"
 )
 
 // ValidationParameterIssues는 입력에서 제외한 필드를 검증기가 필수로 요구하는 충돌을 찾습니다.
@@ -32,14 +31,26 @@ func HandlerValidationParameterIssues(meta execution.HandlerMeta, prefix string,
 	var issues []configuration.ConfigIssue
 	for i := offset; i < signature.NumIn(); i++ {
 		parameter := signature.In(i)
-		t, source, ok := input.DTO(parameter)
-		if plan, wrapped, err := input.Inspect(parameter); err == nil && wrapped && plan.Source == "body" {
-			t, source, ok = plan.Payload, "body", true
+		if source, wrapped := input.Wrapper(parameter); wrapped && source == "body" &&
+			parameter.Kind() == reflect.Pointer && parameter.Elem().Kind() == reflect.Struct {
+			if !input.BodyMediaNeedsValidation(parameter.Elem()) {
+				continue
+			}
+			declaration, err := resolver.DescribeValidation(describer, parameter.Elem())
+			if err == nil && len(input.BodyMediaTypes(parameter.Elem(), declaration)) == 0 {
+				issues = append(issues, configuration.ConfigIssue{
+					Path: fmt.Sprintf("%s.Parameters[%d]", prefix, i-offset), Code: "HTTP_INPUT_VALIDATION_CONFLICT",
+					Message: fmt.Sprintf("Handler %s has no body format that can bind all required fields.", name),
+					Hint:    "Bind the required fields in a common body format or change their validation constraints.",
+				})
+			}
+			continue
 		}
+		t, source, ok := input.DTO(parameter)
 		if !ok || !hasExcludedInputField(t, source, make(map[reflect.Type]bool)) {
 			continue
 		}
-		declaration, err := describeValidation(describer, t)
+		declaration, err := resolver.DescribeValidation(describer, t)
 		if err != nil {
 			continue
 		}
@@ -60,35 +71,21 @@ func hasExcludedInputField(t reflect.Type, source string, seen map[reflect.Type]
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
-	if t.Kind() != reflect.Struct || seen[t] || source == "body" && customBodyDecoder(t) {
+	if t.Kind() != reflect.Struct || seen[t] {
 		return false
 	}
 	seen[t] = true
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
-		if field.IsExported() && (inputFieldExcluded(field, source) || hasExcludedInputField(field.Type, source, seen)) {
+		if field.IsExported() && (field.Tag.Get(source) == "-" || hasExcludedInputField(field.Type, source, seen)) {
 			return true
 		}
 	}
 	return false
 }
 
-func inputFieldExcluded(field reflect.StructField, source string) bool {
-	if source == "body" {
-		return field.Tag.Get("json") == "-" && field.Tag.Get("xml") == "-" && field.Tag.Get("form") == "-"
-	}
-	return field.Tag.Get(source) == "-"
-}
-
-func customBodyDecoder(t reflect.Type) bool {
-	pointer := reflect.PointerTo(t)
-	return pointer.Implements(reflect.TypeFor[json.Unmarshaler]()) ||
-		pointer.Implements(reflect.TypeFor[xml.Unmarshaler]()) ||
-		pointer.Implements(reflect.TypeFor[encoding.TextUnmarshaler]())
-}
-
 func excludedInputField(t reflect.Type, source string, index []int) bool {
-	for _, position := range index {
+	for depth, position := range index {
 		if t.Kind() == reflect.Pointer {
 			t = t.Elem()
 		}
@@ -96,22 +93,13 @@ func excludedInputField(t reflect.Type, source string, index []int) bool {
 			return false
 		}
 		field := t.Field(position)
-		if source == "body" && customBodyDecoder(t) {
+		if depth > 0 && reflect.PointerTo(t).Implements(reflect.TypeFor[encoding.TextUnmarshaler]()) {
 			return false
 		}
-		if inputFieldExcluded(field, source) {
+		if field.Tag.Get(source) == "-" {
 			return true
 		}
 		t = field.Type
 	}
 	return false
-}
-
-func describeValidation(describer validation.SchemaDescriber, t reflect.Type) (result validation.SchemaDescription, err error) {
-	defer func() {
-		if recover() != nil {
-			err = fmt.Errorf("validation description panicked")
-		}
-	}()
-	return describer.DescribeSchema(t)
 }

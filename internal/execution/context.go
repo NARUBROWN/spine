@@ -4,8 +4,7 @@ import (
 	"context"
 	"mime/multipart"
 
-	"github.com/NARUBROWN/spine/core"
-	"github.com/NARUBROWN/spine/internal/contextview"
+	httpcontract "github.com/NARUBROWN/spine/contract/http"
 	"github.com/NARUBROWN/spine/internal/event/emission"
 )
 
@@ -40,8 +39,8 @@ type HTTPRequestContext interface {
 }
 
 type HTTPResponseContext interface {
-	ResponseWriter() core.ResponseWriter
-	SetResponseWriter(core.ResponseWriter)
+	ResponseWriter() httpcontract.ResponseWriter
+	SetResponseWriter(httpcontract.ResponseWriter)
 }
 
 type ConsumerRequestContext interface {
@@ -65,4 +64,16 @@ func GoContext(ctx Context) context.Context {
 }
 
 // WebSocketRequestContext는 내부 upgrade 요청의 불변 정보 계약입니다.
-type WebSocketRequestContext = contextview.WebSocketRequestView
+type WebSocketRequestContext interface {
+	Context() context.Context
+	Path() string
+	Header(name string) string
+	Headers() map[string][]string
+	Query(name string) string
+	Queries() map[string][]string
+	Cookie(name string) (string, bool)
+	Cookies() map[string]string
+	RemoteAddr() string
+	Host() string
+	RequestURI() string
+}

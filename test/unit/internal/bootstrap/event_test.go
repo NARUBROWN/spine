@@ -60,7 +60,7 @@ func (p *eventPublisherStub) Close(context.Context) error                       
 
 func eventConfig(factory eventadapter.Factory) Config {
 	registry := consumer.NewRegistry()
-	if err := registry.Register("orders", (*testController).Handle); err != nil {
+	if err := registry.Register("orders", (*testController).Consume); err != nil {
 		panic(err)
 	}
 	return Config{Constructors: []any{func() *testController { return &testController{} }}, ConsumerRegistry: registry, EventAdapters: []EventAdapterBinding{{Name: "events", Factory: factory, Options: boot.EventOptions{ConsumerRetry: boot.ConsumerRetryOptions{MaxAttempts: 1}}}}}

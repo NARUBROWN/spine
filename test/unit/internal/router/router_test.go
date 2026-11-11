@@ -282,3 +282,14 @@ func (c *testExecutionContext) SetRoute(params map[string]string, pathKeys []str
 	c.params = params
 	c.pathKeys = pathKeys
 }
+
+func List(*testController) string { return "package function" }
+
+func TestNewHandlerMetaRejectsPackageFunctionWithMethodName(t *testing.T) {
+	if _, err := NewHandlerMeta(List); err == nil {
+		t.Fatal("패키지 함수 대신 같은 이름의 메서드를 등록했습니다")
+	}
+	if _, err := NewHandlerMeta((*testController).List); err != nil {
+		t.Fatal(err)
+	}
+}

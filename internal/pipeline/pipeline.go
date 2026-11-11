@@ -49,7 +49,18 @@ func (p *Pipeline) AddReturnValueHandler(handlers ...handler.ReturnValueHandler)
 }
 
 // Execute는 하나의 요청 실행 전체를 소유합니다.
-func (p *Pipeline) Execute(ctx execution.Context) (finalErr error) {
+func (p *Pipeline) Execute(ctx execution.Context) error {
+	return p.execute(ctx, p.router.Route)
+}
+
+// ExecuteRegistered는 이미 전송 계층에서 선택한 핸들러를 실행합니다.
+func (p *Pipeline) ExecuteRegistered(ctx execution.Context, meta execution.HandlerMeta) error {
+	return p.execute(ctx, func(execution.Context) (execution.HandlerMeta, error) {
+		return meta, nil
+	})
+}
+
+func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context) (execution.HandlerMeta, error)) (finalErr error) {
 	// 응답 처리와 완료 훅이 끝난 뒤 저장값의 참조를 해제합니다.
 	if store, ok := ctx.(interface{ ReleaseStore() }); ok {
 		defer store.ReleaseStore()
@@ -105,6 +116,9 @@ func (p *Pipeline) Execute(ctx execution.Context) (finalErr error) {
 		}
 		if responseStage != nil {
 			responseStage.rollbackSuccessResponse()
+			if errors.Is(finalErr, hook.ErrPublisherUnavailable) {
+				responseStage.prepared = false
+			}
 		}
 
 		if returnedErr != nil {
@@ -145,7 +159,7 @@ func (p *Pipeline) Execute(ctx execution.Context) (finalErr error) {
 	}
 
 	// 라우터가 실행 대상을 결정
-	meta, err := p.router.Route(ctx)
+	meta, err := resolve(ctx)
 	if err != nil {
 		if _, ok := ctx.(execution.HTTPResponseContext); ok {
 			switch {
@@ -446,6 +460,9 @@ func (p *Pipeline) handleExecutionError(ctx execution.Context, err error) error 
 			status = httpErr.Status
 			message = httpErr.Message
 		}
+	} else if errors.Is(err, hook.ErrPublisherUnavailable) {
+		status = http.StatusServiceUnavailable
+		message = hook.ErrPublisherUnavailable.Error()
 	} else if validationBody, ok := handler.ValidationErrorJSON(err); ok {
 		status = http.StatusBadRequest
 		body = validationBody

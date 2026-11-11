@@ -155,31 +155,14 @@ func Describe(routes []router.RouteSpec, options *configuration.HTTPOptions, val
 					if !c.inputSchemaAvailable(parameter.Type.Elem()) {
 						break
 					}
-					input.Content = map[string]json.RawMessage{"application/json": raw(c.schema(parameter.Type.Elem(), "request/json"))}
-					if _, ok := candidate.(*resolver.FormDTOResolver); ok {
-						form := raw(c.schema(parameter.Type.Elem(), "request/form"))
-						input.Content["application/x-www-form-urlencoded"], input.Content["multipart/form-data"] = form, append(json.RawMessage(nil), form...)
-						for _, field := range wireFields(parameter.Type.Elem(), true) {
-							if inputbinding.FormFileType(field.typeOf) {
-								input.Content = map[string]json.RawMessage{"multipart/form-data": form}
-								break
-							}
-						}
-					}
-					if _, hasJSON := input.Content["application/json"]; hasJSON {
-						bodyXML := raw(c.schema(parameter.Type.Elem(), "request/xml"))
-						input.Content["application/xml"] = bodyXML
-						input.Content["text/xml"] = append(json.RawMessage(nil), bodyXML...)
-					}
-					for media := range input.Content {
-						mode := "request/json"
-						switch media {
-						case "application/x-www-form-urlencoded", "multipart/form-data":
-							mode = "request/form"
-						case "application/xml", "text/xml":
-							mode = "request/xml"
-						}
-						if schema, ok := c.schemas[c.ids[schemaKey{parameter.Type.Elem(), mode}]].(map[string]any); ok {
+					payload := parameter.Type.Elem()
+					describer := validator.(validation.SchemaDescriber)
+					declaration, _ := resolver.DescribeValidation(describer, payload)
+					input.Content = make(map[string]json.RawMessage)
+					for _, media := range inputbinding.BodyMediaTypes(payload, declaration) {
+						mode := "request/" + inputbinding.BodyFieldTag(media)
+						input.Content[media] = raw(c.schema(payload, mode))
+						if schema, ok := c.schemas[c.ids[schemaKey{payload, mode}]].(map[string]any); ok {
 							names, _ := schema["required"].([]string)
 							input.Required = input.Required || len(names) > 0
 						}

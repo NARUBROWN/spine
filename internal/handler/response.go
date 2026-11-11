@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"github.com/NARUBROWN/spine/internal/inputerr"
 
+	httpcontract "github.com/NARUBROWN/spine/contract/http"
 	validation "github.com/NARUBROWN/spine/contract/validator"
-	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/execution"
 )
 
-func responseWriter(ctx execution.Context) (core.ResponseWriter, error) {
+func responseWriter(ctx execution.Context) (httpcontract.ResponseWriter, error) {
 	response, ok := ctx.(execution.HTTPResponseContext)
 	if !ok || response.ResponseWriter() == nil {
 		return nil, fmt.Errorf("ResponseWriter not found in ExecutionContext")

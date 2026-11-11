@@ -3,6 +3,7 @@ package resolver
 import (
 	"fmt"
 	"reflect"
+	"slices"
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/internal/execution"
@@ -32,7 +33,7 @@ func (r *DTOResolver) Resolve(ctx execution.Context, meta resolver.ParameterMeta
 	// DTO 인스턴스 생성
 	dtoPtr := reflect.New(meta.Type)
 
-	if err := jsondecode.Unmarshal(payload, dtoPtr.Interface()); err != nil {
+	if err := jsondecode.Unmarshal(slices.Clone(payload), dtoPtr.Interface()); err != nil {
 		return nil, fmt.Errorf("DTO deserialization failed: %w", err)
 	}
 

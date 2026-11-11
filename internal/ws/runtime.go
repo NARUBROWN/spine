@@ -299,7 +299,7 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 			handshakeContext,
 		)
 
-		if err := r.pipeline.Execute(ctx); err != nil {
+		if err := r.pipeline.ExecuteRegistered(ctx, reg.Meta); err != nil {
 			log.Printf("[WS] Handler failed (conn=%p): %v", &connID, err)
 			code, reason := wsadapter.CloseInternalServerErr, "handler error"
 			if _, ok := validation.AsError(err); ok {

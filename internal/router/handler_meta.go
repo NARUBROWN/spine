@@ -54,6 +54,9 @@ func NewHandlerMeta(handler any) (execution.HandlerMeta, error) {
 		return execution.HandlerMeta{}, fmt.Errorf("method not found: %s", methodName)
 	}
 
+	if method.Type != t || method.Func.Pointer() != v.Pointer() {
+		return execution.HandlerMeta{}, fmt.Errorf("handler must be the method expression for %s.%s", receiverType, methodName)
+	}
 	return execution.HandlerMeta{
 		ControllerType: receiverType,
 		Method:         method,

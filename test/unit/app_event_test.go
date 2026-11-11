@@ -46,10 +46,17 @@ func (r *publicEventReader) Read(ctx context.Context) (eventadapter.Delivery, er
 }
 func (r *publicEventReader) Close(context.Context) error { r.closes.Add(1); return nil }
 
-type publicDelivery struct{ ack, nack func(context.Context) error }
+type publicDelivery struct {
+	ack, nack func(context.Context) error
+	payload   []byte
+}
 
-func (*publicDelivery) Message() eventadapter.Message {
-	return eventadapter.Message{EventName: "producer-controlled-unregistered-route", Payload: []byte(`{"value":"input"}`)}
+func (d *publicDelivery) Message() eventadapter.Message {
+	payload := d.payload
+	if payload == nil {
+		payload = []byte(`{"value":"input"}`)
+	}
+	return eventadapter.Message{EventName: "producer-controlled-unregistered-route", Payload: payload}
 }
 func (d *publicDelivery) Ack(ctx context.Context) error  { return d.ack(ctx) }
 func (d *publicDelivery) Nack(ctx context.Context) error { return d.nack(ctx) }
@@ -218,5 +225,73 @@ func TestAppEventStartupCancellationRollsBackPublisher(t *testing.T) {
 	}
 	if err := <-done; !errors.Is(err, context.Canceled) || publisher.closes.Load() != 1 {
 		t.Fatalf("시작 취소와 publisher 정리가 다릅니다: %v", err)
+	}
+}
+
+type subscriptionController struct {
+	seen chan string
+}
+
+func (c *subscriptionController) First(topic string, payload []byte) {
+	payload[0] = 1
+	c.seen <- "first " + topic
+}
+
+func (c *subscriptionController) Second(topic string, payload []byte) {
+	payload[0] = 2
+	c.seen <- "second " + topic
+}
+
+func TestAppEventPreservesSubscriptionKeysAndAdapterPayload(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	seen := make(chan string, 2)
+	readers := map[string]*publicEventReader{}
+	var settled atomic.Int32
+	for _, topic := range []string{"team/orders", "team/orders/"} {
+		reader := &publicEventReader{deliveries: make(chan eventadapter.Delivery, 1)}
+		payload := []byte{42}
+		reader.deliveries <- &publicDelivery{
+			payload: payload,
+			ack: func(context.Context) error {
+				if payload[0] != 42 {
+					t.Errorf("어댑터의 페이로드가 변경됐습니다: %s %v", topic, payload)
+				}
+				if settled.Add(1) == 2 {
+					cancel()
+				}
+				return nil
+			},
+			nack: func(context.Context) error {
+				t.Errorf("정상 전달이 NACK 됐습니다: %s", topic)
+				cancel()
+				return nil
+			},
+		}
+		readers[topic] = reader
+	}
+	app := spine.New(spine.WithEventAdapter("source", publicEventFactory{
+		consume: true,
+		reader: func(_ context.Context, sub eventadapter.Subscription) (eventadapter.Reader, error) {
+			return readers[sub.Topic], nil
+		},
+	}))
+	app.Constructor(func() *subscriptionController { return &subscriptionController{seen: seen} })
+	if err := app.Consumers().Register("team/orders", (*subscriptionController).First); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.Consumers().Register("team/orders/", (*subscriptionController).Second); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.RunContext(ctx, boot.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	close(seen)
+	handlers := map[string]bool{}
+	for handler := range seen {
+		handlers[handler] = true
+	}
+	if settled.Load() != 2 || !handlers["first team/orders"] || !handlers["second team/orders/"] {
+		t.Fatalf("구독과 실행 핸들러가 다릅니다: %v ACK=%d", handlers, settled.Load())
 	}
 }

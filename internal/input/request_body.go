@@ -148,8 +148,20 @@ func (b *Body) Bind(target any) (err error) {
 
 func decodeXML(data []byte, target any) error {
 	decoder := xml.NewDecoder(bytes.NewReader(data))
-	if err := decoder.Decode(target); err != nil {
-		return err
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		if root, ok := token.(xml.StartElement); ok {
+			if err := decoder.DecodeElement(target, &root); err != nil {
+				return err
+			}
+			break
+		}
+		if text, ok := token.(xml.CharData); ok && len(bytes.Trim(text, " \t\r\n")) != 0 {
+			return fmt.Errorf("unexpected XML content before the root element")
+		}
 	}
 	for {
 		token, err := decoder.Token()

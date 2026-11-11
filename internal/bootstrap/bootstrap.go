@@ -118,13 +118,13 @@ func validate(config Config) ([]configuration.OpenAPIResource, error) {
 	if config.ConsumerRegistry != nil {
 		resolvers := consumerArgumentResolvers(config.Validator)
 		for i, registration := range config.ConsumerRegistry.Registrations() {
-			issues = append(issues, messageParameterIssues(registration.Meta, resolvers, fmt.Sprintf("Consumers[%d]", i), "EVENT_PARAMETER_UNSUPPORTED")...)
+			issues = append(issues, messageHandlerIssues(registration.Meta, resolvers, fmt.Sprintf("Consumers[%d]", i), "EVENT")...)
 		}
 	}
 	if config.WebSocketRegistry != nil {
 		resolvers := webSocketArgumentResolvers(config.Validator)
 		for i, registration := range config.WebSocketRegistry.Registrations() {
-			issues = append(issues, messageParameterIssues(registration.Meta, resolvers, fmt.Sprintf("WebSockets[%d]", i), "WEBSOCKET_PARAMETER_UNSUPPORTED")...)
+			issues = append(issues, messageHandlerIssues(registration.Meta, resolvers, fmt.Sprintf("WebSockets[%d]", i), "WEBSOCKET")...)
 		}
 	}
 	var openAPIResources []configuration.OpenAPIResource
@@ -453,14 +453,8 @@ func printBanner() {
 	log.Printf("[Bootstrap] Spine version: %s", runtimeSpineVersion())
 }
 
-func buildConsumerPipeline(container *container.Container, registry *consumer.Registry, dispatchHook *hook.EventDispatchHook, validator validation.Validator) *pipeline.Pipeline {
-	consumerRouter := spineRouter.NewRouter()
-	for _, registration := range registry.Registrations() {
-		consumerRouter.Register("EVENT", registration.Topic, registration.Meta)
-	}
-
-	consumerInvoker := invoker.NewInvoker(container)
-	consumerPipeline := pipeline.NewPipeline(consumerRouter, consumerInvoker)
+func buildConsumerPipeline(container *container.Container, dispatchHook *hook.EventDispatchHook, validator validation.Validator) *pipeline.Pipeline {
+	consumerPipeline := pipeline.NewPipeline(nil, invoker.NewInvoker(container))
 
 	if dispatchHook != nil {
 		consumerPipeline.AddPostExecutionHook(dispatchHook)
@@ -482,18 +476,11 @@ func consumerArgumentResolvers(validator validation.Validator) []resolver.Argume
 
 func buildWSPipeline(
 	container *container.Container,
-	registry *ws.Registry,
 	dispatchHook *hook.EventDispatchHook,
 	interceptors []core.Interceptor,
 	validator validation.Validator,
 ) *pipeline.Pipeline {
-	wsRouter := spineRouter.NewRouter()
-	for _, reg := range registry.Registrations() {
-		wsRouter.Register("WS", reg.Path, reg.Meta)
-	}
-
-	wsInvoker := invoker.NewInvoker(container)
-	wsPipeline := pipeline.NewPipeline(wsRouter, wsInvoker)
+	wsPipeline := pipeline.NewPipeline(nil, invoker.NewInvoker(container))
 	for _, interceptor := range interceptors {
 		wsPipeline.AddInterceptor(interceptor)
 	}
@@ -516,14 +503,31 @@ func webSocketArgumentResolvers(validator validation.Validator) []resolver.Argum
 	}
 }
 
-func messageParameterIssues(meta execution.HandlerMeta, resolvers []resolver.ArgumentResolver, prefix, code string) []configuration.ConfigIssue {
+func messageHandlerIssues(meta execution.HandlerMeta, resolvers []resolver.ArgumentResolver, prefix, transport string) []configuration.ConfigIssue {
 	var issues []configuration.ConfigIssue
+	signature := meta.FunctionType()
+	if signature.IsVariadic() {
+		issues = append(issues, configuration.ConfigIssue{
+			Path: prefix, Code: transport + "_PARAMETER_UNSUPPORTED",
+			Message: "Variadic message handlers are unsupported.",
+			Hint:    "Declare a fixed parameter list.",
+		})
+	}
+	for i := 0; i < signature.NumOut(); i++ {
+		if result := signature.Out(i); !result.Implements(reflect.TypeFor[error]()) {
+			issues = append(issues, configuration.ConfigIssue{
+				Path: fmt.Sprintf("%s.Returns[%d]", prefix, i), Code: transport + "_RETURN_UNSUPPORTED",
+				Message: fmt.Sprintf("No message return handler supports %s.", result),
+				Hint:    "Return an error or use an explicit send or publish API.",
+			})
+		}
+	}
 	for _, parameter := range resolver.HandlerParameters(meta, nil) {
 		if !slices.ContainsFunc(resolvers, func(candidate resolver.ArgumentResolver) bool {
 			return candidate.Supports(parameter)
 		}) {
 			issues = append(issues, configuration.ConfigIssue{
-				Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: code,
+				Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: transport + "_PARAMETER_UNSUPPORTED",
 				Message: fmt.Sprintf("No resolver supports %s.", parameter.Type),
 				Hint:    "Use a supported context, message identifier, raw bytes, or struct payload.",
 			})

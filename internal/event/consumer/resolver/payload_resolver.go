@@ -3,6 +3,7 @@ package resolver
 import (
 	"fmt"
 	"reflect"
+	"slices"
 
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/resolver"
@@ -11,8 +12,7 @@ import (
 type PayloadResolver struct{}
 
 func (r *PayloadResolver) Supports(meta resolver.ParameterMeta) bool {
-	return meta.Type.Kind() == reflect.Slice &&
-		meta.Type.Elem().Kind() == reflect.Uint8
+	return reflect.TypeFor[[]byte]().ConvertibleTo(meta.Type) && meta.Type.Kind() == reflect.Slice
 }
 
 func (r *PayloadResolver) Resolve(ctx execution.Context, meta resolver.ParameterMeta) (any, error) {
@@ -21,7 +21,7 @@ func (r *PayloadResolver) Resolve(ctx execution.Context, meta resolver.Parameter
 		return nil, fmt.Errorf("context is not a ConsumerRequestContext")
 	}
 
-	payload := consumerCtx.Payload()
+	payload := slices.Clone(consumerCtx.Payload())
 
 	value := reflect.ValueOf(payload)
 	if !value.Type().ConvertibleTo(meta.Type) {

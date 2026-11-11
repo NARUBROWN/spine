@@ -2,9 +2,8 @@ package contextview
 
 import (
 	"context"
+	"encoding/json"
 	"mime/multipart"
-
-	httpcontract "github.com/NARUBROWN/spine/contract/http"
 )
 
 type ContextCarrier interface {
@@ -27,7 +26,15 @@ type Ctx interface {
 }
 
 // HTTPResponseView는 내부 writer 교체를 허용하지 않는 응답 출력 계약입니다.
-type HTTPResponseView = httpcontract.ResponseWriter
+type HTTPResponseView interface {
+	SetHeader(key, value string)
+	AddHeader(key, value string)
+	IsCommitted() bool
+	WriteStatus(status int) error
+	WriteJSON(status int, body json.RawMessage) error
+	WriteString(status int, body string) error
+	WriteBytes(status int, body []byte) error
+}
 
 type HTTPRequestView interface {
 	ContextCarrier

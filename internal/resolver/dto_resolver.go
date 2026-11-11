@@ -2,17 +2,22 @@ package resolver
 
 import (
 	"fmt"
-	"github.com/NARUBROWN/spine/internal/inputerr"
 	"mime"
+	"net/http"
 	"reflect"
+	"slices"
+	"sync"
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/internal/execution"
+	"github.com/NARUBROWN/spine/internal/httpfailure"
 	"github.com/NARUBROWN/spine/internal/input"
+	"github.com/NARUBROWN/spine/internal/inputerr"
 )
 
 type DTOResolver struct {
 	Validator validation.Validator
+	media     sync.Map
 }
 
 func (r *DTOResolver) Supports(pm ParameterMeta) bool {
@@ -27,36 +32,43 @@ func (r *DTOResolver) Resolve(ctx execution.Context, parameterMeta ParameterMeta
 	if !r.Supports(parameterMeta) {
 		return nil, fmt.Errorf("HTTP DTO inputs require an explicit input wrapper")
 	}
+	return resolveBodyDTO(ctx, parameterMeta, r.Validator, &r.media)
+}
+
+func resolveBodyDTO(ctx execution.Context, parameter ParameterMeta, validator validation.Validator, mediaCache *sync.Map) (any, error) {
 	httpCtx, ok := ctx.(execution.HTTPRequestContext)
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")
 	}
-
-	// 빈 DTO 생성 (*T)
-	valuePtr := reflect.New(parameterMeta.Type.Elem())
-
-	if err := httpCtx.Bind(valuePtr.Interface()); err != nil {
-		return nil, &inputerr.Error{Source: "body", Cause: fmt.Errorf(
-			"DTO binding failed (%s): %w",
-			parameterMeta.Type.Name(),
-			err,
-		)}
+	payload := parameter.Type.Elem()
+	available, cached := mediaCache.Load(payload)
+	if !cached {
+		var declaration validation.SchemaDescription
+		if describer, ok := validator.(validation.SchemaDescriber); ok && input.BodyMediaNeedsValidation(payload) {
+			declaration, _ = DescribeValidation(describer, payload)
+		}
+		available, _ = mediaCache.LoadOrStore(payload, input.BodyMediaTypes(payload, declaration))
 	}
-
-	// 포인터로 전달
-	if err := ValidateHTTPDTO(ctx.Context(), r.Validator, valuePtr.Interface(), "body", bodyFieldTag(httpCtx)); err != nil {
+	mediaTypes := available.([]string)
+	media, _, _ := mime.ParseMediaType(httpCtx.Header("Content-Type"))
+	switch media {
+	case "application/json", "application/xml", "text/xml", "application/x-www-form-urlencoded", "multipart/form-data":
+		if !slices.Contains(mediaTypes, media) {
+			return nil, &inputerr.Error{Source: "body", Cause: &httpfailure.HTTPError{
+				Status: http.StatusUnsupportedMediaType, Message: "Unsupported Media Type",
+			}}
+		}
+	case "":
+		if len(mediaTypes) > 0 {
+			media = mediaTypes[0]
+		}
+	}
+	dto := reflect.New(payload)
+	if err := httpCtx.Bind(dto.Interface()); err != nil {
+		return nil, &inputerr.Error{Source: "body", Cause: err}
+	}
+	if err := ValidateHTTPDTO(ctx.Context(), validator, dto.Interface(), "body", input.BodyFieldTag(media)); err != nil {
 		return nil, err
 	}
-	return valuePtr.Convert(parameterMeta.Type).Interface(), nil
-}
-
-func bodyFieldTag(ctx execution.HTTPRequestContext) string {
-	media, _, _ := mime.ParseMediaType(ctx.Header("Content-Type"))
-	if media == "multipart/form-data" || media == "application/x-www-form-urlencoded" {
-		return "form"
-	}
-	if media == "application/xml" || media == "text/xml" {
-		return "xml"
-	}
-	return "json"
+	return dto.Convert(parameter.Type).Interface(), nil
 }
