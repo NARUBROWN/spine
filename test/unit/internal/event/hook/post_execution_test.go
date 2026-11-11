@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/event/emission"
 	internalpublish "github.com/NARUBROWN/spine/internal/event/publish"
 	pkgevent "github.com/NARUBROWN/spine/pkg/event/publish"
 )
@@ -48,11 +48,11 @@ func (d *testDispatcher) Dispatch(ctx context.Context, events []pkgevent.DomainE
 }
 
 type testExecutionContext struct {
-	bus core.EventBus
+	bus emission.Bus
 }
 
 func (c *testExecutionContext) Context() context.Context     { return context.Background() }
-func (c *testExecutionContext) EventBus() core.EventBus      { return c.bus }
+func (c *testExecutionContext) EventBus() emission.Bus       { return c.bus }
 func (c *testExecutionContext) Method() string               { return "GET" }
 func (c *testExecutionContext) Path() string                 { return "/" }
 func (c *testExecutionContext) Params() map[string]string    { return map[string]string{} }

@@ -1,15 +1,33 @@
 package router
 
 import (
+	"errors"
 	"net/url"
 	"reflect"
 	"strings"
 
 	"github.com/NARUBROWN/spine/core"
-	"github.com/NARUBROWN/spine/pkg/httperr"
+	"github.com/NARUBROWN/spine/internal/execution"
 )
 
-type RouteOption func(*RouteSpec)
+type RouteOption struct {
+	apply func(*RouteSpec)
+}
+
+func NewOption(apply func(*RouteSpec)) RouteOption { return RouteOption{apply: apply} }
+
+func ApplyOption(option RouteOption, spec *RouteSpec) bool {
+	if option.apply == nil {
+		return false
+	}
+	option.apply(spec)
+	return true
+}
+
+var (
+	ErrRouteNotFound       = errors.New("handler not found")
+	ErrInvalidPathEncoding = errors.New("invalid path encoding")
+)
 
 type RouteSpec struct {
 	Method         string
@@ -23,13 +41,13 @@ type RouteSpec struct {
 }
 
 type Router interface {
-	Route(ctx core.ExecutionContext) (core.HandlerMeta, error)
+	Route(ctx execution.Context) (execution.HandlerMeta, error)
 }
 
 type routeNode struct {
 	staticChildren map[string]*routeNode
 	paramChild     *routeNode
-	meta           *core.HandlerMeta
+	meta           *execution.HandlerMeta
 }
 
 type DefaultRouter struct {
@@ -49,7 +67,7 @@ func (r *DefaultRouter) ControllerTypes() []reflect.Type {
 	return append([]reflect.Type(nil), r.controllerTypes...)
 }
 
-func (r *DefaultRouter) Register(method string, path string, meta core.HandlerMeta) {
+func (r *DefaultRouter) Register(method string, path string, meta execution.HandlerMeta) {
 	root := r.trees[method]
 	if root == nil {
 		root = &routeNode{}
@@ -87,10 +105,10 @@ func (r *DefaultRouter) Register(method string, path string, meta core.HandlerMe
 	}
 }
 
-func (r *DefaultRouter) Route(ctx core.ExecutionContext) (core.HandlerMeta, error) {
+func (r *DefaultRouter) Route(ctx execution.Context) (execution.HandlerMeta, error) {
 	root := r.trees[ctx.Method()]
 	if root == nil {
-		return core.HandlerMeta{}, httperr.NotFound("handler not found")
+		return execution.HandlerMeta{}, ErrRouteNotFound
 	}
 
 	pathSegs := splitPath(ctx.Path())
@@ -99,14 +117,14 @@ func (r *DefaultRouter) Route(ctx core.ExecutionContext) (core.HandlerMeta, erro
 		for i, segment := range pathSegs {
 			decoded, err := url.PathUnescape(segment)
 			if err != nil {
-				return core.HandlerMeta{}, httperr.BadRequest("invalid path encoding")
+				return execution.HandlerMeta{}, ErrInvalidPathEncoding
 			}
 			pathSegs[i] = decoded
 		}
 	}
 	node, values, ok := findRoute(root, pathSegs, 0, nil)
 	if !ok {
-		return core.HandlerMeta{}, httperr.NotFound("handler not found")
+		return execution.HandlerMeta{}, ErrRouteNotFound
 	}
 
 	if len(node.meta.PathKeys) > 0 {

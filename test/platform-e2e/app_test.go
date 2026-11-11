@@ -1,5 +1,7 @@
 package integration_test
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"context"
 	"encoding/json"
@@ -36,15 +38,15 @@ type panicDTO struct {
 }
 type controller struct{ calls atomic.Int32 }
 
-func (c *controller) JSON(dto *inputDTO) httpx.Response[string] {
+func (c *controller) JSON(dto httpinput.Body[inputDTO]) httpx.Response[string] {
 	c.calls.Add(1)
 	return httpx.Response[string]{Body: dto.Email}
 }
-func (c *controller) Form(dto *formDTO) httpx.Response[string] {
+func (c *controller) Form(dto httpinput.Body[formDTO]) httpx.Response[string] {
 	c.calls.Add(1)
 	return httpx.Response[string]{Body: dto.Name}
 }
-func (c *controller) Panic(*panicDTO) httpx.Response[string] {
+func (c *controller) Panic(httpinput.Body[panicDTO]) httpx.Response[string] {
 	c.calls.Add(1)
 	return httpx.Response[string]{Body: "unreachable"}
 }

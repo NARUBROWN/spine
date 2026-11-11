@@ -1,5 +1,7 @@
 package spine
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"context"
 	"errors"
@@ -23,19 +25,19 @@ type repeatedHeader struct {
 }
 type repeatedInputController struct{}
 
-func (*repeatedInputController) Body(*repeatedBody, *repeatedBody) error {
+func (*repeatedInputController) Body(httpinput.Body[repeatedBody], httpinput.Body[repeatedBody]) error {
 	panic("핸들러를 실행하면 안 됩니다")
 }
-func (*repeatedInputController) Query(*repeatedQuery, *repeatedQuery) error {
+func (*repeatedInputController) Query(httpinput.Query[repeatedQuery], httpinput.Query[repeatedQuery]) error {
 	panic("핸들러를 실행하면 안 됩니다")
 }
-func (*repeatedInputController) Header(*repeatedHeader, *repeatedHeader) error {
+func (*repeatedInputController) Header(httpinput.Header[repeatedHeader], httpinput.Header[repeatedHeader]) error {
 	panic("핸들러를 실행하면 안 됩니다")
 }
-func (*repeatedInputController) Alias(*repeatedBody, *repeatedBodyAlias) error {
+func (*repeatedInputController) Alias(httpinput.Body[repeatedBody], httpinput.Body[repeatedBodyAlias]) error {
 	panic("핸들러를 실행하면 안 됩니다")
 }
-func (*repeatedInputController) Single(*repeatedBody) error {
+func (*repeatedInputController) Single(httpinput.Body[repeatedBody]) error {
 	panic("핸들러를 실행하면 안 됩니다")
 }
 

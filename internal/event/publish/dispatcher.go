@@ -10,11 +10,11 @@ import (
 	"sync"
 
 	eventadapter "github.com/NARUBROWN/spine/contract/event"
-	"github.com/NARUBROWN/spine/pkg/event/publish"
+	"github.com/NARUBROWN/spine/internal/event/emission"
 )
 
 type EventDispatcher interface {
-	Dispatch(ctx context.Context, events []publish.DomainEvent) error
+	Dispatch(ctx context.Context, events []emission.DomainEvent) error
 }
 
 type DefaultEventDispatcher struct {
@@ -47,7 +47,7 @@ func isNilEventPublisher(publisher EventPublisher) bool {
 	}
 }
 
-func (d *DefaultEventDispatcher) Dispatch(ctx context.Context, events []publish.DomainEvent) error {
+func (d *DefaultEventDispatcher) Dispatch(ctx context.Context, events []emission.DomainEvent) error {
 	var dispatchErrs []error
 
 	for _, e := range events {

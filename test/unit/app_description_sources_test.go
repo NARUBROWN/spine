@@ -1,5 +1,7 @@
 package spine
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"context"
 	"encoding/json"
@@ -26,10 +28,10 @@ type uploadDTO struct {
 	Files []*multipart.FileHeader `form:"attachments"`
 }
 
-func (*descriptionController) Search(*searchDTO, *headersDTO) httpx.Response[descriptionDTO] {
+func (*descriptionController) Search(httpinput.Query[searchDTO], httpinput.Header[headersDTO]) httpx.Response[descriptionDTO] {
 	panic("설명 중 실행하면 안 됩니다")
 }
-func (*descriptionController) Upload(*uploadDTO) httpx.Binary {
+func (*descriptionController) Upload(httpinput.Body[uploadDTO]) httpx.Binary {
 	panic("설명 중 실행하면 안 됩니다")
 }
 
@@ -112,7 +114,7 @@ type mixedInputDTO struct {
 	ID string `header:"X-ID"`
 }
 
-func (*descriptionController) Mixed(*mixedInputDTO) error { return nil }
+func (*descriptionController) Mixed(httpinput.Query[mixedInputDTO]) error { return nil }
 func TestMixedInputSourcesAreRejectedEvenWithOpenAPIDisabled(t *testing.T) {
 	app := New()
 	app.Route("GET", "/mixed", (*descriptionController).Mixed)

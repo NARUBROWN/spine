@@ -8,20 +8,14 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/event/emission"
 	"github.com/NARUBROWN/spine/internal/event/publish"
-	pkgws "github.com/NARUBROWN/spine/pkg/ws"
+	"github.com/NARUBROWN/spine/internal/execution"
+	"github.com/NARUBROWN/spine/internal/ws/sendctx"
 )
 
-type connSender struct {
-	send func(messageType int, data []byte) error
-}
-
-func (s *connSender) Send(messageType int, data []byte) error {
-	return s.send(messageType, data)
-}
-
 type WSExecutionContext struct {
+	execution.Store
 	mu          sync.RWMutex
 	ctx         context.Context
 	connID      string
@@ -31,7 +25,6 @@ type WSExecutionContext struct {
 	eventBus    publish.EventBus
 	params      map[string]string
 	pathKeys    []string
-	store       map[string]any
 	request     *webSocketRequestSnapshot
 }
 
@@ -106,8 +99,8 @@ func (s *webSocketRequestSnapshot) RemoteAddr() string { return s.remoteAddr }
 func (s *webSocketRequestSnapshot) Host() string       { return s.host }
 func (s *webSocketRequestSnapshot) RequestURI() string { return s.requestURI }
 
-func NewWSExecutionContext(ctx context.Context, connID string, path string, messageType int, payload []byte, eventBus publish.EventBus, sendFn func(int, []byte) error, request ...core.WebSocketHandshakeContext) core.WebSocketContext {
-	ctx = context.WithValue(ctx, pkgws.SenderKey, &connSender{send: sendFn})
+func NewWSExecutionContext(ctx context.Context, connID string, path string, messageType int, payload []byte, eventBus publish.EventBus, sendFn func(int, []byte) error, request ...execution.WebSocketRequestContext) execution.WebSocketContext {
+	ctx = sendctx.With(ctx, sendFn)
 	requestSnapshot := &webSocketRequestSnapshot{
 		ctx:     ctx,
 		path:    path,
@@ -130,7 +123,7 @@ func NewWSExecutionContext(ctx context.Context, connID string, path string, mess
 	}
 }
 
-func snapshotWebSocketRequest(ctx context.Context, request core.WebSocketHandshakeContext) *webSocketRequestSnapshot {
+func snapshotWebSocketRequest(ctx context.Context, request execution.WebSocketRequestContext) *webSocketRequestSnapshot {
 	headers := make(http.Header)
 	for key, values := range request.Headers() {
 		headers[key] = append([]string(nil), values...)
@@ -163,23 +156,13 @@ func (w *WSExecutionContext) Context() context.Context {
 	return w.ctx
 }
 
-func (w *WSExecutionContext) EventBus() core.EventBus {
+func (w *WSExecutionContext) EventBus() emission.Bus {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.eventBus == nil {
 		w.eventBus = publish.NewEventBus()
 	}
 	return w.eventBus
-}
-
-func (w *WSExecutionContext) Get(key string) (any, bool) {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	if w.store == nil {
-		return nil, false
-	}
-	v, ok := w.store[key]
-	return v, ok
 }
 
 func (w *WSExecutionContext) Header(name string) string {
@@ -239,13 +222,4 @@ func (w *WSExecutionContext) Payload() []byte {
 
 func (w *WSExecutionContext) Queries() map[string][]string {
 	return w.request.Queries()
-}
-
-func (w *WSExecutionContext) Set(key string, value any) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.store == nil {
-		w.store = make(map[string]any)
-	}
-	w.store[key] = value
 }

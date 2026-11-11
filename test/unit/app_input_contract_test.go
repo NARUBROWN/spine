@@ -1,5 +1,7 @@
 package spine
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"errors"
 	"strings"
@@ -24,7 +26,7 @@ type pageQuery struct {
 }
 type partiallyMappedQuery struct {
 	Q    string `query:"q"`
-	Name string `json:"name"`
+	Name string `query:"bad,name"`
 }
 type typoHeader struct {
 	ID string `headers:"X-ID"`
@@ -38,7 +40,7 @@ type paramSourceBody struct {
 	ID int `param:"id"`
 }
 type emptyHeaderSource struct {
-	ID string `header:""`
+	ID string `header:"bad name"`
 }
 type privateQuerySource struct {
 	ID string `query:"id"`
@@ -58,21 +60,23 @@ type hiddenNestedQueryBody struct {
 }
 type contractController struct{}
 
-func (*contractController) Bodies(*repeatedBody, *anotherBody)         {}
-func (*contractController) BodyForm(*repeatedBody, *contractForm)      {}
-func (*contractController) QueryKeys(*repeatedQuery, *anotherQuery)    {}
-func (*contractController) HeaderKeys(*repeatedHeader, *anotherHeader) {}
-func (*contractController) Pagination(query.Pagination, *pageQuery)    {}
-func (*contractController) Missing(*partiallyMappedQuery)              {}
-func (*contractController) Typo(*typoHeader)                           {}
-func (*contractController) Nested(*nestedSourceBody)                   {}
-func (*contractController) Param(*paramSourceBody)                     {}
-func (*contractController) EmptyHeader(*emptyHeaderSource)             {}
-func (*contractController) HiddenQuery(*hiddenQueryBody)               {}
-func (*contractController) UnsupportedHeader(*unsupportedHeaderList)   {}
-func (*contractController) Untagged(*anotherBody)                      {}
-func (*contractController) DuplicateJSON(*duplicateJSONBody)           {}
-func (*contractController) HiddenNestedQuery(*hiddenNestedQueryBody)   {}
+func (*contractController) Bodies(httpinput.Body[repeatedBody], httpinput.Body[anotherBody])    {}
+func (*contractController) BodyForm(httpinput.Body[repeatedBody], httpinput.Body[contractForm]) {}
+func (*contractController) QueryKeys(httpinput.Query[repeatedQuery], httpinput.Query[anotherQuery]) {
+}
+func (*contractController) HeaderKeys(httpinput.Header[repeatedHeader], httpinput.Header[anotherHeader]) {
+}
+func (*contractController) Pagination(query.Pagination, httpinput.Query[pageQuery])   {}
+func (*contractController) Missing(httpinput.Query[partiallyMappedQuery])             {}
+func (*contractController) Typo(httpinput.Body[typoHeader])                           {}
+func (*contractController) Nested(httpinput.Body[nestedSourceBody])                   {}
+func (*contractController) Param(httpinput.Body[paramSourceBody])                     {}
+func (*contractController) EmptyHeader(httpinput.Header[emptyHeaderSource])           {}
+func (*contractController) HiddenQuery(httpinput.Body[hiddenQueryBody])               {}
+func (*contractController) UnsupportedHeader(httpinput.Header[unsupportedHeaderList]) {}
+func (*contractController) Untagged(httpinput.Body[anotherBody])                      {}
+func (*contractController) DuplicateJSON(httpinput.Body[duplicateJSONBody])           {}
+func (*contractController) HiddenNestedQuery(httpinput.Body[hiddenNestedQueryBody])   {}
 
 func TestHTTPInputContractsFailBeforeBootAndDescriptionCallbacks(t *testing.T) {
 	for _, test := range []struct {

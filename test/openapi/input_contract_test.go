@@ -1,5 +1,7 @@
 package openapi_test
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"context"
 	"encoding/json"
@@ -41,25 +43,25 @@ type sourcePath struct {
 }
 type sourceController struct{}
 
-func (*sourceController) Body(input *sourceBody) httpx.Response[sourceBody] {
+func (*sourceController) Body(input httpinput.Body[sourceBody]) httpx.Response[sourceBody] {
 	return httpx.Response[sourceBody]{Body: *input}
 }
-func (*sourceController) Query(input *sourceQuery) httpx.Response[sourceQuery] {
+func (*sourceController) Query(input httpinput.Query[sourceQuery]) httpx.Response[sourceQuery] {
 	return httpx.Response[sourceQuery]{Body: *input}
 }
-func (*sourceController) Header(input *sourceHeader) httpx.Response[sourceHeader] {
+func (*sourceController) Header(input httpinput.Header[sourceHeader]) httpx.Response[sourceHeader] {
 	return httpx.Response[sourceHeader]{Body: *input}
 }
-func (*sourceController) Form(input *sourceForm) httpx.Response[sourceForm] {
+func (*sourceController) Form(input httpinput.Body[sourceForm]) httpx.Response[sourceForm] {
 	return httpx.Response[sourceForm]{Body: *input}
 }
-func (*sourceController) Match(input *sourceMatch) httpx.Response[[]string] {
+func (*sourceController) Match(input httpinput.Header[sourceMatch]) httpx.Response[[]string] {
 	return httpx.Response[[]string]{Body: input.Match}
 }
-func (*sourceController) Encoding(input *sourceEncoding) httpx.Response[string] {
+func (*sourceController) Encoding(input httpinput.Header[sourceEncoding]) httpx.Response[string] {
 	return httpx.Response[string]{Body: input.Encoding}
 }
-func (*sourceController) Plain(_ *sourcePath, input *bareBody) httpx.Response[bareBody] {
+func (*sourceController) Plain(_ httpinput.Path[sourcePath], input httpinput.Body[bareBody]) httpx.Response[bareBody] {
 	return httpx.Response[bareBody]{Body: *input}
 }
 
@@ -96,7 +98,7 @@ func TestHTTPValidationUsesBoundSourceAndWireNames(t *testing.T) {
 		{"POST", "/body", "application/json", "{}", "body", "/id"},
 		{"POST", "/body", "application/xml", "<request/>", "body", "/xml_id"},
 		{"GET", "/query", "", "", "query", "/count"},
-		{"GET", "/header", "", "", "header", "/X-ID"},
+		{"GET", "/header", "", "", "header", "/X-Id"},
 		{"POST", "/form", "application/x-www-form-urlencoded", "", "body", "/form_id"},
 		{"POST", "/form", "application/json", "{}", "body", "/json_id"},
 	} {
@@ -117,6 +119,42 @@ func TestHTTPValidationUsesBoundSourceAndWireNames(t *testing.T) {
 		_ = json.Unmarshal(w.Body.Bytes(), &result)
 		if w.Code != 400 || result["in"] != test.source || result["fields"] != nil {
 			t.Fatalf("바인딩 오류와 검증 오류를 구분해야 합니다: %d %s", w.Code, w.Body)
+		}
+	}
+}
+
+func TestXMLRequestMediaAndWireNamesMatchOpenAPI(t *testing.T) {
+	h := sourceApplication(t, true)
+	document := serve(h, "GET", "/openapi.json", "", nil)
+	var spec struct {
+		Paths map[string]map[string]struct {
+			RequestBody struct {
+				Content map[string]struct {
+					Schema struct {
+						Ref string `json:"$ref"`
+					}
+				}
+			}
+		}
+		Components struct {
+			Schemas map[string]struct {
+				Properties map[string]json.RawMessage
+				Required   []string
+			}
+		}
+	}
+	if err := json.Unmarshal(document.Body.Bytes(), &spec); err != nil || document.Code != http.StatusOK {
+		t.Fatalf("OpenAPI: %d %v %s", document.Code, err, document.Body)
+	}
+	for _, media := range []string{"application/xml", "text/xml"} {
+		result := serve(h, "POST", "/body", media, strings.NewReader("<request><xml_id>bound</xml_id></request>"))
+		if result.Code != http.StatusOK || !strings.Contains(result.Body.String(), `"id":"bound"`) {
+			t.Fatalf("%s: %d %s", media, result.Code, result.Body)
+		}
+		ref := spec.Paths["/body"]["post"].RequestBody.Content[media].Schema.Ref
+		schema := spec.Components.Schemas[strings.TrimPrefix(ref, "#/components/schemas/")]
+		if schema.Properties["xml_id"] == nil || schema.Properties["id"] != nil || !reflect.DeepEqual(schema.Required, []string{"xml_id"}) {
+			t.Fatalf("%s schema %s: %+v", media, ref, schema)
 		}
 	}
 }

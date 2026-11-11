@@ -12,9 +12,11 @@
 
 ## 現在のチャネル
 
-**Stable** | 公開済みコアタグ [`v0.7.1`](https://github.com/NARUBROWN/spine/tree/v0.7.1)
+**Preview** | 公開済みコアタグ [`v0.7.2-preview.3`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.3)
 
-他のチャネル | [Preview](https://github.com/NARUBROWN/spine/tree/preview) | [RC](https://github.com/NARUBROWN/spine/tree/rc)
+次のソース候補は `v0.7.5-preview.1`、対象の正式バージョンは `v0.7.5` です。互換性を壊す変更は[移行ガイド](docs/migration/v0.7.5.md)を参照してください。このタグはまだ公開していません。
+
+他のチャネル | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 
 ## コアコンセプト
 
@@ -29,9 +31,9 @@
 ## Spine CLI で始める
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.3
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.4-preview.5
 spine version
-spine new todo-api --module github.com/acme/todo-api --channel main --no-interactive
+spine new todo-api --module github.com/acme/todo-api --channel preview --no-interactive
 cd todo-api
 spine dev
 ```
@@ -41,6 +43,8 @@ curl http://localhost:8080/health
 ```
 
 使用するコアとプラットフォームのバージョンは生成された `go.mod` で確認してください。
+
+`--channel preview` は更新される開発ブランチを参照します。
 
 ## リンク
 
@@ -52,7 +56,7 @@ curl http://localhost:8080/health
 
 ---
 
-Spine `v0.7.1` の[コントローラーでのルート登録例](docs/migration/controller-routes.md)を参照してください。
+Spine `v0.7.2` の[コントローラーでのルート登録例](docs/migration/controller-routes.md)を参照してください。
 
 ## 企業導入の無償技術サポート
 

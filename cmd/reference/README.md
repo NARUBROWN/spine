@@ -12,7 +12,7 @@ CLI 계약과 최소 E2E 예제는 [cmd/demo](../demo/README.md)를 사용합니
 - RabbitMQ 메시지 거부 기본값과 선택적 데드 레터 교환기
 - 제한된 컨슈머 재연결 기본값과 코드에 문서화된 선택적 조정 방법
 
-이 애플리케이션은 브로커 없이 HTTP/WebSocket 서비스로 실행됩니다.
+이 애플리케이션은 브로커 없이 HTTP와 WebSocket 서비스로 실행됩니다. 발행기가 없는 상태에서 주문 또는 재고 이벤트 API를 호출하면 `503 Service Unavailable`을 반환합니다.
 
 ```sh
 go -C cmd/reference run .

@@ -2,7 +2,7 @@
   "schema_version": "spine.release-policy/v2",
   "kind": "core",
   "module": "github.com/NARUBROWN/spine",
-  "next_version": "v0.7.1",
+  "next_version": "v0.7.5",
   "preview_hours": 72,
   "rc_hours": 24,
   "stable_interval_hours": 168,
@@ -15,9 +15,9 @@
   },
   "channels": {
     "preview": {
-      "core_version": "v0.7.1-preview.1",
+      "core_version": "v0.7.5-preview.1",
       "modules": {
-        "github.com/NARUBROWN/spine-echo-platform": "v0.2.0-preview.4",
+        "github.com/NARUBROWN/spine-echo-platform": "v0.2.1-preview.1",
         "github.com/NARUBROWN/spine-nethttp-platform": "v0.1.0-preview.2",
         "github.com/NARUBROWN/spine-gorilla-platform": "v0.2.0-preview.2",
         "github.com/NARUBROWN/spine-kafka-platform": "v0.2.0-preview.2",
@@ -27,9 +27,9 @@
       }
     },
     "rc": {
-      "core_version": "v0.7.1-rc.1",
+      "core_version": "v0.7.5-rc.1",
       "modules": {
-        "github.com/NARUBROWN/spine-echo-platform": "v0.2.0-preview.4",
+        "github.com/NARUBROWN/spine-echo-platform": "v0.2.1-preview.1",
         "github.com/NARUBROWN/spine-nethttp-platform": "v0.1.0-preview.2",
         "github.com/NARUBROWN/spine-gorilla-platform": "v0.2.0-preview.2",
         "github.com/NARUBROWN/spine-kafka-platform": "v0.2.0-preview.2",
@@ -39,9 +39,9 @@
       }
     },
     "stable": {
-      "core_version": "v0.7.1",
+      "core_version": "v0.7.5",
       "modules": {
-        "github.com/NARUBROWN/spine-echo-platform": "v0.2.0-preview.4",
+        "github.com/NARUBROWN/spine-echo-platform": "v0.2.1-preview.1",
         "github.com/NARUBROWN/spine-nethttp-platform": "v0.1.0-preview.2",
         "github.com/NARUBROWN/spine-gorilla-platform": "v0.2.0-preview.2",
         "github.com/NARUBROWN/spine-kafka-platform": "v0.2.0-preview.2",
@@ -52,7 +52,7 @@
     }
   },
   "ci_sources": {
-    "github.com/NARUBROWN/spine-echo-platform": "5fad6a286b1cf8e286eb17ca9d6415926670179a",
+    "github.com/NARUBROWN/spine-echo-platform": "e0ed7fab17bda14f92d74845314f781b754f6071",
     "github.com/NARUBROWN/spine-validator-playground": "fd13a60df886afb295852270e77ff4588b69a8e6",
     "github.com/NARUBROWN/spine-gorilla-platform": "c501e2f47603dde30e2b518cce15685274d25ed7",
     "github.com/NARUBROWN/spine-kafka-platform": "3016808daef7f0ffc71a619294a599640f5502ed",

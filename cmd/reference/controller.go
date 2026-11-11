@@ -1,16 +1,19 @@
 package main
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
-	"context"
 	"fmt"
 	"log"
+	"mime/multipart"
+	"net/http"
 	"os"
 	"time"
 
+	"github.com/NARUBROWN/spine/pkg/api"
 	"github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
-	"github.com/NARUBROWN/spine/pkg/multipart"
 	"github.com/NARUBROWN/spine/pkg/spine"
 	"github.com/NARUBROWN/spine/pkg/ws"
 )
@@ -25,17 +28,19 @@ type StockPath struct {
 	StockID int64 `path:"stockId"`
 }
 
-type UserController struct{}
+type eventPublishingConfig struct{ enabled bool }
+
+type UserController struct{ publishEnabled bool }
 
 type CommonController struct{}
 
 type ChatController struct{}
 
-func NewUserController() *UserController {
-	return &UserController{}
+func (*UserController) Constructor(publishing eventPublishingConfig) *UserController {
+	return &UserController{publishEnabled: publishing.enabled}
 }
 
-func NewCommonController() *CommonController {
+func (*CommonController) Constructor() *CommonController {
 	return &CommonController{}
 }
 
@@ -43,25 +48,38 @@ func NewChatController() *ChatController {
 	return &ChatController{}
 }
 
+func (c *UserController) RegisterRoutes(r *api.Registry) {
+	r.GET("/users/:id", c.GetUser, api.Interceptors(&LoggingInterceptor{}))
+	r.GET("/users", c.GetUserQuery)
+	r.POST("/upload", c.Upload)
+	r.POST("/orders/:orderId", c.CreateOrder)
+	r.POST("/stocks/:stockId", c.CreateStock)
+}
+
+func (c *CommonController) RegisterRoutes(r *api.Registry) {
+	r.GET("/headers", c.CheckHeader)
+	r.GET("/images/:id", c.GetAvatar)
+}
+
 type User struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
 }
 
-func (c *UserController) GetUser(ctx context.Context, p *UserPath, spineCtx spine.Ctx) (User, error) {
-	v, ok := spineCtx.Get("test")
+func (c *UserController) GetUser(ctx spine.Ctx, p httpinput.Path[UserPath]) (httpx.Response[User], error) {
+	v, ok := ctx.ExecutionContext().Get("test")
 	if !ok {
-		return User{}, httperr.BadRequest("context does not contain content")
+		return httpx.Response[User]{}, httperr.BadRequest("context does not contain content")
 	}
 	log.Printf("%s", v)
-	return User{}, httperr.NotFound("user not found")
+	return httpx.Response[User]{}, httperr.NotFound("user not found")
 }
 
 type CreateUserRequest struct {
 	Name string `json:"name"`
 }
 
-func (c *UserController) CreateUser(ctx context.Context, req *CreateUserRequest) map[string]any {
+func (c *UserController) CreateUser(req httpinput.Body[CreateUserRequest]) map[string]any {
 	return map[string]any{
 		"name": req.Name,
 	}
@@ -71,15 +89,16 @@ type UserQuery struct {
 	Name string `query:"name"`
 }
 
-func (c *UserController) GetUserQuery(ctx context.Context, q *UserQuery) httpx.Response[string] {
+func (c *UserController) GetUserQuery(q httpinput.Query[UserQuery]) httpx.Response[string] {
 	return httpx.Response[string]{
 		Body: "OK",
 	}
 }
 
 type CreatePostForm struct {
-	Title   string `form:"title"`
-	Content string `form:"content"`
+	Title   string                  `form:"title"`
+	Content string                  `form:"content"`
+	Files   []*multipart.FileHeader `form:"files"`
 }
 
 type UploadQuery struct {
@@ -88,11 +107,9 @@ type UploadQuery struct {
 }
 
 func (c *UserController) Upload(
-	ctx context.Context,
-	form *CreatePostForm,
-	files multipart.UploadedFiles,
-	q *UploadQuery,
-) string {
+	form httpinput.Body[CreatePostForm],
+	q httpinput.Query[UploadQuery],
+) httpx.Response[string] {
 	page, size := 1, 20
 	if q.Page != nil {
 		page = *q.Page
@@ -111,41 +128,47 @@ func (c *UserController) Upload(
 	fmt.Println("[QUERY] Page:", page)
 	fmt.Println("[QUERY] Size:", size)
 
-	fmt.Println("[FILES] Count:", len(files.Files))
-	for i, f := range files.Files {
+	fmt.Println("[FILES] Count:", len(form.Files))
+	for i, f := range form.Files {
 		fmt.Printf(
 			"[FILES] #%d field=%s name=%s size=%d contentType=%s\n",
 			i,
-			f.FieldName,
+			"files",
 			f.Filename,
 			f.Size,
-			f.ContentType,
+			f.Header.Get("Content-Type"),
 		)
 	}
 
-	return "OK"
+	return httpx.Response[string]{Body: "OK"}
 }
 
-func (c *UserController) CreateOrder(ctx context.Context, p *OrderPath) httpx.Response[string] {
-	publish.Event(ctx, OrderCreated{
+func (c *UserController) CreateOrder(ctx spine.Ctx, p httpinput.Path[OrderPath]) (httpx.Response[string], error) {
+	if !c.publishEnabled {
+		return httpx.Response[string]{}, &httperr.HTTPError{Status: http.StatusServiceUnavailable, Message: "Event publishing is not configured."}
+	}
+	publish.Event(ctx.ExecutionContext().Context(), OrderCreated{
 		OrderID: p.OrderID,
 		At:      time.Now(),
 	})
 
 	return httpx.Response[string]{
 		Body: "OK",
-	}
+	}, nil
 }
 
-func (c *UserController) CreateStock(ctx context.Context, p *StockPath) httpx.Response[string] {
-	publish.Event(ctx, StockCreated{
+func (c *UserController) CreateStock(ctx spine.Ctx, p httpinput.Path[StockPath]) (httpx.Response[string], error) {
+	if !c.publishEnabled {
+		return httpx.Response[string]{}, &httperr.HTTPError{Status: http.StatusServiceUnavailable, Message: "Event publishing is not configured."}
+	}
+	publish.Event(ctx.ExecutionContext().Context(), StockCreated{
 		OrderID: p.StockID,
 		At:      time.Now(),
 	})
 
 	return httpx.Response[string]{
 		Body: "OK",
-	}
+	}, nil
 }
 
 // Headers는 CheckHeader가 반환하는 응답 DTO입니다.
@@ -160,11 +183,11 @@ type RequestHeaders struct {
 	ContentType string `header:"Content-Type"`
 }
 
-func (c *CommonController) CheckHeader(headers *RequestHeaders) Headers {
-	return Headers{
+func (c *CommonController) CheckHeader(headers httpinput.Header[RequestHeaders]) httpx.Response[Headers] {
+	return httpx.Response[Headers]{Body: Headers{
 		UserAgent:   headers.UserAgent,
 		ContentType: headers.ContentType,
-	}
+	}}
 }
 
 func (c *CommonController) GetAvatar() httpx.Binary {
@@ -179,6 +202,6 @@ type ChatMessage struct {
 	Message string `json:"message"`
 }
 
-func (c *ChatController) OnMessage(ctx context.Context, connID ws.ConnectionID, msg ChatMessage) error {
-	return ws.Send(ctx, ws.TextMessage, []byte(msg.Message))
+func (c *ChatController) OnMessage(ctx spine.Ctx, connID ws.ConnectionID, msg ChatMessage) error {
+	return ws.Send(ctx.ExecutionContext().Context(), ws.TextMessage, []byte(msg.Message))
 }

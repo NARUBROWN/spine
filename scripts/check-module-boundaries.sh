@@ -21,6 +21,13 @@ for contract in contract/description contract/http contract/event contract/valid
   fi
 done
 
+# 공개 인터셉터 계약은 spine.Ctx를 사용하며 내부 구현은 내부 뷰 계약을 사용합니다.
+handler_context=$(go list -f '{{join .Imports "\n"}}' ./internal/... | awk '$0 == "github.com/NARUBROWN/spine/pkg/spine" || $0 == "github.com/NARUBROWN/spine/pkg/boot"')
+if [ -n "$handler_context" ]; then
+  printf '내부 패키지는 공개 핸들러 컨텍스트와 boot 패키지에 의존하면 안 됩니다.\n%s\n' "$handler_context" >&2
+  exit 1
+fi
+
 # 커널과 계약은 외부 모듈 없이 표준 라이브러리만 사용합니다.
 kernel=$(go run ./scripts/test list -deps -test -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./...)
 unexpected=$(printf '%s\n' "$kernel" | awk 'NF && $0 !~ /^github.com\/NARUBROWN\/spine([\/._ ]|$)/')

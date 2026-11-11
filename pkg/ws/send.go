@@ -1,19 +1,19 @@
 package ws
 
-import "context"
+import (
+	"context"
 
-type senderKeyType struct{}
-
-var SenderKey = senderKeyType{}
+	"github.com/NARUBROWN/spine/internal/ws/sendctx"
+)
 
 type Sender interface {
 	Send(messageType int, data []byte) error
 }
 
 func Send(ctx context.Context, messageType int, data []byte) error {
-	sender, ok := ctx.Value(SenderKey).(Sender)
-	if !ok || sender == nil {
+	send := sendctx.From(ctx)
+	if send == nil {
 		return nil
 	}
-	return sender.Send(messageType, data)
+	return send(messageType, data)
 }

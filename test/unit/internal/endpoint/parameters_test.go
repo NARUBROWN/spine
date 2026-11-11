@@ -1,15 +1,17 @@
 package endpoint
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"context"
 	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/NARUBROWN/spine/core"
 	left "github.com/NARUBROWN/spine/internal/endpoint/testdata/left"
 	right "github.com/NARUBROWN/spine/internal/endpoint/testdata/right"
 	"github.com/NARUBROWN/spine/pkg/path"
+	"github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type bodyDTO struct{ Name string }
@@ -26,19 +28,20 @@ type formDTO struct {
 }
 type controller struct{}
 
-func (*controller) Body(*bodyDTO, *bodyDTO)                        {}
-func (*controller) Query(*queryDTO, *queryDTO)                     {}
-func (*controller) Header(*headerDTO, *headerDTO)                  {}
-func (*controller) Form(*formDTO, *formDTO)                        {}
-func (*controller) Alias(*bodyDTO, *bodyAlias)                     {}
-func (*controller) SeparateTypes(*bodyDTO, *otherBody)             {}
-func (*controller) SeparatePackages(*left.Request, *right.Request) {}
-func (*controller) Contexts(context.Context, context.Context, core.ControllerContext, core.ControllerContext) {
+func (*controller) Body(httpinput.Body[bodyDTO], httpinput.Body[bodyDTO])                        {}
+func (*controller) Query(httpinput.Query[queryDTO], httpinput.Query[queryDTO])                   {}
+func (*controller) Header(httpinput.Header[headerDTO], httpinput.Header[headerDTO])              {}
+func (*controller) Form(httpinput.Body[formDTO], httpinput.Body[formDTO])                        {}
+func (*controller) Alias(httpinput.Body[bodyDTO], httpinput.Body[bodyAlias])                     {}
+func (*controller) SeparateTypes(httpinput.Body[bodyDTO], httpinput.Body[otherBody])             {}
+func (*controller) SeparatePackages(httpinput.Body[left.Request], httpinput.Body[right.Request]) {}
+func (*controller) Contexts(context.Context, context.Context, spine.Ctx, spine.Ctx) {
 }
 func (*controller) Paths(path.Int, path.Int) {}
-func (*controller) AfterContext(context.Context, *bodyDTO, *bodyDTO) {
+func (*controller) AfterContext(context.Context, httpinput.Body[bodyDTO], httpinput.Body[bodyDTO]) {
 }
-func (*controller) Anonymous(*struct{ Name string }, *struct{ Name string }) {}
+func (*controller) Anonymous(httpinput.Body[struct{ Name string }], httpinput.Body[struct{ Name string }]) {
+}
 
 func TestDTOParameterIssuesUseTypeIdentityAndExcludeNonDTOBindings(t *testing.T) {
 	for _, test := range []struct {

@@ -11,7 +11,10 @@ import (
 )
 
 // Registry는 컨트롤러 한 개의 등록을 수집한 뒤 고정합니다.
-type Registry struct {
+type Registry struct{ collector *Collector }
+
+// Collector는 경로 등록 상태를 보관하고 준비 단계에서 마감합니다.
+type Collector struct {
 	mu     sync.Mutex
 	owner  reflect.Type
 	routes []router.RouteSpec
@@ -19,10 +22,21 @@ type Registry struct {
 	frozen bool
 }
 
-func New(owner reflect.Type) *Registry { return &Registry{owner: owner} }
+func New(owner reflect.Type) (*Registry, *Collector) {
+	collector := &Collector{owner: owner}
+	return &Registry{collector: collector}, collector
+}
+
+func (registry *Registry) activeCollector() *Collector {
+	if registry == nil || registry.collector == nil {
+		panic("api.Registry is not initialized")
+	}
+	return registry.collector
+}
 
 // Error는 사용자 구성 오류를 앱 준비 오류에 포함합니다.
-func (r *Registry) Error(err error) {
+func (registry *Registry) Error(err error) {
+	r := registry.activeCollector()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.frozen {
@@ -33,7 +47,8 @@ func (r *Registry) Error(err error) {
 	}
 }
 
-func (r *Registry) add(method, path string, handler any, options []router.RouteOption) {
+func (registry *Registry) add(method, path string, handler any, options []router.RouteOption) {
+	r := registry.activeCollector()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.frozen {
@@ -41,11 +56,10 @@ func (r *Registry) add(method, path string, handler any, options []router.RouteO
 	}
 	spec := router.RouteSpec{Method: method, Path: path, Handler: handler, ControllerType: r.owner}
 	for _, option := range options {
-		if option == nil {
-			r.errors = append(r.errors, fmt.Errorf("nil route option for %s %s", method, path))
+		if !router.ApplyOption(option, &spec) {
+			r.errors = append(r.errors, fmt.Errorf("empty route option for %s %s", method, path))
 			continue
 		}
-		option(&spec)
 	}
 	spec.Interceptors = append(spec.Interceptors[:0:0], spec.Interceptors...)
 	spec.Tags = append([]string(nil), spec.Tags...)
@@ -53,10 +67,13 @@ func (r *Registry) add(method, path string, handler any, options []router.RouteO
 }
 
 // Freeze는 이후 등록을 거부하고 호출자가 소유하는 스냅샷을 반환합니다.
-func (r *Registry) Freeze() ([]router.RouteSpec, error) {
+func (r *Collector) Freeze(registry *Registry) ([]router.RouteSpec, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.frozen = true
+	if registry.collector != r {
+		return nil, errors.Join(errors.Join(r.errors...), errors.New("api.Registry was overwritten during registration"))
+	}
 	routes := append([]router.RouteSpec(nil), r.routes...)
 	for i := range routes {
 		routes[i].Interceptors = append(routes[i].Interceptors[:0:0], routes[i].Interceptors...)

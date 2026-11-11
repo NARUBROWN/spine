@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"github.com/NARUBROWN/spine/internal/inputerr"
 	"testing"
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
@@ -11,7 +12,7 @@ import (
 
 func TestHTTPValidationErrorsExposeSourceWithoutMutatingSharedFailures(t *testing.T) {
 	failure := validation.NewError(validation.FieldError{Field: "/x-id/0", Rule: "required"})
-	err := &httperr.InputError{Source: "header", Cause: failure}
+	err := &inputerr.Error{Source: "header", Cause: failure}
 	data, ok := ValidationErrorJSON(err)
 	var body struct {
 		Fields []struct{ Field, In, Rule string } `json:"fields"`
@@ -31,7 +32,7 @@ func TestHTTPValidationErrorsExposeSourceWithoutMutatingSharedFailures(t *testin
 }
 
 func TestBindingErrorsIncludeSourceButProcessingFailuresStayGeneric(t *testing.T) {
-	err := &httperr.InputError{Source: "query", Cause: httperr.BadRequest("invalid query field age")}
+	err := &inputerr.Error{Source: "query", Cause: httperr.BadRequest("invalid query field age")}
 	var body map[string]any
 	_ = json.Unmarshal(InputErrorJSON(err, 400, "invalid query field age"), &body)
 	if body["in"] != "query" {

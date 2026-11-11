@@ -1,5 +1,7 @@
 package openapi_test
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"bytes"
 	"context"
@@ -52,7 +54,7 @@ type bodyDTO struct {
 }
 
 type uploadDTO struct {
-	Avatar      *multipart.FileHeader   `json:"avatar" form:"avatar" validate:"required"`
+	Avatar      *multipart.FileHeader   `json:"-" xml:"-" form:"avatar" validate:"required"`
 	Attachments []*multipart.FileHeader `json:"attachments" form:"attachments"`
 }
 type searchResult struct {
@@ -66,19 +68,19 @@ type uploadResult struct {
 }
 type controller struct{}
 
-func (*controller) Create(value *payload) httpx.Response[payload] {
+func (*controller) Create(value httpinput.Body[payload]) httpx.Response[payload] {
 	return httpx.Response[payload]{Body: *value}
 }
-func (*controller) Form(value *formDTO) httpx.Response[formDTO] {
+func (*controller) Form(value httpinput.Body[formDTO]) httpx.Response[formDTO] {
 	return httpx.Response[formDTO]{Body: *value}
 }
-func (*controller) Search(values *queryDTO, headers *headerDTO) httpx.Response[searchResult] {
+func (*controller) Search(values httpinput.Query[queryDTO], headers httpinput.Header[headerDTO]) httpx.Response[searchResult] {
 	return httpx.Response[searchResult]{Body: searchResult{Age: values.Age, Tags: values.Tags, ID: headers.ID}}
 }
-func (*controller) Combined(values *queryDTO, headers *headerDTO, body *bodyDTO) httpx.Response[map[string]any] {
+func (*controller) Combined(values httpinput.Query[queryDTO], headers httpinput.Header[headerDTO], body httpinput.Body[bodyDTO]) httpx.Response[map[string]any] {
 	return httpx.Response[map[string]any]{Body: map[string]any{"age": values.Age, "id": headers.ID, "name": body.Name}}
 }
-func (*controller) Upload(value *uploadDTO) httpx.Response[uploadResult] {
+func (*controller) Upload(value httpinput.Body[uploadDTO]) httpx.Response[uploadResult] {
 	return httpx.Response[uploadResult]{Body: uploadResult{Name: value.Avatar.Filename, Count: len(value.Attachments)}}
 }
 func (*controller) Nullable() httpx.Response[*payload] { return httpx.Response[*payload]{} }
@@ -306,7 +308,7 @@ func TestSeparateQueryAndHeaderDTOsBindValidateAndDescribeTheirFields(t *testing
 			if w.Code == 200 && (!strings.Contains(w.Body.String(), `"age":18`) || !strings.Contains(w.Body.String(), `"tags":["a","b"]`) || !strings.Contains(w.Body.String(), `"id":"request-1"`)) {
 				t.Fatalf("본문이 별도 입력을 덮어쓰면 안 됩니다: %s", w.Body)
 			}
-			if test.id == "" && !strings.Contains(w.Body.String(), "X-Request-ID") {
+			if test.id == "" && !strings.Contains(w.Body.String(), "X-Request-Id") {
 				t.Fatalf("검증 오류는 헤더 필드를 가리켜야 합니다: %s", w.Body)
 			}
 		}
@@ -315,7 +317,11 @@ func TestSeparateQueryAndHeaderDTOsBindValidateAndDescribeTheirFields(t *testing
 
 func TestExistingFormUploadsAndReturnTypesWithoutDeclarations(t *testing.T) {
 	h, doc := application(t)
-	if len(operation(doc, "/upload", "post")["requestBody"].(map[string]any)["content"].(map[string]any)) != 1 {
+	requestBody := operation(doc, "/upload", "post")["requestBody"].(map[string]any)
+	if requestBody["required"] != true {
+		t.Fatal("필수 멀티파트 파일은 요청 본문도 필수로 표시해야 합니다")
+	}
+	if len(requestBody["content"].(map[string]any)) != 1 {
 		t.Fatal("파일 DTO는 multipart 미디어로만 기술해야 합니다")
 	}
 	for _, name := range []string{"a", "alice"} {

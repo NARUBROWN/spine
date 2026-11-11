@@ -1,5 +1,7 @@
 package test
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"bytes"
 	"context"
@@ -47,21 +49,21 @@ type httpBaselinePath struct {
 }
 type httpBaselineController struct{}
 
-func (*httpBaselineController) Bind(dto *httpBaselineDTO) httpx.Response[httpBaselineDTO] {
+func (*httpBaselineController) Bind(dto httpinput.Body[httpBaselineDTO]) httpx.Response[httpBaselineDTO] {
 	return httpx.Response[httpBaselineDTO]{Body: *dto}
 }
 
-func (*httpBaselineController) Form(dto *httpBaselineForm) httpx.Response[httpBaselineForm] {
+func (*httpBaselineController) Form(dto httpinput.Body[httpBaselineForm]) httpx.Response[httpBaselineForm] {
 	return httpx.Response[httpBaselineForm]{Body: *dto}
 }
 
-func (*httpBaselineController) Path(p *httpBaselinePath) httpx.Response[map[string]int] {
+func (*httpBaselineController) Path(p httpinput.Path[httpBaselinePath]) httpx.Response[map[string]int] {
 	return httpx.Response[map[string]int]{Body: map[string]int{
 		"id": int(p.ID),
 	}}
 }
 
-func (*httpBaselineController) Upload(form *httpBaselineForm, files spinemultipart.UploadedFiles) (httpx.Response[httpBaselineUpload], error) {
+func (*httpBaselineController) Upload(form httpinput.Body[httpBaselineForm], files spinemultipart.UploadedFiles) (httpx.Response[httpBaselineUpload], error) {
 	body := httpBaselineUpload{Form: *form}
 	for _, file := range files.Files {
 		reader, err := file.Open()
@@ -139,6 +141,7 @@ func TestAppIntegration_HTTPBindingBaseline(t *testing.T) {
 		{name: "unsupported_type", method: "POST", target: "/body", contentType: "text/plain", body: "payload", status: 415, message: "Unsupported Media Type"},
 		{name: "missing_content_type", method: "POST", target: "/body", body: `{}`, status: 415, message: "Unsupported Media Type"},
 		{name: "empty_body_skips_content_type", method: "POST", target: "/body", contentType: "text/plain", status: 200},
+		{name: "empty_body_skips_invalid_content_type", method: "POST", target: "/body", contentType: "application/json; =bad", status: 200},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

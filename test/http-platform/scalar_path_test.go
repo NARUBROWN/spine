@@ -27,9 +27,9 @@ type scalarPathResult struct {
 }
 
 func (*scalarPathController) Constructor() *scalarPathController { return &scalarPathController{} }
-func (*scalarPathController) RegisterRoutes(r *api.Registry) {
+func (c *scalarPathController) RegisterRoutes(r *api.Registry) {
 	r.GET("/scalar/:id", func(id input.Path[int16]) httpx.Response[int16] { return httpx.Response[int16]{Body: *id} })
-	r.GET("/scalar/:id/:name", (*scalarPathController).Multiple)
+	r.GET("/scalar/:id/:name", c.Multiple)
 	r.GET("/strings/:first/:second", func(first input.Path[string], second input.Path[string]) httpx.Response[string] {
 		return httpx.Response[string]{Body: *first + ":" + *second}
 	})

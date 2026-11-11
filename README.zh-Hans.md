@@ -12,9 +12,11 @@
 
 ## 当前渠道
 
-**Stable** | 已发布的核心标签 [`v0.7.1`](https://github.com/NARUBROWN/spine/tree/v0.7.1)
+**Preview** | 已发布的核心标签 [`v0.7.2-preview.3`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.3)
 
-其他渠道 | [Preview](https://github.com/NARUBROWN/spine/tree/preview) | [RC](https://github.com/NARUBROWN/spine/tree/rc)
+下一个源码候选版本为 `v0.7.5-preview.1`，目标正式版本为 `v0.7.5`。破坏性变更请参阅[迁移指南](docs/migration/v0.7.5.md)。此标签尚未发布。
+
+其他渠道 | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 
 ## 核心理念
 
@@ -29,9 +31,9 @@
 ## 使用 Spine CLI 开始
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.3
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.4-preview.5
 spine version
-spine new todo-api --module github.com/acme/todo-api --channel main --no-interactive
+spine new todo-api --module github.com/acme/todo-api --channel preview --no-interactive
 cd todo-api
 spine dev
 ```
@@ -41,6 +43,8 @@ curl http://localhost:8080/health
 ```
 
 请在生成的 `go.mod` 中查看应用使用的核心和平台版本。
+
+`--channel preview` 会解析持续更新的开发分支。
 
 ## 链接
 
@@ -52,7 +56,7 @@ curl http://localhost:8080/health
 
 ---
 
-请参阅 Spine `v0.7.1` 的[控制器路由注册示例](docs/migration/controller-routes.md)。
+请参阅 Spine `v0.7.2` 的[控制器路由注册示例](docs/migration/controller-routes.md)。
 
 ## 企业采用免费技术支持
 

@@ -51,6 +51,9 @@ func (c *Container) RegisterConstructor(function any) error {
 	if typ.NumOut() != 1 {
 		return errors.New("constructor must return exactly one value")
 	}
+	if typ.IsVariadic() {
+		return errors.New("constructor must be non-variadic; use a slice parameter instead")
+	}
 
 	outType := typ.Out(0)
 

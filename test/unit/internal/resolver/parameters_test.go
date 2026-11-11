@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/pkg/input"
 )
 
@@ -18,7 +18,7 @@ func (*multiPathController) Handle(context.Context, input.Path[int64], input.Que
 
 func TestScalarPathArgumentsFollowRouteOrder(t *testing.T) {
 	method, _ := reflect.TypeFor[*multiPathController]().MethodByName("Handle")
-	handlers := []core.HandlerMeta{
+	handlers := []execution.HandlerMeta{
 		{Method: method},
 		{Callback: reflect.ValueOf(func(context.Context, input.Path[int64], input.Query[pathQuery], input.Path[string], input.Body[pathBody]) {
 		})},

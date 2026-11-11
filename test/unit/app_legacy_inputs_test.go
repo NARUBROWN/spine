@@ -1,41 +1,44 @@
 package spine
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"context"
 	"errors"
 	"strings"
 	"testing"
 
-	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/header"
 	"github.com/NARUBROWN/spine/pkg/path"
 	"github.com/NARUBROWN/spine/pkg/query"
+	handlerctx "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type legacyInputController struct{}
 
-func (*legacyInputController) QueryQuery(query.Values, *repeatedQuery)     {}
-func (*legacyInputController) QueryHeader(query.Values, *repeatedHeader)   {}
-func (*legacyInputController) QueryPath(query.Values, *pathContract)       {}
-func (*legacyInputController) HeaderQuery(header.Values, *repeatedQuery)   {}
-func (*legacyInputController) HeaderHeader(header.Values, *repeatedHeader) {}
-func (*legacyInputController) HeaderPath(header.Values, *pathContract)     {}
-func (*legacyInputController) PathQuery(path.Int, *repeatedQuery)          {}
-func (*legacyInputController) PathHeader(path.Int, *repeatedHeader)        {}
-func (*legacyInputController) PathPath(path.Int, *pathContract)            {}
-func (*legacyInputController) NewFirst(*repeatedQuery, header.Values)      {}
-func (*legacyInputController) QueryPointer(*query.Values)                  {}
-func (*legacyInputController) HeaderPointer(*header.Values)                {}
-func (*legacyInputController) Legacy(context.Context, core.ControllerContext, path.Int, query.Values, header.Values, query.Pagination, *repeatedBody) {
+func (*legacyInputController) QueryQuery(query.Values, httpinput.Query[repeatedQuery])      {}
+func (*legacyInputController) QueryHeader(query.Values, httpinput.Header[repeatedHeader])   {}
+func (*legacyInputController) QueryPath(query.Values, httpinput.Path[pathContract])         {}
+func (*legacyInputController) HeaderQuery(header.Values, httpinput.Query[repeatedQuery])    {}
+func (*legacyInputController) HeaderHeader(header.Values, httpinput.Header[repeatedHeader]) {}
+func (*legacyInputController) HeaderPath(header.Values, httpinput.Path[pathContract])       {}
+func (*legacyInputController) PathQuery(path.Int, httpinput.Query[repeatedQuery])           {}
+func (*legacyInputController) PathHeader(path.Int, httpinput.Header[repeatedHeader])        {}
+func (*legacyInputController) PathPath(path.Int, httpinput.Path[pathContract])              {}
+func (*legacyInputController) NewFirst(httpinput.Query[repeatedQuery], header.Values)       {}
+func (*legacyInputController) QueryPointer(*query.Values)                                   {}
+func (*legacyInputController) HeaderPointer(*header.Values)                                 {}
+func (*legacyInputController) Legacy(context.Context, handlerctx.Ctx, path.Int, query.Values, header.Values, query.Pagination, httpinput.Body[repeatedBody]) {
 }
-func (*legacyInputController) Typed(*pathContract, *repeatedQuery, *repeatedHeader) {
+func (*legacyInputController) Typed(httpinput.Path[pathContract], httpinput.Query[repeatedQuery], httpinput.Header[repeatedHeader]) {
 }
-func (*legacyInputController) PaginationPath(query.Pagination, *pathContract)        {}
-func (*legacyInputController) PaginationQuery(query.Pagination, *repeatedQuery)      {}
-func (*legacyInputController) PaginationHeader(query.Pagination, *repeatedHeader)    {}
-func (*legacyInputController) NewBeforePagination(*repeatedHeader, query.Pagination) {}
-func (*legacyInputController) PaginationPointer(*query.Pagination)                   {}
+func (*legacyInputController) PaginationPath(query.Pagination, httpinput.Path[pathContract])       {}
+func (*legacyInputController) PaginationQuery(query.Pagination, httpinput.Query[repeatedQuery])    {}
+func (*legacyInputController) PaginationHeader(query.Pagination, httpinput.Header[repeatedHeader]) {}
+func (*legacyInputController) NewBeforePagination(httpinput.Header[repeatedHeader], query.Pagination) {
+}
+func (*legacyInputController) PaginationPointer(*query.Pagination) {}
 func (*legacyInputController) RepeatedPagination(query.Pagination, query.Pagination) {
 }
 

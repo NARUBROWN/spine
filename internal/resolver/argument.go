@@ -3,7 +3,7 @@ package resolver
 import (
 	"reflect"
 
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/execution"
 )
 
 type ParameterMeta struct {
@@ -24,5 +24,5 @@ type ArgumentResolver interface {
 	Supports(parameterMeta ParameterMeta) bool
 
 	// Resolve는 컨텍스트를 바탕으로 매개변수에 전달할 값을 생성합니다.
-	Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error)
+	Resolve(ctx execution.Context, parameterMeta ParameterMeta) (any, error)
 }

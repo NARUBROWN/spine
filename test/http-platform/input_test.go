@@ -1,5 +1,7 @@
 package httpplatform_test
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"bytes"
 	"context"
@@ -28,6 +30,7 @@ import (
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	files "github.com/NARUBROWN/spine/pkg/multipart"
 	"github.com/NARUBROWN/spine/pkg/route"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 	"github.com/labstack/echo/v5"
 )
 
@@ -134,19 +137,19 @@ type requiredDTO struct {
 }
 type inputController struct{ calls atomic.Int32 }
 
-func (c *inputController) Body(dto *bodyDTO) httpx.Response[bodyDTO] {
+func (c *inputController) Body(dto httpinput.Body[bodyDTO]) httpx.Response[bodyDTO] {
 	c.calls.Add(1)
 	return httpx.Response[bodyDTO]{Body: *dto}
 }
-func (c *inputController) Form(dto *formDTO) httpx.Response[formDTO] {
+func (c *inputController) Form(dto httpinput.Body[formDTO]) httpx.Response[formDTO] {
 	c.calls.Add(1)
 	return httpx.Response[formDTO]{Body: *dto}
 }
-func (c *inputController) Inspect(path *pathDTO, query *queryDTO, header *headerDTO) httpx.Response[map[string]any] {
+func (c *inputController) Inspect(path httpinput.Path[pathDTO], query httpinput.Query[queryDTO], header httpinput.Header[headerDTO]) httpx.Response[map[string]any] {
 	c.calls.Add(1)
 	return httpx.Response[map[string]any]{Body: map[string]any{"id": path.ID, "tags": query.Tags, "page": query.Page, "host": header.Host}}
 }
-func (c *inputController) Required(dto *requiredDTO) httpx.Response[requiredDTO] {
+func (c *inputController) Required(dto httpinput.Body[requiredDTO]) httpx.Response[requiredDTO] {
 	c.calls.Add(1)
 	return httpx.Response[requiredDTO]{Body: *dto}
 }
@@ -251,13 +254,13 @@ type uploadController struct {
 	failure string
 }
 
-func (c *uploadController) FormFirst(form *formDTO, upload files.UploadedFiles) httpx.Response[string] {
+func (c *uploadController) FormFirst(form httpinput.Body[formDTO], upload files.UploadedFiles) httpx.Response[string] {
 	return c.handle(form, upload)
 }
-func (c *uploadController) FilesFirst(upload files.UploadedFiles, form *formDTO) httpx.Response[string] {
+func (c *uploadController) FilesFirst(upload files.UploadedFiles, form httpinput.Body[formDTO]) httpx.Response[string] {
 	return c.handle(form, upload)
 }
-func (c *uploadController) handle(form *formDTO, upload files.UploadedFiles) httpx.Response[string] {
+func (c *uploadController) handle(form httpinput.Body[formDTO], upload files.UploadedFiles) httpx.Response[string] {
 	c.order = append(c.order, "controller")
 	if form.Title != "body" || len(upload.Files) != 1 {
 		c.t.Errorf("폼과 파일: %+v %+v", form, upload)
@@ -290,29 +293,30 @@ type uploadInterceptor struct {
 	reject     bool
 }
 
-func (i *uploadInterceptor) PreHandle(core.ExecutionContext, core.HandlerMeta) error {
+func (i *uploadInterceptor) PreHandle(contextapi.Ctx, core.HandlerMeta) error {
 	i.controller.order = append(i.controller.order, "pre")
 	if i.reject {
 		return httperr.Unauthorized("authentication required")
 	}
 	return nil
 }
-func (*uploadInterceptor) PostHandle(core.ExecutionContext, core.HandlerMeta) {}
-func (i *uploadInterceptor) BeforeResponse(core.ExecutionContext, core.HandlerMeta, error) error {
+func (*uploadInterceptor) PostHandle(contextapi.Ctx, core.HandlerMeta) {}
+func (i *uploadInterceptor) BeforeResponse(contextapi.Ctx, core.HandlerMeta, error) error {
 	i.controller.order = append(i.controller.order, "before")
 	if i.controller.failure == "before" {
 		return errors.New("before response failed")
 	}
 	return nil
 }
-func (i *uploadInterceptor) AfterCompletion(ctx core.ExecutionContext, _ core.HandlerMeta, _ error) {
+func (i *uploadInterceptor) AfterCompletion(ctx contextapi.Ctx, _ core.HandlerMeta, _ error) {
 	c := i.controller
 	c.order = append(c.order, "after")
 	if c.path != "" {
 		if _, err := os.Stat(c.path); err != nil {
 			c.t.Errorf("완료 훅의 파일 수명: %v", err)
 		}
-		form, err := ctx.(core.HttpRequestContext).MultipartForm()
+		request, _ := ctx.HTTPRequestContext()
+		form, err := request.MultipartForm()
 		if err != nil || form.Value["title"][0] != "body" {
 			c.t.Errorf("완료 훅의 파싱 결과: %v", err)
 		}

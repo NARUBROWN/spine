@@ -9,6 +9,7 @@ import (
 	"github.com/NARUBROWN/spine/pkg/api"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/constructor"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type componentDependency struct{}
@@ -39,13 +40,13 @@ func (*componentWrongRoutes) RegisterRoutes(string)              {}
 
 type componentInterceptor struct{}
 
-func (*componentInterceptor) Constructor() *componentInterceptor                      { return &componentInterceptor{} }
-func (*componentInterceptor) PreHandle(core.ExecutionContext, core.HandlerMeta) error { return nil }
-func (*componentInterceptor) PostHandle(core.ExecutionContext, core.HandlerMeta)      {}
-func (*componentInterceptor) BeforeResponse(core.ExecutionContext, core.HandlerMeta, error) error {
+func (*componentInterceptor) Constructor() *componentInterceptor               { return &componentInterceptor{} }
+func (*componentInterceptor) PreHandle(contextapi.Ctx, core.HandlerMeta) error { return nil }
+func (*componentInterceptor) PostHandle(contextapi.Ctx, core.HandlerMeta)      {}
+func (*componentInterceptor) BeforeResponse(contextapi.Ctx, core.HandlerMeta, error) error {
 	return nil
 }
-func (*componentInterceptor) AfterCompletion(core.ExecutionContext, core.HandlerMeta, error) {}
+func (*componentInterceptor) AfterCompletion(contextapi.Ctx, core.HandlerMeta, error) {}
 
 type componentTransport struct{ initialized *bool }
 

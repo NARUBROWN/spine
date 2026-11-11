@@ -1,8 +1,6 @@
 package publish
 
-import "time"
+import "github.com/NARUBROWN/spine/internal/event/emission"
 
-type DomainEvent interface {
-	Name() string
-	OccurredAt() time.Time
-}
+// DomainEvent는 앱이 발행할 도메인 이벤트 계약입니다.
+type DomainEvent = emission.DomainEvent

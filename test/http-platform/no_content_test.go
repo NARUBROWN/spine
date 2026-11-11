@@ -12,6 +12,7 @@ import (
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httpx"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 var noContentFailure = errors.New("controller failure")
@@ -50,12 +51,12 @@ func (*noContentController) Failure() error { return noContentFailure }
 
 type noContentProbe struct{ completed chan error }
 
-func (*noContentProbe) PreHandle(core.ExecutionContext, core.HandlerMeta) error { return nil }
-func (*noContentProbe) PostHandle(core.ExecutionContext, core.HandlerMeta)      {}
-func (*noContentProbe) BeforeResponse(core.ExecutionContext, core.HandlerMeta, error) error {
+func (*noContentProbe) PreHandle(contextapi.Ctx, core.HandlerMeta) error { return nil }
+func (*noContentProbe) PostHandle(contextapi.Ctx, core.HandlerMeta)      {}
+func (*noContentProbe) BeforeResponse(contextapi.Ctx, core.HandlerMeta, error) error {
 	return nil
 }
-func (p *noContentProbe) AfterCompletion(_ core.ExecutionContext, _ core.HandlerMeta, err error) {
+func (p *noContentProbe) AfterCompletion(_ contextapi.Ctx, _ core.HandlerMeta, err error) {
 	p.completed <- err
 }
 

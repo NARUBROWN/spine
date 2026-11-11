@@ -56,7 +56,7 @@ func (c *registeredController) RegisterRoutes(r *api.Registry) {
 		r.POST("/users", func() int { return 1 })
 		return
 	case "body":
-		r.POST("/users", func(input.Body[controllerBody], *bodyDTO) error { return nil })
+		r.POST("/users", func(input.Body[controllerBody], input.Body[bodyDTO]) error { return nil })
 		return
 	case "collision":
 		r.GET("/openapi.json", func() error { return nil })
@@ -308,5 +308,60 @@ func TestControllerInputNamesReachActualValidatorAndSchema(t *testing.T) {
 	data, _ := io.ReadAll(response.Body)
 	if response.StatusCode != 200 || strings.TrimSpace(string(data)) != "7" {
 		t.Fatalf("%d %s", response.StatusCode, data)
+	}
+}
+
+type decodedInput struct {
+	Value string `path:"-" query:"-" header:"-" validate:"required"`
+}
+
+func (input *decodedInput) UnmarshalText(data []byte) error {
+	input.Value = string(data)
+	return nil
+}
+
+type decodedPath struct {
+	ID decodedInput `path:"id"`
+}
+type decodedQuery struct {
+	Name decodedInput `query:"name"`
+}
+type decodedHeader struct {
+	Trace decodedInput `header:"X-Trace"`
+}
+type decodedInputController struct{}
+
+func (*decodedInputController) RegisterRoutes(r *api.Registry) {
+	r.GET("/decode/:id", func(p input.Path[decodedPath], q input.Query[decodedQuery], h input.Header[decodedHeader]) httpx.Response[string] {
+		return httpx.Response[string]{Body: p.ID.Value + "," + q.Name.Value + "," + h.Trace.Value}
+	})
+}
+
+func TestControllerAcceptsFieldsFilledByTextDecoder(t *testing.T) {
+	for _, engine := range []string{"echo", "nethttp"} {
+		t.Run(engine, func(t *testing.T) {
+			validator, err := playground.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			app := spine.New(spine.WithHTTPAdapter(platformFactory(engine, nativeHooks{})), spine.WithValidator(validator))
+			app.Constructor(func() *decodedInputController { return &decodedInputController{} })
+			prepared := prepare(t, app, boot.HTTPOptions{})
+			base, client := managedServer(t, prepared)
+			request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, base+"/decode/123?name=Alice", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("X-Trace", "trace")
+			response, err := client.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			body, err := io.ReadAll(response.Body)
+			if err != nil || response.StatusCode != http.StatusOK || string(body) != "123,Alice,trace" {
+				t.Fatalf("입력 바인딩 결과: %d %q %v", response.StatusCode, body, err)
+			}
+		})
 	}
 }

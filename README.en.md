@@ -12,15 +12,17 @@ It does not hide how a request is resolved and executed.
 
 ## Current channel
 
-**Stable** | Published core tag [`v0.7.1`](https://github.com/NARUBROWN/spine/tree/v0.7.1)
+**Preview** | Published core tag [`v0.7.2-preview.3`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.3)
 
-Other channels | [Preview](https://github.com/NARUBROWN/spine/tree/preview) | [RC](https://github.com/NARUBROWN/spine/tree/rc)
+The next source candidate is `v0.7.5-preview.1`, targeting `v0.7.5`. See the [migration guide](docs/migration/v0.7.5.md) for breaking changes. This tag has not been published.
+
+Other channels | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 
 ## Core ideas
 
 - Fixed execution order and responsibilities
 - Method signature is the API contract
-- Semantic input types: `path.*`, `query.*`, `httperr.*`
+- Semantic input types: `input.Path`, `input.Query`, `input.Header`, `input.Body`, `httperr.*`
 
 ## Recommended environment
 
@@ -29,9 +31,9 @@ Other channels | [Preview](https://github.com/NARUBROWN/spine/tree/preview) | [R
 ## Get started with Spine CLI
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.3
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.4-preview.5
 spine version
-spine new todo-api --module github.com/acme/todo-api --channel main --no-interactive
+spine new todo-api --module github.com/acme/todo-api --channel preview --no-interactive
 cd todo-api
 spine dev
 ```
@@ -41,6 +43,8 @@ curl http://localhost:8080/health
 ```
 
 Check the generated `go.mod` for the core and platform versions used by the app.
+
+`--channel preview` resolves moving development branches.
 
 ## Links
 
@@ -52,7 +56,7 @@ Check the generated `go.mod` for the core and platform versions used by the app.
 
 ---
 
-See the [controller route registration example](docs/migration/controller-routes.md) for Spine `v0.7.1`.
+See the [controller route registration example](docs/migration/controller-routes.md) for Spine `v0.7.2`.
 
 ## Free enterprise adoption support
 

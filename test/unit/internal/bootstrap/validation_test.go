@@ -67,7 +67,7 @@ func TestConsumerValidationBlocksHandlerAndNacksDelivery(t *testing.T) {
 			}
 			return nil
 		})
-		p := buildConsumerPipeline(ctr, registry, nil, validator)
+		p := buildConsumerPipeline(ctr, nil, validator)
 		ctx, cancel := context.WithCancel(context.Background())
 		message := &consumer.Message{EventName: "users", Payload: []byte(`{"name":"decoded"}`)}
 		signals := make(chan string, 1)

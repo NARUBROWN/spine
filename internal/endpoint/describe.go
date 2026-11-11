@@ -9,21 +9,21 @@ import (
 
 	"github.com/NARUBROWN/spine/contract/description"
 	validation "github.com/NARUBROWN/spine/contract/validator"
+	"github.com/NARUBROWN/spine/internal/configuration"
 	"github.com/NARUBROWN/spine/internal/handler"
 	inputbinding "github.com/NARUBROWN/spine/internal/input"
 	"github.com/NARUBROWN/spine/internal/resolver"
 	"github.com/NARUBROWN/spine/internal/router"
-	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 // Describe는 타입과 등록만 읽으며 리졸버의 Resolve나 반환 처리의 Handle을 실행하지 않습니다.
-func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator validation.Validator) (description.HTTP, error) {
+func Describe(routes []router.RouteSpec, options *configuration.HTTPOptions, validator validation.Validator) (description.HTTP, error) {
 	result := description.HTTP{ContractVersion: description.ContractVersion, Enabled: options != nil, Routes: []description.Route{}, Schemas: map[string]json.RawMessage{}, Diagnostics: []description.Diagnostic{}}
 	if options == nil {
 		return result, nil
 	}
 	result.PathsOnly = validator == nil
-	if err := boot.ValidationError(options.ValidateIssues("HTTP")...); err != nil {
+	if err := configuration.ValidationError(configuration.ValidateHTTP(*options, "HTTP")...); err != nil {
 		return result, err
 	}
 	prefix := strings.TrimSuffix(options.GlobalPrefix, "/")
@@ -35,22 +35,23 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 		c.diagnostic("VALIDATOR_NOT_CONFIGURED", "HTTP", "Only registered paths and methods are described because no validator is configured.")
 	}
 	seen := map[string]bool{}
-	var inputIssues []boot.ConfigIssue
+	var inputIssues []configuration.ConfigIssue
 	for index, spec := range routes {
 		meta, err := router.Meta(spec)
 		if err != nil {
 			return result, err
 		}
 		inputIssues = append(inputIssues, HandlerDTOParameterIssues(meta, fmt.Sprintf("Routes[%d]", index), spec.Path)...)
+		inputIssues = append(inputIssues, ResponseTypeIssues(meta, fmt.Sprintf("Routes[%d]", index))...)
 	}
-	if err := boot.ValidationError(inputIssues...); err != nil {
+	if err := configuration.ValidationError(inputIssues...); err != nil {
 		return result, err
 	}
 	for index, spec := range routes {
 		meta, _ := router.Meta(spec)
 		inputIssues = append(inputIssues, HandlerValidationParameterIssues(meta, fmt.Sprintf("Routes[%d]", index), validator)...)
 	}
-	if err := boot.ValidationError(inputIssues...); err != nil {
+	if err := configuration.ValidationError(inputIssues...); err != nil {
 		return result, err
 	}
 	for _, spec := range routes {
@@ -120,10 +121,10 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 					input.Binding = "context"
 				case *resolver.QueryValuesResolver:
 					input.Binding = "query"
-					c.diagnostic("LEGACY_QUERY_VALUES_UNRESOLVED", route.Handler, "Deprecated query.Values reads keys at runtime; use a query-tagged struct pointer to describe inputs.")
+					c.diagnostic("LEGACY_QUERY_VALUES_UNRESOLVED", route.Handler, "Deprecated query.Values reads keys at runtime; use an input.Query[T] to describe inputs.")
 				case *resolver.HeaderResolver:
 					input.Binding = "header"
-					c.diagnostic("LEGACY_HEADER_VALUES_UNRESOLVED", route.Handler, "Deprecated header.Values reads keys at runtime; use a header-tagged struct pointer to describe inputs.")
+					c.diagnostic("LEGACY_HEADER_VALUES_UNRESOLVED", route.Handler, "Deprecated header.Values reads keys at runtime; use an input.Header[T] to describe inputs.")
 				case *resolver.PathIntResolver, *resolver.PathStringResolver, *resolver.PathBooleanResolver:
 					input.Binding, input.Name, input.Required = "path", parameter.PathKey, true
 					if input.Name == "" {
@@ -154,22 +155,16 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 					if !c.inputSchemaAvailable(parameter.Type.Elem()) {
 						break
 					}
-					input.Content = map[string]json.RawMessage{"application/json": raw(c.schema(parameter.Type.Elem(), "request/json"))}
-					if id, ok := c.ids[schemaKey{parameter.Type.Elem(), "request/json"}]; ok {
-						if schema, ok := c.schemas[id].(map[string]any); ok {
-							if names, ok := schema["required"].([]string); ok {
-								input.Required = len(names) > 0
-							}
-						}
-					}
-					if _, ok := candidate.(*resolver.FormDTOResolver); ok {
-						form := raw(c.schema(parameter.Type.Elem(), "request/form"))
-						input.Content["application/x-www-form-urlencoded"], input.Content["multipart/form-data"] = form, append(json.RawMessage(nil), form...)
-						for _, field := range wireFields(parameter.Type.Elem(), true) {
-							if fileField(field.typeOf) {
-								input.Content = map[string]json.RawMessage{"multipart/form-data": form}
-								break
-							}
+					payload := parameter.Type.Elem()
+					describer := validator.(validation.SchemaDescriber)
+					declaration, _ := resolver.DescribeValidation(describer, payload)
+					input.Content = make(map[string]json.RawMessage)
+					for _, media := range inputbinding.BodyMediaTypes(payload, declaration) {
+						mode := "request/" + inputbinding.BodySchemaMode(media)
+						input.Content[media] = raw(c.schema(payload, mode))
+						if schema, ok := c.schemas[c.ids[schemaKey{payload, mode}]].(map[string]any); ok {
+							names, _ := schema["required"].([]string)
+							input.Required = input.Required || len(names) > 0
 						}
 					}
 				case *resolver.UploadedFilesResolver:

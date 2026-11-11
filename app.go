@@ -14,21 +14,24 @@ import (
 	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/bootstrap"
+	"github.com/NARUBROWN/spine/internal/componentregistration"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/ws"
+	"github.com/NARUBROWN/spine/pkg/api"
 	"github.com/NARUBROWN/spine/pkg/boot"
-	"github.com/NARUBROWN/spine/pkg/constructor"
 )
 
 type App interface {
-	// Constructor는 constructor의 역할 표식 또는 기존 생성자 함수를 등록합니다.
+	// Constructor는 constructor.Custom, Repository, Service, Controller, Interceptor의 역할 표식을 등록합니다.
+	// 역할 표식 없이 객체를 전달하는 호출 형태는 deprecated입니다. constructor.Custom(&T{})로 감싸세요.
+	// 기존 생성자 함수 등록은 호환을 위해 계속 지원합니다.
 	Constructor(constructors ...any)
 	// Route는 메서드 표현식으로 HTTP 경로를 등록합니다.
 	//
 	// Deprecated: 새 HTTP 경로는 api.Controller의 RegisterRoutes 메서드에 등록하세요.
 	// 기존 등록은 전환 기간에 계속 사용할 수 있습니다.
-	Route(method string, path string, handler any, opts ...router.RouteOption)
+	Route(method string, path string, handler any, opts ...api.Option)
 	// 인터셉터 선언
 	Interceptor(interceptors ...core.Interceptor)
 	// InterceptorFor는 선택한 기본 전송 방식에 전역 인터셉터를 등록합니다.
@@ -43,10 +46,21 @@ type App interface {
 	Run(opts boot.Options) error
 	// RunContext는 context가 취소될 때 정상 종료를 시작합니다.
 	RunContext(ctx context.Context, opts boot.Options) error
-	// 이벤트 소비자 레지스트리 반환
-	Consumers() *consumer.Registry
-	// 웹 소켓 레지스트리 반환
-	WebSocket() *ws.Registry
+	// Consumers는 토픽에 이벤트 핸들러를 등록하는 경로입니다.
+	Consumers() Registrar
+	// WebSocket은 경로에 WebSocket 핸들러를 등록하는 경로입니다.
+	WebSocket() Registrar
+}
+
+// Registrar는 이름에 핸들러를 등록합니다.
+type Registrar interface {
+	Register(name string, handler any) error
+}
+
+type registrar struct{ registry Registrar }
+
+func (r registrar) Register(name string, handler any) error {
+	return r.registry.Register(name, handler)
 }
 
 type app struct {
@@ -68,17 +82,19 @@ type app struct {
 }
 
 // Option은 애플리케이션의 통합 구현을 명시적으로 선택하는 생성 옵션입니다.
-type Option func(*app)
+type Option struct {
+	apply func(*app)
+}
 
 // WithHTTPAdapter는 HTTP 실행에 사용할 독립 계약의 factory를 지정합니다.
 func WithHTTPAdapter(factory adapter.Factory) Option {
-	return func(a *app) { a.httpAdapterFactory = factory }
+	return Option{apply: func(a *app) { a.httpAdapterFactory = factory }}
 }
 
 // WithWebSocketAdapter는 HTTP 플랫폼과 독립적으로 WebSocket 구현을 선택합니다.
 // WS 경로를 등록한 앱은 factory를 명시해야 합니다.
 func WithWebSocketAdapter(factory wsadapter.Factory) Option {
-	return func(a *app) { a.websocketAdapterFactory = factory }
+	return Option{apply: func(a *app) { a.websocketAdapterFactory = factory }}
 }
 
 // EventAdapterOption은 브로커 공통 실행 정책을 설정합니다.
@@ -93,9 +109,9 @@ func WithEventAdapter(name string, factory eventadapter.Factory, options ...Even
 			option(&settings)
 		}
 	}
-	return func(a *app) {
+	return Option{apply: func(a *app) {
 		a.eventAdapters = append(a.eventAdapters, bootstrap.EventAdapterBinding{Name: name, Factory: factory, Options: settings})
-	}
+	}}
 }
 
 // WithEventConsumerRetry는 Reader 생성과 재연결의 공통 backoff를 설정합니다.
@@ -121,20 +137,23 @@ func WithEventConsumerErrorHistory(policy boot.CleanupErrorHistoryOptions) Event
 // WithValidator는 모든 기본 DTO 리졸버가 사용할 검증기를 등록합니다.
 // 생략하면 검증하지 않으며, 명시적으로 등록한 nil은 앱 사전 검사에서 거부합니다.
 func WithValidator(validator validation.Validator) Option {
-	return func(a *app) {
+	return Option{apply: func(a *app) {
 		a.validator = validator
 		a.validatorConfigured = true
-	}
+	}}
 }
 
 // New는 특정 HTTP 서버 구현을 선택하지 않는 Spine 커널 앱을 생성합니다.
 // HTTP를 사용할 때는 통합 모듈의 생성자 또는 WithHTTPAdapter를 사용합니다.
 // 예: New(WithHTTPAdapter(factory)). HTTP 없는 앱은 New()로 생성합니다.
 func New(options ...Option) App {
-	a := &app{}
+	a := &app{
+		consumerRegistry:  consumer.NewRegistry(),
+		websocketRegistry: ws.NewRegistry(),
+	}
 	for _, option := range options {
-		if option != nil {
-			option(a)
+		if option.apply != nil {
+			option.apply(a)
 		}
 	}
 	return a
@@ -142,7 +161,7 @@ func New(options ...Option) App {
 
 func (a *app) Constructor(constructors ...any) {
 	for _, value := range constructors {
-		if registration, ok := value.(constructor.Registration); ok {
+		if registration, ok := value.(componentregistration.Registration); ok {
 			a.componentRegistration(registration)
 		} else if t := reflect.TypeOf(value); t != nil && t.Kind() == reflect.Func {
 			a.constructors = append(a.constructors, value)
@@ -155,7 +174,7 @@ func (a *app) Constructor(constructors ...any) {
 	}
 }
 
-func (a *app) Route(method string, path string, handler any, opts ...router.RouteOption) {
+func (a *app) Route(method string, path string, handler any, opts ...api.Option) {
 	// HTTP 메서드를 대문자로 변환해 라우팅 시 대소문자 불일치 문제를 방지합니다.
 	method = strings.ToUpper(strings.TrimSpace(method))
 
@@ -166,7 +185,9 @@ func (a *app) Route(method string, path string, handler any, opts ...router.Rout
 	}
 
 	for _, opt := range opts {
-		opt(&spec)
+		if !router.ApplyOption(opt, &spec) {
+			panic("empty route option")
+		}
 	}
 
 	a.routes = append(a.routes, spec)
@@ -244,16 +265,10 @@ func (a *app) RunContext(ctx context.Context, opts boot.Options) error {
 	return bootstrap.RunContext(ctx, a.bootstrapConfig(opts))
 }
 
-func (a *app) Consumers() *consumer.Registry {
-	if a.consumerRegistry == nil {
-		a.consumerRegistry = consumer.NewRegistry()
-	}
-	return a.consumerRegistry
+func (a *app) Consumers() Registrar {
+	return registrar{registry: a.consumerRegistry}
 }
 
-func (a *app) WebSocket() *ws.Registry {
-	if a.websocketRegistry == nil {
-		a.websocketRegistry = ws.NewRegistry()
-	}
-	return a.websocketRegistry
+func (a *app) WebSocket() Registrar {
+	return registrar{registry: a.websocketRegistry}
 }

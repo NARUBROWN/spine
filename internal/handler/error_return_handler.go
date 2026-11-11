@@ -1,12 +1,10 @@
 package handler
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 
-	"github.com/NARUBROWN/spine/core"
-	"github.com/NARUBROWN/spine/pkg/httperr"
+	"github.com/NARUBROWN/spine/internal/execution"
 )
 
 type ErrorReturnHandler struct{}
@@ -16,7 +14,7 @@ func (h *ErrorReturnHandler) Supports(returnType reflect.Type) bool {
 	return returnType.Implements(errorType)
 }
 
-func (h *ErrorReturnHandler) Handle(value any, ctx core.ExecutionContext) error {
+func (h *ErrorReturnHandler) Handle(value any, ctx execution.Context) error {
 	rw, writerErr := responseWriter(ctx)
 	if writerErr != nil {
 		return writerErr
@@ -27,17 +25,5 @@ func (h *ErrorReturnHandler) Handle(value any, ctx core.ExecutionContext) error 
 		return fmt.Errorf("ErrorReturnHandler only supports error values: %T", value)
 	}
 
-	status := 500
-	message := "Internal server error"
-
-	// HTTPError면 상태 코드를 추출한다.
-	var httpErr *httperr.HTTPError
-	if errors.As(err, &httpErr) {
-		status = httpErr.Status
-		message = httpErr.Message
-	} else if body, ok := ValidationErrorJSON(err); ok {
-		return rw.WriteJSON(400, body)
-	}
-
-	return rw.WriteJSON(status, InputErrorJSON(err, status, message))
+	return WriteErrorResponse(rw, err)
 }

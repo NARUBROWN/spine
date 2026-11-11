@@ -12,15 +12,17 @@
 
 ## 현재 채널
 
-**Stable** | 공개 코어 태그 [`v0.7.1`](https://github.com/NARUBROWN/spine/tree/v0.7.1)
+**Preview** | 공개 코어 태그 [`v0.7.2-preview.3`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.3)
 
-다른 채널 | [Preview](https://github.com/NARUBROWN/spine/tree/preview) | [RC](https://github.com/NARUBROWN/spine/tree/rc)
+소스의 다음 후보는 `v0.7.5-preview.1`이며, 대상 정식 버전은 `v0.7.5`입니다. API 호환성 변경과 전환 방법은 [마이그레이션 안내](docs/migration/v0.7.5.md)를 참고하세요. 아직 태그를 발행하지 않았습니다.
+
+다른 채널 | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 
 ## 핵심 아이디어
 
 - 요청 해석, 핸들러 실행, 반환 처리의 책임을 분리합니다.
 - 컨트롤러의 메서드 시그니처로 요청 입력과 응답 형식을 정의합니다.
-- `path.*`, `query.*`, `httperr.*`로 경로 매개변수, 쿼리, HTTP 오류의 의미를 표현합니다.
+- `input.Path`, `input.Query`, `input.Header`, `input.Body`, `httperr.*`로 경로 매개변수, 쿼리, HTTP 오류의 의미를 표현합니다.
 
 ## 권장 환경
 
@@ -29,9 +31,9 @@
 ## Spine CLI로 시작하기
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.3
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.4-preview.5
 spine version
-spine new todo-api --module github.com/acme/todo-api --channel main --no-interactive
+spine new todo-api --module github.com/acme/todo-api --channel preview --no-interactive
 cd todo-api
 spine dev
 ```
@@ -42,6 +44,8 @@ curl http://localhost:8080/health
 
 현재 앱이 사용하는 코어와 플랫폼은 생성된 `go.mod`에서 확인하세요.
 
+미리보기의 `--channel preview`는 이동하는 개발 브랜치를 조회합니다.
+
 ## 문서와 예제
 
 - [공식 사이트](https://spine.na2ru2.me/ko/)
@@ -50,7 +54,7 @@ curl http://localhost:8080/health
 - [Kafka MSA 예제](https://github.com/NARUBROWN/spine-simple-msa-demo): 주문 서버와 재고 워커의 이벤트 처리
 - [WebSocket 채팅 예제](https://github.com/NARUBROWN/spine-simple-chat-demo): 인증과 방별 메시지 전송
 
-Spine `v0.7.1`의 [컨트롤러 경로 등록 예제](docs/migration/controller-routes.md)를 참고하세요.
+Spine `v0.7.2`의 [컨트롤러 경로 등록 예제](docs/migration/controller-routes.md)를 참고하세요.
 
 ## 기업 도입 무상 기술 지원
 

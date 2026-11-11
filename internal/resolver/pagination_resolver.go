@@ -2,11 +2,12 @@ package resolver
 
 import (
 	"fmt"
+	"github.com/NARUBROWN/spine/internal/inputerr"
 	"reflect"
 	"strconv"
 
-	"github.com/NARUBROWN/spine/core"
-	"github.com/NARUBROWN/spine/pkg/httperr"
+	"github.com/NARUBROWN/spine/internal/execution"
+	"github.com/NARUBROWN/spine/internal/httpfailure"
 	"github.com/NARUBROWN/spine/pkg/query"
 )
 
@@ -17,15 +18,15 @@ func (r *PaginationResolver) Supports(parameterMeta ParameterMeta) bool {
 	return parameterMeta.Type == reflect.TypeFor[query.Pagination]()
 }
 
-func (r *PaginationResolver) Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error) {
-	httpCtx, ok := ctx.(core.HttpRequestContext)
+func (r *PaginationResolver) Resolve(ctx execution.Context, parameterMeta ParameterMeta) (any, error) {
+	httpCtx, ok := ctx.(execution.HTTPRequestContext)
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")
 	}
 	values := httpCtx.Queries()
 	for _, name := range []string{"page", "size"} {
 		if len(values[name]) > 1 {
-			return nil, &httperr.InputError{Source: "query", Cause: httperr.BadRequest("multiple values for query field " + name)}
+			return nil, &inputerr.Error{Source: "query", Cause: httpfailure.BadRequest("multiple values for query field " + name)}
 		}
 	}
 

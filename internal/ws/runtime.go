@@ -16,9 +16,11 @@ import (
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/configuration"
+	"github.com/NARUBROWN/spine/internal/contextview"
+	"github.com/NARUBROWN/spine/internal/execution"
+	"github.com/NARUBROWN/spine/internal/httpfailure"
 	"github.com/NARUBROWN/spine/internal/pipeline"
-	"github.com/NARUBROWN/spine/pkg/boot"
-	"github.com/NARUBROWN/spine/pkg/httperr"
 )
 
 const (
@@ -92,7 +94,7 @@ func (c *trackedConn) writeClose(code int, reason string, timeout time.Duration)
 	return c.conn.WriteClose(code, reason, writeDeadline(timeout))
 }
 
-func NewRuntime(pipeline *pipeline.Pipeline, adapter wsadapter.Adapter, opts boot.WebSocketOptions, handshakeInterceptors ...core.WebSocketHandshakeInterceptor) *Runtime {
+func NewRuntime(pipeline *pipeline.Pipeline, adapter wsadapter.Adapter, opts configuration.WebSocketOptions, handshakeInterceptors ...core.WebSocketHandshakeInterceptor) *Runtime {
 	if wsadapter.ValidateAdapter(adapter) != nil {
 		panic("ws: adapter cannot be nil")
 	}
@@ -114,12 +116,12 @@ func NewRuntime(pipeline *pipeline.Pipeline, adapter wsadapter.Adapter, opts boo
 }
 
 // AdapterOptions는 커널 기본값을 적용한 연결 설정만 플랫폼에 전달합니다.
-func AdapterOptions(opts boot.WebSocketOptions) wsadapter.Options {
+func AdapterOptions(opts configuration.WebSocketOptions) wsadapter.Options {
 	normalized := normalizeWebSocketOptions(opts)
 	return wsadapter.Options{HandshakeTimeout: normalized.HandshakeTimeout, ReadTimeout: normalized.ReadTimeout, MaxMessageBytes: normalized.MaxMessageBytes}
 }
 
-func normalizeWebSocketOptions(opts boot.WebSocketOptions) normalizedWebSocketOptions {
+func normalizeWebSocketOptions(opts configuration.WebSocketOptions) normalizedWebSocketOptions {
 	normalized := normalizedWebSocketOptions{
 		AllowedOrigins:   append([]string(nil), opts.AllowedOrigins...),
 		MaxConnections:   opts.MaxConnections,
@@ -141,7 +143,7 @@ func normalizeWebSocketOptions(opts boot.WebSocketOptions) normalizedWebSocketOp
 		normalized.MaxMessageBytes = defaultWSMaxMessageBytes
 	}
 	if normalized.MaxConnections == 0 {
-		normalized.MaxConnections = boot.DefaultWebSocketMaxConnections
+		normalized.MaxConnections = configuration.DefaultWebSocketMaxConnections
 	}
 	if normalized.CapacityRetry == 0 {
 		normalized.CapacityRetry = defaultWSCapacityRetry
@@ -297,7 +299,7 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 			handshakeContext,
 		)
 
-		if err := r.pipeline.Execute(ctx); err != nil {
+		if err := r.pipeline.ExecuteRegistered(ctx, reg.Meta); err != nil {
 			log.Printf("[WS] Handler failed (conn=%p): %v", &connID, err)
 			code, reason := wsadapter.CloseInternalServerErr, "handler error"
 			if _, ok := validation.AsError(err); ok {
@@ -312,12 +314,15 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 	}
 }
 
-func (r *Runtime) preHandshake(ctx core.WebSocketHandshakeContext, reg Registration) error {
+func (r *Runtime) preHandshake(ctx execution.WebSocketRequestContext, reg Registration) error {
+	executionCtx := NewWSExecutionContext(ctx.Context(), "", ctx.Path(), 0, nil, nil, nil, ctx)
+	defer executionCtx.(interface{ ReleaseStore() }).ReleaseStore()
+	publicCtx := execution.NewContext(executionCtx)
 	for _, interceptor := range r.handshakeInterceptors {
 		if interceptor == nil {
 			continue
 		}
-		if err := callPreHandshake(interceptor, ctx, reg.Meta); err != nil {
+		if err := callPreHandshake(interceptor, publicCtx, reg.Meta); err != nil {
 			return err
 		}
 	}
@@ -326,27 +331,30 @@ func (r *Runtime) preHandshake(ctx core.WebSocketHandshakeContext, reg Registrat
 		if !ok {
 			continue
 		}
-		if err := callPreHandshake(handshakeInterceptor, ctx, reg.Meta); err != nil {
+		if err := callPreHandshake(handshakeInterceptor, publicCtx, reg.Meta); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func callPreHandshake(interceptor core.WebSocketHandshakeInterceptor, ctx core.WebSocketHandshakeContext, meta core.HandlerMeta) (err error) {
+func callPreHandshake(interceptor core.WebSocketHandshakeInterceptor, ctx contextview.Ctx, meta execution.HandlerMeta) (err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			err = fmt.Errorf("websocket handshake interceptor panic: %v", recovered)
 		}
 	}()
-	return interceptor.PreHandshake(ctx, meta)
+	return interceptor.PreHandshake(ctx, meta.View())
 }
 
 func writeHandshakeRejection(w http.ResponseWriter, err error) {
 	status := http.StatusUnauthorized
-	var httpErr *httperr.HTTPError
-	if errors.As(err, &httpErr) && httpErr.Status >= 400 && httpErr.Status <= 499 {
-		status = httpErr.Status
+	var httpErr *httpfailure.HTTPError
+	if errors.As(err, &httpErr) {
+		status = http.StatusInternalServerError
+		if httpErr != nil && httpErr.Status >= 400 && httpErr.Status <= 599 {
+			status = httpErr.Status
+		}
 	}
 	http.Error(w, http.StatusText(status), status)
 }

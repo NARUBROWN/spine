@@ -13,6 +13,7 @@ import (
 	adapter "github.com/NARUBROWN/spine/contract/http"
 	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/configuration"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/endpoint"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
@@ -23,7 +24,6 @@ import (
 	spineRouter "github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/transport"
 	"github.com/NARUBROWN/spine/internal/ws"
-	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 // Prepare는 실행 작업이나 리스너를 시작하지 않고 앱 자원을 준비합니다.
@@ -39,12 +39,12 @@ func Prepare(ctx context.Context, config Config) (*Application, error) {
 	return prepare(ctx, config, resources)
 }
 
-func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResource) (result *Application, err error) {
+func prepare(ctx context.Context, config Config, resources []configuration.OpenAPIResource) (result *Application, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	var openAPIDocument []byte
-	openAPIResources := map[string]boot.OpenAPIResource{}
+	openAPIResources := map[string]configuration.OpenAPIResource{}
 
 	application := &Application{config: config, closeDone: make(chan struct{})}
 	ready := false
@@ -91,16 +91,13 @@ func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResourc
 		eventPublishers = append(eventPublishers, managed)
 	}
 
-	// 실행 후 훅에서 사용할 공통 디스패처(퍼블리셔가 없으면 nil 유지)
-	var dispatchHook *hook.EventDispatchHook
+	dispatchHook := &hook.EventDispatchHook{}
 	if len(eventPublishers) > 0 {
 		dispatcher, err := eventPublish.NewDefaultEventDispatcher(eventPublishers...)
 		if err != nil {
 			return nil, fmt.Errorf("[Bootstrap] failed to initialize event dispatcher: %w", err)
 		}
-		dispatchHook = &hook.EventDispatchHook{
-			Dispatcher: dispatcher,
-		}
+		dispatchHook.Dispatcher = dispatcher
 	}
 
 	if err := ctx.Err(); err != nil {
@@ -238,10 +235,7 @@ func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResourc
 		httpInvoker := invoker.NewInvoker(container)
 		httpPipeline := pipeline.NewPipeline(router, httpInvoker)
 
-		// HTTP 실행 후 훅: 도메인 이벤트 발행(퍼블리셔가 있는 경우에만)
-		if dispatchHook != nil {
-			httpPipeline.AddPostExecutionHook(dispatchHook)
-		}
+		httpPipeline.SetEventDispatch(dispatchHook)
 
 		log.Println("[Bootstrap] Registering argument resolvers")
 		httpPipeline.AddArgumentResolver(endpoint.Resolvers(config.Validator)...)
@@ -266,11 +260,20 @@ func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResourc
 		var upgrades []adapter.NetHTTPUpgradeRoute
 		if config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0 {
 			wsRegistrations := config.WebSocketRegistry.Registrations()
+			controllerTypes := make([]reflect.Type, 0, len(wsRegistrations))
+			for _, registration := range wsRegistrations {
+				if registration.Meta.ControllerType != nil {
+					controllerTypes = append(controllerTypes, registration.Meta.ControllerType)
+				}
+			}
+			if err := container.WarmUp(controllerTypes); err != nil {
+				return nil, fmt.Errorf("[Bootstrap] WebSocket controller warm-up failed: %w", err)
+			}
 			log.Println("[Bootstrap] Configuring WebSocket runtime")
 			log.Printf("[Bootstrap] Configuring WebSocket routes (%d routes)", len(wsRegistrations))
 
 			// WS 전용 인자 리졸버 등록
-			wsPipeline := buildWSPipeline(container, config.WebSocketRegistry, dispatchHook, resolvedWSInterceptors, config.Validator)
+			wsPipeline := buildWSPipeline(container, dispatchHook, resolvedWSInterceptors, config.Validator)
 
 			wsAdapter, err := config.WebSocketAdapterFactory.New(ws.AdapterOptions(config.HTTP.WebSocket))
 			if err != nil {
@@ -312,7 +315,7 @@ func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResourc
 					}
 					return scope.Writer().WriteString(http.StatusOK, resource.Body)
 				}
-				if len(openAPIDocument) > 0 && request.Path() == config.HTTP.OpenAPI.DocumentPath() && (scope.Method() == http.MethodGet || scope.Method() == http.MethodHead) {
+				if len(openAPIDocument) > 0 && request.Path() == configuration.DocumentPath(config.HTTP.OpenAPI) && (scope.Method() == http.MethodGet || scope.Method() == http.MethodHead) {
 					scope.Writer().SetHeader("Cache-Control", "no-cache")
 					if scope.Method() == http.MethodHead {
 						scope.Writer().SetHeader("Content-Type", "application/json")
@@ -366,7 +369,7 @@ func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResourc
 			}
 			runtime := consumer.NewRuntime(config.ConsumerRegistry,
 				consumer.NewPlatformFactory(binding.Factory, binding.Options),
-				buildConsumerPipeline(container, config.ConsumerRegistry, dispatchHook, config.Validator), binding.Options.ConsumerErrorHistory)
+				buildConsumerPipeline(container, dispatchHook, config.Validator), binding.Options.ConsumerErrorHistory)
 			application.consumers = append(application.consumers, consumerRuntime{name: binding.Name, runtime: runtime})
 			if err := runtime.PrepareWithRetry(ctx); err != nil {
 				if ctx.Err() != nil && errors.Is(err, ctx.Err()) {

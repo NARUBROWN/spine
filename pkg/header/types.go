@@ -5,14 +5,14 @@ import "net/http"
 // Values는 전환 기간에 유지하는 기존 HTTP 헤더 조회 타입입니다.
 // 읽는 키는 실행 중 결정되므로 상세 입력 명세를 생성할 수 없습니다.
 //
-// Deprecated: header 태그를 지정한 일반 구조체 포인터를 핸들러 인자로 받으세요.
+// Deprecated: header 태그를 지정한 DTO를 input.Header[T]로 받으세요.
 type Values struct {
 	headers http.Header
 }
 
 // NewValues는 주어진 헤더로 기존 조회 뷰를 만듭니다.
 //
-// Deprecated: header 태그를 지정한 일반 구조체 포인터로 전환하세요.
+// Deprecated: header 태그를 지정한 DTO와 input.Header[T]로 전환하세요.
 func NewValues(headers http.Header) Values {
 	return Values{headers: headers}
 }

@@ -1,5 +1,7 @@
 package test
 
+import httpinput "github.com/NARUBROWN/spine/pkg/input"
+
 import (
 	"bytes"
 	"context"
@@ -22,6 +24,7 @@ import (
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	files "github.com/NARUBROWN/spine/pkg/multipart"
 	"github.com/NARUBROWN/spine/pkg/route"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 	"github.com/labstack/echo/v5"
 )
 
@@ -38,15 +41,15 @@ type inputV3Controller struct {
 	executionErr error
 }
 
-func (c *inputV3Controller) FormFirst(form *inputV3Form, upload files.UploadedFiles) httpx.Response[string] {
+func (c *inputV3Controller) FormFirst(form httpinput.Body[inputV3Form], upload files.UploadedFiles) httpx.Response[string] {
 	return c.handle(form, upload)
 }
 
-func (c *inputV3Controller) FilesFirst(upload files.UploadedFiles, form *inputV3Form) httpx.Response[string] {
+func (c *inputV3Controller) FilesFirst(upload files.UploadedFiles, form httpinput.Body[inputV3Form]) httpx.Response[string] {
 	return c.handle(form, upload)
 }
 
-func (c *inputV3Controller) handle(form *inputV3Form, upload files.UploadedFiles) httpx.Response[string] {
+func (c *inputV3Controller) handle(form httpinput.Body[inputV3Form], upload files.UploadedFiles) httpx.Response[string] {
 	c.calls.Add(1)
 	c.order = append(c.order, "controller")
 	if form.Title != "body" || len(upload.Files) != 1 {
@@ -80,7 +83,7 @@ type inputV3Interceptor struct {
 	failAfter  bool
 }
 
-func (i *inputV3Interceptor) PreHandle(core.ExecutionContext, core.HandlerMeta) error {
+func (i *inputV3Interceptor) PreHandle(contextapi.Ctx, core.HandlerMeta) error {
 	i.controller.order = append(i.controller.order, "pre")
 	if i.reject {
 		return httperr.Unauthorized("authentication required")
@@ -88,7 +91,7 @@ func (i *inputV3Interceptor) PreHandle(core.ExecutionContext, core.HandlerMeta) 
 	return nil
 }
 
-func (i *inputV3Interceptor) BeforeResponse(_ core.ExecutionContext, _ core.HandlerMeta, _ error) error {
+func (i *inputV3Interceptor) BeforeResponse(_ contextapi.Ctx, _ core.HandlerMeta, _ error) error {
 	i.controller.order = append(i.controller.order, "before")
 	if i.controller.fail == "before" {
 		return errors.New("before response failed")
@@ -96,7 +99,7 @@ func (i *inputV3Interceptor) BeforeResponse(_ core.ExecutionContext, _ core.Hand
 	return nil
 }
 
-func (i *inputV3Interceptor) AfterCompletion(ctx core.ExecutionContext, _ core.HandlerMeta, executionErr error) {
+func (i *inputV3Interceptor) AfterCompletion(ctx contextapi.Ctx, _ core.HandlerMeta, executionErr error) {
 	c := i.controller
 	c.executionErr = executionErr
 	c.order = append(c.order, "after")
@@ -106,9 +109,16 @@ func (i *inputV3Interceptor) AfterCompletion(ctx core.ExecutionContext, _ core.H
 	if _, err := os.Stat(c.path); err != nil {
 		c.t.Errorf("AfterCompletion까지 파일이 있어야 합니다: %v", err)
 	}
-	form, err := ctx.(core.HttpRequestContext).MultipartForm()
+	request, _ := ctx.HTTPRequestContext()
+	form, err := request.MultipartForm()
 	if err != nil || form.Value["title"][0] != "body" {
-		c.t.Errorf("완료 훅에서 같은 multipart 결과를 읽어야 합니다: %v", err)
+		c.t.Errorf("완료 훅에서 multipart 결과를 읽어야 합니다: %v", err)
+	} else {
+		form.Value["title"][0] = "changed"
+		again, err := request.MultipartForm()
+		if err != nil || again.Value["title"][0] != "body" {
+			c.t.Errorf("공개 폼 뷰가 원본 필드를 바꿨습니다: %v", err)
+		}
 	}
 	if i.failAfter {
 		panic("completion panic")
@@ -225,13 +235,13 @@ func TestHTTPV3AuthenticationRejectsBeforeCommonBodyRead(t *testing.T) {
 	}
 }
 
-func (*inputV3Interceptor) PostHandle(core.ExecutionContext, core.HandlerMeta) {}
+func (*inputV3Interceptor) PostHandle(contextapi.Ctx, core.HandlerMeta) {}
 
 func (c *inputV3Controller) FileOnly(files.UploadedFiles) httpx.Response[string] {
 	c.calls.Add(1)
 	return httpx.Response[string]{}
 }
-func (c *inputV3Controller) JSON(*httpBaselineDTO) httpx.Response[string] {
+func (c *inputV3Controller) JSON(httpinput.Body[httpBaselineDTO]) httpx.Response[string] {
 	c.calls.Add(1)
 	return httpx.Response[string]{}
 }
@@ -285,8 +295,8 @@ func TestHTTPV3InputFailuresPreserveSourceAndCause(t *testing.T) {
 			if response.Code != tc.status || c.calls.Load() != 0 {
 				t.Fatalf("오류 입력 실행: %d %s", response.Code, response.Body.String())
 			}
-			var source *httperr.InputError
-			if !errors.As(c.executionErr, &source) || source.Source != "body" {
+			source, ok := httperr.InputLocation(c.executionErr)
+			if !ok || source != "body" {
 				t.Fatalf("입력 출처를 보존해야 합니다: %v", c.executionErr)
 			}
 			if tc.broken != nil && !errors.Is(c.executionErr, tc.broken) {
