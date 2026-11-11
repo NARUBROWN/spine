@@ -28,14 +28,16 @@ type StockPath struct {
 	StockID int64 `path:"stockId"`
 }
 
+type eventPublishingConfig struct{ enabled bool }
+
 type UserController struct{ publishEnabled bool }
 
 type CommonController struct{}
 
 type ChatController struct{}
 
-func (c *UserController) Constructor() *UserController {
-	return &UserController{publishEnabled: c.publishEnabled}
+func (*UserController) Constructor(publishing eventPublishingConfig) *UserController {
+	return &UserController{publishEnabled: publishing.enabled}
 }
 
 func (*CommonController) Constructor() *CommonController {
