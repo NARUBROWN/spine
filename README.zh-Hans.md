@@ -12,7 +12,9 @@
 
 ## 当前渠道
 
-**Preview** | 已发布的核心标签 [`v0.7.2-preview.2`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.2)
+**Preview** | 已发布的核心标签 [`v0.7.2-preview.3`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.3)
+
+下一个源码候选版本为 `v0.7.5-preview.1`，目标正式版本为 `v0.7.5`。破坏性变更请参阅[迁移指南](docs/migration/v0.7.5.md)。此标签尚未发布。
 
 其他渠道 | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 
@@ -29,7 +31,7 @@
 ## 使用 Spine CLI 开始
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.4-preview.2
+go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.4-preview.5
 spine version
 spine new todo-api --module github.com/acme/todo-api --channel preview --no-interactive
 cd todo-api

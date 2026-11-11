@@ -23,7 +23,7 @@ func TestBuildDemoConfig_DefaultsToHTTPAndWebSocketOnly(t *testing.T) {
 	if ws.MaxConnections != 0 || len(ws.AllowedOrigins) != 1 {
 		t.Fatalf("unexpected WebSocket defaults: %+v", ws)
 	}
-	if err := config.Options.HTTP.Validate(); err != nil {
+	if err := newReferenceApp().Validate(config.Options); err != nil {
 		t.Fatalf("default HTTP/WS configuration must pass preflight: %v", err)
 	}
 }
@@ -89,7 +89,7 @@ func TestBuildDemoConfig_LeavesInvalidTrustedProxyForPreflight(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := config.Options.HTTP.Validate(); err == nil {
+	if err := newReferenceApp().Validate(config.Options); err == nil {
 		t.Fatal("invalid trusted proxy CIDR must fail the 0.5 preflight")
 	}
 }

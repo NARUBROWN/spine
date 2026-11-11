@@ -1,7 +1,6 @@
 package pipeline
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -9,12 +8,15 @@ import (
 	"runtime/debug"
 
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/contextview"
 	"github.com/NARUBROWN/spine/internal/event/hook"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/handler"
+	"github.com/NARUBROWN/spine/internal/httpfailure"
 	"github.com/NARUBROWN/spine/internal/invoker"
+	"github.com/NARUBROWN/spine/internal/pipelinecontrol"
 	"github.com/NARUBROWN/spine/internal/resolver"
 	"github.com/NARUBROWN/spine/internal/router"
-	"github.com/NARUBROWN/spine/pkg/httperr"
 )
 
 type Pipeline struct {
@@ -24,6 +26,7 @@ type Pipeline struct {
 	returnHandlers    []handler.ReturnValueHandler
 	invoker           *invoker.Invoker
 	postHooks         []hook.PostExecutionHook
+	eventDispatch     *hook.EventDispatchHook
 }
 
 func NewPipeline(router router.Router, invoker *invoker.Invoker) *Pipeline {
@@ -46,25 +49,45 @@ func (p *Pipeline) AddReturnValueHandler(handlers ...handler.ReturnValueHandler)
 }
 
 // Execute는 하나의 요청 실행 전체를 소유합니다.
-func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
-	globalMeta := core.HandlerMeta{}
+func (p *Pipeline) Execute(ctx execution.Context) error {
+	return p.execute(ctx, p.router.Route)
+}
+
+// ExecuteRegistered는 이미 전송 계층에서 선택한 핸들러를 실행합니다.
+func (p *Pipeline) ExecuteRegistered(ctx execution.Context, meta execution.HandlerMeta) error {
+	return p.execute(ctx, func(execution.Context) (execution.HandlerMeta, error) {
+		return meta, nil
+	})
+}
+
+func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context) (execution.HandlerMeta, error)) (finalErr error) {
+	// 응답 처리와 완료 훅이 끝난 뒤 저장값의 참조를 해제합니다.
+	if store, ok := ctx.(interface{ ReleaseStore() }); ok {
+		defer store.ReleaseStore()
+	}
+	globalMeta := execution.HandlerMeta{}
+	var interceptorCtx contextview.Ctx
+	if len(p.interceptors) > 0 {
+		interceptorCtx = execution.NewContext(ctx)
+	}
 	var routeInterceptors []core.Interceptor
 	var globalFinalizers []core.Interceptor
 	var routeFinalizers []core.Interceptor
 	var results []any
 	var returnedErr error
+	var interceptorErr error
 	beforeResponseCalled := false
 	responseStage := stageResponseWriter(ctx)
 
 	// AfterCompletion은 응답 처리가 끝난 뒤 실행한다.
 	defer func() {
 		for i := len(routeInterceptors) - 1; i >= 0; i-- {
-			if err := callAfterCompletion(routeInterceptors[i], ctx, globalMeta, finalErr); err != nil {
+			if err := callAfterCompletion(routeInterceptors[i], interceptorCtx, globalMeta, finalErr); err != nil {
 				finalErr = errors.Join(finalErr, err)
 			}
 		}
 		for i := len(p.interceptors) - 1; i >= 0; i-- {
-			if err := callAfterCompletion(p.interceptors[i], ctx, globalMeta, finalErr); err != nil {
+			if err := callAfterCompletion(p.interceptors[i], interceptorCtx, globalMeta, finalErr); err != nil {
 				finalErr = errors.Join(finalErr, err)
 			}
 		}
@@ -76,7 +99,7 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 		if responseStage == nil {
 			return
 		}
-		ctx.(core.HTTPResponseContext).SetResponseWriter(responseStage.target)
+		ctx.(execution.HTTPResponseContext).SetResponseWriter(responseStage.target)
 		if err := responseStage.flush(); err != nil {
 			finalErr = errors.Join(finalErr, fmt.Errorf("flush staged response: %w", err))
 			if !responseStage.target.IsCommitted() {
@@ -94,9 +117,12 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 		}
 		if responseStage != nil {
 			responseStage.rollbackSuccessResponse()
+			if interceptorErr != nil || errors.Is(finalErr, hook.ErrPublisherUnavailable) {
+				responseStage.prepared = false
+			}
 		}
 
-		if returnedErr != nil {
+		if returnedErr != nil && interceptorErr == nil {
 			handled, err := callHandleErrorReturn(p, ctx, returnedErr)
 			if err != nil {
 				finalErr = errors.Join(finalErr, err)
@@ -105,7 +131,11 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 			}
 		}
 
-		if err := callHandleExecutionError(p, ctx, finalErr); err != nil {
+		responseErr := finalErr
+		if interceptorErr != nil {
+			responseErr = interceptorErr
+		}
+		if err := callHandleExecutionError(p, ctx, responseErr); err != nil {
 			finalErr = errors.Join(finalErr, err)
 		}
 	}()
@@ -116,40 +146,57 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 			finalErr = panicAsError(recovered)
 		}
 		if !beforeResponseCalled {
-			finalErr = runBeforeResponse(ctx, globalMeta, routeFinalizers, globalFinalizers, finalErr)
+			var beforeErr error
+			finalErr, beforeErr = runBeforeResponse(interceptorCtx, globalMeta, routeFinalizers, globalFinalizers, finalErr)
+			if beforeErr != nil {
+				interceptorErr = beforeErr
+			}
 			beforeResponseCalled = true
 		}
 	}()
 
 	// 글로벌 인터셉터는 라우팅 전에 먼저 실행한다.
 	for _, it := range p.interceptors {
-		if err := it.PreHandle(ctx, globalMeta); err != nil {
-			if errors.Is(err, core.ErrAbortPipeline) {
+		if err := it.PreHandle(interceptorCtx, globalMeta.View()); err != nil {
+			if errors.Is(err, pipelinecontrol.ErrAbort) {
 				// 인터셉터가 의도적으로 요청을 종료함(응답은 이미 작성됨)
 				return nil
 			}
+			interceptorErr = err
 			return err
 		}
 		globalFinalizers = append(globalFinalizers, it)
 	}
 
 	// 라우터가 실행 대상을 결정
-	meta, err := p.router.Route(ctx)
+	meta, err := resolve(ctx)
 	if err != nil {
+		if _, ok := ctx.(execution.HTTPResponseContext); ok {
+			switch {
+			case errors.Is(err, router.ErrRouteNotFound):
+				return &httpfailure.HTTPError{Status: http.StatusNotFound, Message: err.Error(), Cause: err}
+			case errors.Is(err, router.ErrInvalidPathEncoding):
+				return &httpfailure.HTTPError{Status: http.StatusBadRequest, Message: err.Error(), Cause: err}
+			}
+		}
 		return err
 	}
 	globalMeta = meta
 
 	routeInterceptors = meta.Interceptors
+	if interceptorCtx == nil && len(routeInterceptors) > 0 {
+		interceptorCtx = execution.NewContext(ctx)
+	}
 
 	// 라우트 인터셉터는 요청 본문과 멀티파트를 읽기 전에 실행한다.
 	// 인증되지 않은 요청이 인자 해석 비용이나 부수 효과를 유발하면 안 된다.
 	for _, it := range routeInterceptors {
-		if err := it.PreHandle(ctx, meta); err != nil {
-			if errors.Is(err, core.ErrAbortPipeline) {
+		if err := it.PreHandle(interceptorCtx, meta.View()); err != nil {
+			if errors.Is(err, pipelinecontrol.ErrAbort) {
 				// 인터셉터가 의도적으로 요청을 종료함(응답은 이미 작성됨)
 				return nil
 			}
+			interceptorErr = err
 			return err
 		}
 		routeFinalizers = append(routeFinalizers, it)
@@ -189,23 +236,31 @@ func (p *Pipeline) Execute(ctx core.ExecutionContext) (finalErr error) {
 		}
 	}
 
+	if err := p.dispatchEvents(ctx); err != nil {
+		return err
+	}
+
 	// 라우트 인터셉터의 사후 처리 실행(역순)
 	for i := len(routeInterceptors) - 1; i >= 0; i-- {
-		routeInterceptors[i].PostHandle(ctx, meta)
+		routeInterceptors[i].PostHandle(interceptorCtx, meta.View())
 	}
 
 	// 전역 인터셉터의 사후 처리 실행(역순)
 	for i := len(p.interceptors) - 1; i >= 0; i-- {
-		p.interceptors[i].PostHandle(ctx, meta)
+		p.interceptors[i].PostHandle(interceptorCtx, meta.View())
 	}
 
-	finalErr = runBeforeResponse(ctx, globalMeta, routeFinalizers, globalFinalizers, nil)
+	if err := p.dispatchEvents(ctx); err != nil {
+		return err
+	}
+
+	finalErr, interceptorErr = runBeforeResponse(interceptorCtx, globalMeta, routeFinalizers, globalFinalizers, nil)
 	beforeResponseCalled = true
 	if finalErr != nil {
 		return finalErr
 	}
 
-	return nil
+	return p.dispatchEvents(ctx)
 }
 
 func findReturnedError(results []any) error {
@@ -221,30 +276,33 @@ func findReturnedError(results []any) error {
 }
 
 func runBeforeResponse(
-	ctx core.ExecutionContext,
-	meta core.HandlerMeta,
+	ctx contextview.Ctx,
+	meta execution.HandlerMeta,
 	routeInterceptors []core.Interceptor,
 	globalInterceptors []core.Interceptor,
 	executionErr error,
-) error {
+) (error, error) {
 	finalErr := executionErr
+	var responseErr error
 	for i := len(routeInterceptors) - 1; i >= 0; i-- {
 		if err := callBeforeResponse(routeInterceptors[i], ctx, meta, finalErr); err != nil {
 			finalErr = errors.Join(finalErr, err)
+			responseErr = err
 		}
 	}
 	for i := len(globalInterceptors) - 1; i >= 0; i-- {
 		if err := callBeforeResponse(globalInterceptors[i], ctx, meta, finalErr); err != nil {
 			finalErr = errors.Join(finalErr, err)
+			responseErr = err
 		}
 	}
-	return finalErr
+	return finalErr, responseErr
 }
 
 func callBeforeResponse(
 	interceptor core.Interceptor,
-	ctx core.ExecutionContext,
-	meta core.HandlerMeta,
+	ctx contextview.Ctx,
+	meta execution.HandlerMeta,
 	executionErr error,
 ) (err error) {
 	defer func() {
@@ -252,13 +310,13 @@ func callBeforeResponse(
 			err = panicAsError(recovered)
 		}
 	}()
-	return interceptor.BeforeResponse(ctx, meta, executionErr)
+	return interceptor.BeforeResponse(ctx, meta.View(), executionErr)
 }
 
 func callAfterCompletion(
 	interceptor core.Interceptor,
-	ctx core.ExecutionContext,
-	meta core.HandlerMeta,
+	ctx contextview.Ctx,
+	meta execution.HandlerMeta,
 	executionErr error,
 ) (err error) {
 	defer func() {
@@ -266,13 +324,13 @@ func callAfterCompletion(
 			err = panicAsError(recovered)
 		}
 	}()
-	interceptor.AfterCompletion(ctx, meta, executionErr)
+	interceptor.AfterCompletion(ctx, meta.View(), executionErr)
 	return nil
 }
 
 func callHandleErrorReturn(
 	p *Pipeline,
-	ctx core.ExecutionContext,
+	ctx execution.Context,
 	returnedErr error,
 ) (handled bool, err error) {
 	defer func() {
@@ -285,7 +343,7 @@ func callHandleErrorReturn(
 
 func callHandleExecutionError(
 	p *Pipeline,
-	ctx core.ExecutionContext,
+	ctx execution.Context,
 	executionErr error,
 ) (err error) {
 	defer func() {
@@ -316,7 +374,7 @@ func isNilResult(v any) bool {
 	}
 }
 
-func (p *Pipeline) handleErrorReturn(ctx core.ExecutionContext, returnedErr error) (bool, error) {
+func (p *Pipeline) handleErrorReturn(ctx execution.Context, returnedErr error) (bool, error) {
 	if isNilResult(returnedErr) {
 		return false, nil
 	}
@@ -332,7 +390,7 @@ func (p *Pipeline) handleErrorReturn(ctx core.ExecutionContext, returnedErr erro
 	return false, fmt.Errorf("no ReturnValueHandler can handle the error return value (%s)", resultType.String())
 }
 
-func (p *Pipeline) handleSuccessReturn(ctx core.ExecutionContext, results []any) error {
+func (p *Pipeline) handleSuccessReturn(ctx execution.Context, results []any) error {
 	for _, result := range results {
 		if isNilResult(result) {
 			continue
@@ -361,7 +419,7 @@ func (p *Pipeline) handleSuccessReturn(ctx core.ExecutionContext, results []any)
 	return nil
 }
 
-func (p *Pipeline) resolveArguments(ctx core.ExecutionContext, paramMetas []resolver.ParameterMeta) ([]any, error) {
+func (p *Pipeline) resolveArguments(ctx execution.Context, paramMetas []resolver.ParameterMeta) ([]any, error) {
 	args := make([]any, 0, len(paramMetas))
 
 	for _, paramMeta := range paramMetas {
@@ -397,8 +455,8 @@ func (p *Pipeline) AddPostExecutionHook(hook hook.PostExecutionHook) {
 	p.postHooks = append(p.postHooks, hook)
 }
 
-func (p *Pipeline) handleExecutionError(ctx core.ExecutionContext, err error) error {
-	response, ok := ctx.(core.HTTPResponseContext)
+func (p *Pipeline) handleExecutionError(ctx execution.Context, err error) error {
+	response, ok := ctx.(execution.HTTPResponseContext)
 	if !ok {
 		return nil
 	}
@@ -412,40 +470,11 @@ func (p *Pipeline) handleExecutionError(ctx core.ExecutionContext, err error) er
 		return nil
 	}
 
-	status := http.StatusInternalServerError
-	message := "Internal server error"
-	var responseErr error
-	var body json.RawMessage
-	var httpErr *httperr.HTTPError
-	if errors.As(err, &httpErr) {
-		if httpErr.Status < 400 || httpErr.Status > 599 {
-			responseErr = fmt.Errorf("invalid HTTP error status %d", httpErr.Status)
-		} else {
-			status = httpErr.Status
-			message = httpErr.Message
-		}
-	} else if validationBody, ok := handler.ValidationErrorJSON(err); ok {
-		status = http.StatusBadRequest
-		body = validationBody
-	} else {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			status = http.StatusRequestEntityTooLarge
-			message = "Request entity too large"
-		}
-	}
-
-	if body == nil {
-		body = handler.InputErrorJSON(err, status, message)
-	}
-	if writeErr := rw.WriteJSON(status, body); writeErr != nil {
-		responseErr = errors.Join(responseErr, fmt.Errorf("write execution error response: %w", writeErr))
-	}
-	return responseErr
+	return handler.WriteErrorResponse(rw, err)
 }
 
-func stageResponseWriter(ctx core.ExecutionContext) *stagedResponseWriter {
-	response, ok := ctx.(core.HTTPResponseContext)
+func stageResponseWriter(ctx execution.Context) *stagedResponseWriter {
+	response, ok := ctx.(execution.HTTPResponseContext)
 	if !ok {
 		return nil
 	}
@@ -463,4 +492,15 @@ func panicAsError(recovered any) error {
 		return fmt.Errorf("panic recovered: %w\n%s", err, debug.Stack())
 	}
 	return fmt.Errorf("panic recovered: %v\n%s", recovered, debug.Stack())
+}
+
+func (p *Pipeline) SetEventDispatch(dispatch *hook.EventDispatchHook) {
+	p.eventDispatch = dispatch
+}
+
+func (p *Pipeline) dispatchEvents(ctx execution.Context) error {
+	if p.eventDispatch == nil {
+		return nil
+	}
+	return p.eventDispatch.AfterExecution(ctx)
 }

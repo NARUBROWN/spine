@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/NARUBROWN/spine/core"
+	httpcontract "github.com/NARUBROWN/spine/contract/http"
 	"github.com/NARUBROWN/spine/internal/handler"
 )
 
@@ -38,7 +38,7 @@ type stagedResponseSnapshot struct {
 // transport. This lets the pipeline finish every framework-controlled failure
 // point before BeforeResponse commits request-scoped transactions.
 type stagedResponseWriter struct {
-	target           core.ResponseWriter
+	target           httpcontract.ResponseWriter
 	headerOperations []stagedHeaderOperation
 	bodyKind         stagedBodyKind
 	status           int
@@ -49,7 +49,7 @@ type stagedResponseWriter struct {
 	checkpoint       *stagedResponseSnapshot
 }
 
-func newStagedResponseWriter(target core.ResponseWriter) *stagedResponseWriter {
+func newStagedResponseWriter(target httpcontract.ResponseWriter) *stagedResponseWriter {
 	return &stagedResponseWriter{target: target}
 }
 

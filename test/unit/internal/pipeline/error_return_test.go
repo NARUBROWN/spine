@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/invoker"
 )
 
@@ -48,14 +48,14 @@ func TestExecute_ErrorReturnPreservesSelectedError(t *testing.T) {
 			if !ok {
 				t.Fatal("오류 반환 테스트의 핸들러가 없습니다")
 			}
-			p := NewPipeline(&testRouter{meta: core.HandlerMeta{
+			p := NewPipeline(&testRouter{meta: execution.HandlerMeta{
 				ControllerType: controllerType,
 				Method:         method,
 			}}, invoker.NewInvoker(ctr))
 			var handled error
 			p.AddReturnValueHandler(&testReturnHandler{
 				supports: func(rt reflect.Type) bool { return rt == reflect.TypeOf(tt.want) },
-				handle: func(value any, _ core.ExecutionContext) error {
+				handle: func(value any, _ execution.Context) error {
 					handled = value.(error)
 					return nil
 				},

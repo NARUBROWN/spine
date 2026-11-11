@@ -12,9 +12,10 @@ import (
 	gorillaplatform "github.com/NARUBROWN/spine-gorilla-platform"
 	kafkaplatform "github.com/NARUBROWN/spine-kafka-platform"
 	rabbitmqplatform "github.com/NARUBROWN/spine-rabbitmq-platform"
+	eventcontract "github.com/NARUBROWN/spine/contract/event"
 	"github.com/NARUBROWN/spine/interceptor/cors"
 	"github.com/NARUBROWN/spine/pkg/boot"
-	"github.com/NARUBROWN/spine/pkg/route"
+	"github.com/NARUBROWN/spine/pkg/constructor"
 )
 
 func main() {
@@ -22,74 +23,22 @@ func main() {
 	if err != nil {
 		log.Fatalf("[Demo] invalid environment configuration: %v", err)
 	}
-	appOptions := []spine.Option{platform.Option(), gorillaplatform.Option()}
+	var eventAdapters []referenceEventAdapter
 	if config.Kafka != nil {
 		factory, err := kafkaplatform.NewFactory(*config.Kafka)
 		if err != nil {
 			log.Fatal(err)
 		}
-		appOptions = append(appOptions, spine.WithEventAdapter("kafka", factory))
+		eventAdapters = append(eventAdapters, referenceEventAdapter{name: "kafka", factory: factory})
 	}
 	if config.RabbitMQ != nil {
 		factory, err := rabbitmqplatform.NewFactory(*config.RabbitMQ)
 		if err != nil {
 			log.Fatal(err)
 		}
-		appOptions = append(appOptions, spine.WithEventAdapter("rabbitmq", factory))
+		eventAdapters = append(eventAdapters, referenceEventAdapter{name: "rabbitmq", factory: factory})
 	}
-	app := spine.New(appOptions...)
-
-	// 생성자 등록
-	app.Constructor(
-		NewUserController,
-		NewOrderConsumer,
-		NewCommonController,
-		NewChatController,
-	)
-
-	// 라우트 등록, 라우터 단위 인터셉터
-	app.Route(
-		"GET",
-		"/users/:id",
-		(*UserController).GetUser,
-		route.WithInterceptors(&LoggingInterceptor{}),
-	)
-
-	app.Route(
-		"GET",
-		"/users",
-		(*UserController).GetUserQuery,
-	)
-
-	app.Route(
-		"POST",
-		"/upload",
-		(*UserController).Upload,
-	)
-
-	app.Route(
-		"POST",
-		"/orders/:orderId",
-		(*UserController).CreateOrder,
-	)
-
-	app.Route(
-		"POST",
-		"/stocks/:stockId",
-		(*UserController).CreateStock,
-	)
-
-	app.Route(
-		"GET",
-		"/headers",
-		(*CommonController).CheckHeader,
-	)
-
-	app.Route(
-		"GET",
-		"/images/:id",
-		(*CommonController).GetAvatar,
-	)
+	app := newReferenceApp(eventAdapters...)
 
 	corsMaxAge := 600
 	corsInterceptor, err := cors.NewValidated(cors.Config{
@@ -129,6 +78,30 @@ func main() {
 	if err := app.Run(config.Options); err != nil {
 		log.Fatalf("[Demo] application stopped with an error: %v", err)
 	}
+}
+
+type referenceEventAdapter struct {
+	name    string
+	factory eventcontract.Factory
+}
+
+func newReferenceApp(eventAdapters ...referenceEventAdapter) spine.App {
+	appOptions := []spine.Option{platform.Option(), gorillaplatform.Option()}
+	publishing := eventPublishingConfig{}
+	for _, adapter := range eventAdapters {
+		appOptions = append(appOptions, spine.WithEventAdapter(adapter.name, adapter.factory))
+		publishing.enabled = publishing.enabled || adapter.factory.Capabilities().Publish
+	}
+
+	app := spine.New(appOptions...)
+	app.Constructor(
+		constructor.Custom(func() eventPublishingConfig { return publishing }),
+		constructor.Controller(&UserController{}),
+		constructor.Controller(&CommonController{}),
+		constructor.Custom(NewOrderConsumer),
+		constructor.Custom(NewChatController),
+	)
+	return app
 }
 
 type demoConfig struct {

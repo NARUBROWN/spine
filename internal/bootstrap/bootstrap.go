@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -13,25 +14,26 @@ import (
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/configuration"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/endpoint"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	eventResolver "github.com/NARUBROWN/spine/internal/event/consumer/resolver"
 	"github.com/NARUBROWN/spine/internal/event/hook"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/internal/resolver"
 	spineRouter "github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/ws"
 	wsResolver "github.com/NARUBROWN/spine/internal/ws/resolver"
-	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 type Config struct {
 	Address                 string
 	Constructors            []any
 	ControllerConstructors  []any
-	ComponentIssues         []boot.ConfigIssue
+	ComponentIssues         []configuration.ConfigIssue
 	TypedComponents         bool
 	Routes                  []spineRouter.RouteSpec
 	Interceptors            []core.Interceptor
@@ -41,7 +43,7 @@ type Config struct {
 	ShutdownTimeout         time.Duration
 	EventAdapters           []EventAdapterBinding
 	ConsumerRegistry        *consumer.Registry
-	HTTP                    *boot.HTTPOptions
+	HTTP                    *configuration.HTTPOptions
 	HTTPAdapterFactory      adapter.Factory
 	WebSocketAdapterFactory wsadapter.Factory
 	WebSocketRegistry       *ws.Registry
@@ -54,7 +56,7 @@ type Config struct {
 type EventAdapterBinding struct {
 	Name    string
 	Factory eventadapter.Factory
-	Options boot.EventOptions
+	Options configuration.EventOptions
 }
 
 // InterceptorBinding은 글로벌 인터셉터를 기본 제공 전송 방식과 연결합니다.
@@ -62,12 +64,12 @@ type EventAdapterBinding struct {
 // App.InterceptorFor를 통해 등록합니다.
 type InterceptorBinding struct {
 	Interceptor core.Interceptor
-	Scope       boot.InterceptorScope
+	Scope       configuration.InterceptorScope
 }
 
 type scopedInterceptor struct {
 	interceptor core.Interceptor
-	scope       boot.InterceptorScope
+	scope       configuration.InterceptorScope
 }
 
 type interceptorIdentity struct {
@@ -110,12 +112,24 @@ func Validate(config Config) error {
 }
 
 // validate는 사전 검사에 사용한 UI 리소스를 준비 단계에도 전달합니다.
-func validate(config Config) ([]boot.OpenAPIResource, error) {
+func validate(config Config) ([]configuration.OpenAPIResource, error) {
 	issues := controllerProviderIssues(config)
 	issues = append(issues, componentValidationIssues(config)...)
-	var openAPIResources []boot.OpenAPIResource
+	if config.ConsumerRegistry != nil {
+		resolvers := consumerArgumentResolvers(config.Validator)
+		for i, registration := range config.ConsumerRegistry.Registrations() {
+			issues = append(issues, messageHandlerIssues(registration.Meta, resolvers, fmt.Sprintf("Consumers[%d]", i), "EVENT")...)
+		}
+	}
+	if config.WebSocketRegistry != nil {
+		resolvers := webSocketArgumentResolvers(config.Validator)
+		for i, registration := range config.WebSocketRegistry.Registrations() {
+			issues = append(issues, messageHandlerIssues(registration.Meta, resolvers, fmt.Sprintf("WebSockets[%d]", i), "WEBSOCKET")...)
+		}
+	}
+	var openAPIResources []configuration.OpenAPIResource
 	if config.ShutdownTimeout < 0 {
-		issues = append(issues, boot.ConfigIssue{
+		issues = append(issues, configuration.ConfigIssue{
 			Path:    "ShutdownTimeout",
 			Code:    "SHUTDOWN_TIMEOUT_INVALID",
 			Message: "Shutdown timeout cannot be negative.",
@@ -127,14 +141,14 @@ func validate(config Config) ([]boot.OpenAPIResource, error) {
 	for i, binding := range config.EventAdapters {
 		path := fmt.Sprintf("EventAdapters[%d]", i)
 		if strings.TrimSpace(binding.Name) == "" || names[binding.Name] {
-			issues = append(issues, boot.ConfigIssue{Path: path + ".Name", Code: "EVENT_ADAPTER_NAME_INVALID", Message: "Event adapter names must be non-empty and unique.", Hint: "Assign a distinct name to each platform."})
+			issues = append(issues, configuration.ConfigIssue{Path: path + ".Name", Code: "EVENT_ADAPTER_NAME_INVALID", Message: "Event adapter names must be non-empty and unique.", Hint: "Assign a distinct name to each platform."})
 		}
 		names[binding.Name] = true
-		issues = append(issues, binding.Options.ConsumerRetry.ValidateIssues(path+".ConsumerRetry")...)
-		issues = append(issues, binding.Options.PublisherErrorHistory.ValidateIssues(path+".PublisherErrorHistory")...)
-		issues = append(issues, binding.Options.ConsumerErrorHistory.ValidateIssues(path+".ConsumerErrorHistory")...)
+		issues = append(issues, configuration.ValidateConsumerRetry(binding.Options.ConsumerRetry, path+".ConsumerRetry")...)
+		issues = append(issues, configuration.ValidateCleanupHistory(binding.Options.PublisherErrorHistory, path+".PublisherErrorHistory")...)
+		issues = append(issues, configuration.ValidateCleanupHistory(binding.Options.ConsumerErrorHistory, path+".ConsumerErrorHistory")...)
 		if binding.Options.SettlementTimeout < 0 {
-			issues = append(issues, boot.ConfigIssue{Path: path + ".SettlementTimeout", Code: "EVENT_SETTLEMENT_TIMEOUT_INVALID", Message: "Settlement timeout cannot be negative.", Hint: "Use zero for the default or a positive duration."})
+			issues = append(issues, configuration.ConfigIssue{Path: path + ".SettlementTimeout", Code: "EVENT_SETTLEMENT_TIMEOUT_INVALID", Message: "Settlement timeout cannot be negative.", Hint: "Use zero for the default or a positive duration."})
 		}
 		if err := eventadapter.ValidateFactory(binding.Factory, eventadapter.Requirements{}); err != nil {
 			adapterErrors = append(adapterErrors, fmt.Errorf("%s (%s): %w", path, binding.Name, err))
@@ -143,7 +157,7 @@ func validate(config Config) ([]boot.OpenAPIResource, error) {
 
 	if config.HTTP == nil {
 		if config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0 {
-			issues = append(issues, boot.ConfigIssue{
+			issues = append(issues, configuration.ConfigIssue{
 				Path: "HTTP", Code: "WEBSOCKET_HTTP_REQUIRED",
 				Message: "WebSocket routes require the HTTP runtime.",
 				Hint:    "Configure boot.Options.HTTP before registering WebSocket routes.",
@@ -152,24 +166,26 @@ func validate(config Config) ([]boot.OpenAPIResource, error) {
 	} else {
 		prefix := config.HTTP.GlobalPrefix
 		if prefix != "" && (!strings.HasPrefix(prefix, "/") || strings.ContainsAny(prefix, ":*")) {
-			issues = append(issues, boot.ConfigIssue{
+			issues = append(issues, configuration.ConfigIssue{
 				Path: "HTTP.GlobalPrefix", Code: "HTTP_GLOBAL_PREFIX_INVALID",
 				Message: "HTTP global prefix must start with '/' and cannot contain parameters or wildcards.",
 				Hint:    "Use a static prefix such as /api/v1.",
 			})
 		}
-		issues = append(issues, config.HTTP.ValidateIssues("HTTP")...)
+		issues = append(issues, configuration.ValidateHTTP(*config.HTTP, "HTTP")...)
 		resources, resourceIssues := openAPIUIResources(config.HTTP.OpenAPI)
 		openAPIResources = resources
 		issues = append(issues, resourceIssues...)
 		issues = append(issues, openAPICollisionIssues(config, resources)...)
+		issues = append(issues, httpWebSocketCollisionIssues(config)...)
 	}
 	for i, route := range config.Routes {
 		if meta, err := spineRouter.Meta(route); err == nil {
 			issues = append(issues, endpoint.HandlerDTOParameterIssues(meta, fmt.Sprintf("Routes[%d]", i), route.Path)...)
+			issues = append(issues, endpoint.ResponseTypeIssues(meta, fmt.Sprintf("Routes[%d]", i))...)
 		}
 		if _, err := spineRouter.Meta(route); err != nil {
-			issues = append(issues, boot.ConfigIssue{
+			issues = append(issues, configuration.ConfigIssue{
 				Path:    fmt.Sprintf("Routes[%d].Handler", i),
 				Code:    "HTTP_ROUTE_HANDLER_INVALID",
 				Message: fmt.Sprintf("HTTP route handler is invalid: %v", err),
@@ -180,19 +196,19 @@ func validate(config Config) ([]boot.OpenAPIResource, error) {
 
 	bindings := make([]InterceptorBinding, 0, len(config.Interceptors)+len(config.ScopedInterceptors))
 	for _, interceptor := range config.Interceptors {
-		bindings = append(bindings, InterceptorBinding{Interceptor: interceptor, Scope: boot.InterceptorAll})
+		bindings = append(bindings, InterceptorBinding{Interceptor: interceptor, Scope: configuration.InterceptorAll})
 	}
 	bindings = append(bindings, config.ScopedInterceptors...)
 	for i, binding := range bindings {
 		path := fmt.Sprintf("Interceptors[%d]", i)
 		if reflect.TypeOf(binding.Interceptor) == nil {
-			issues = append(issues, boot.ConfigIssue{Path: path, Code: "INTERCEPTOR_NIL", Message: "Global interceptor is nil.", Hint: "Remove the nil entry or provide an interceptor instance."})
+			issues = append(issues, configuration.ConfigIssue{Path: path, Code: "INTERCEPTOR_NIL", Message: "Global interceptor is nil.", Hint: "Remove the nil entry or provide an interceptor instance."})
 		}
-		if binding.Scope == 0 || binding.Scope&^boot.InterceptorAll != 0 {
-			issues = append(issues, boot.ConfigIssue{Path: path + ".Scope", Code: "INTERCEPTOR_SCOPE_INVALID", Message: "Interceptor transport scope is invalid.", Hint: "Use boot.InterceptorHTTP, boot.InterceptorWebSocket, or boot.InterceptorAll."})
+		if binding.Scope == 0 || binding.Scope&^configuration.InterceptorAll != 0 {
+			issues = append(issues, configuration.ConfigIssue{Path: path + ".Scope", Code: "INTERCEPTOR_SCOPE_INVALID", Message: "Interceptor transport scope is invalid.", Hint: "Use boot.InterceptorHTTP, boot.InterceptorWebSocket, or boot.InterceptorAll."})
 		}
 	}
-	if err := boot.ValidationError(issues...); err != nil {
+	if err := configuration.ValidationError(issues...); err != nil {
 		return nil, err
 	}
 	if config.ValidatorConfigured || config.Validator != nil {
@@ -204,7 +220,7 @@ func validate(config Config) ([]boot.OpenAPIResource, error) {
 		meta, _ := spineRouter.Meta(route)
 		issues = append(issues, endpoint.HandlerValidationParameterIssues(meta, fmt.Sprintf("Routes[%d]", i), config.Validator)...)
 	}
-	if err := boot.ValidationError(issues...); err != nil {
+	if err := configuration.ValidationError(issues...); err != nil {
 		return nil, err
 	}
 	if config.HTTP != nil {
@@ -223,7 +239,7 @@ func validate(config Config) ([]boot.OpenAPIResource, error) {
 	return openAPIResources, errors.Join(adapterErrors...)
 }
 
-func serverOptions(options boot.HTTPOptions) adapter.ServerOptions {
+func serverOptions(options configuration.HTTPOptions) adapter.ServerOptions {
 	if options.MaxBodyBytes == 0 {
 		options.MaxBodyBytes = 32 << 20
 	}
@@ -254,7 +270,7 @@ func isNilHTTPValue(value any) bool {
 func resolveGlobalInterceptors(ctr *container.Container, config Config) ([]core.Interceptor, []core.Interceptor, error) {
 	bindings := make([]InterceptorBinding, 0, len(config.Interceptors)+len(config.ScopedInterceptors))
 	for _, interceptor := range config.Interceptors {
-		bindings = append(bindings, InterceptorBinding{Interceptor: interceptor, Scope: boot.InterceptorAll})
+		bindings = append(bindings, InterceptorBinding{Interceptor: interceptor, Scope: configuration.InterceptorAll})
 	}
 	bindings = append(bindings, config.ScopedInterceptors...)
 
@@ -265,7 +281,7 @@ func resolveGlobalInterceptors(ctr *container.Container, config Config) ([]core.
 		if t == nil {
 			return nil, nil, fmt.Errorf("[Bootstrap] interceptor[%d] is nil", i)
 		}
-		if binding.Scope == 0 || binding.Scope&^boot.InterceptorAll != 0 {
+		if binding.Scope == 0 || binding.Scope&^configuration.InterceptorAll != 0 {
 			return nil, nil, fmt.Errorf("[Bootstrap] interceptor[%d] has invalid transport scope %d", i, binding.Scope)
 		}
 		if identity, identifiable := globalInterceptorIdentity(binding.Interceptor); identifiable {
@@ -294,10 +310,10 @@ func resolveGlobalInterceptors(ctr *container.Container, config Config) ([]core.
 		} else {
 			log.Printf("[Bootstrap] Using interceptor instance: %T", interceptor)
 		}
-		if binding.scope&boot.InterceptorHTTP != 0 {
+		if binding.scope&configuration.InterceptorHTTP != 0 {
 			resolvedHTTP = append(resolvedHTTP, interceptor)
 		}
-		if binding.scope&boot.InterceptorWebSocket != 0 {
+		if binding.scope&configuration.InterceptorWebSocket != 0 {
 			resolvedWS = append(resolvedWS, interceptor)
 		}
 	}
@@ -422,7 +438,7 @@ func waitConsumerError(errors <-chan error, done <-chan struct{}) error {
 }
 
 const (
-	spineVersion = "v0.7.2"
+	spineVersion = "v0.7.5"
 	spineBanner  = `
 ________       _____             
 __  ___/__________(_)___________ 
@@ -438,57 +454,85 @@ func printBanner() {
 	log.Printf("[Bootstrap] Spine version: %s", runtimeSpineVersion())
 }
 
-func buildConsumerPipeline(container *container.Container, registry *consumer.Registry, dispatchHook *hook.EventDispatchHook, validator validation.Validator) *pipeline.Pipeline {
-	consumerRouter := spineRouter.NewRouter()
-	for _, registration := range registry.Registrations() {
-		consumerRouter.Register("EVENT", registration.Topic, registration.Meta)
-	}
-
-	consumerInvoker := invoker.NewInvoker(container)
-	consumerPipeline := pipeline.NewPipeline(consumerRouter, consumerInvoker)
+func buildConsumerPipeline(container *container.Container, dispatchHook *hook.EventDispatchHook, validator validation.Validator) *pipeline.Pipeline {
+	consumerPipeline := pipeline.NewPipeline(nil, invoker.NewInvoker(container))
 
 	if dispatchHook != nil {
-		consumerPipeline.AddPostExecutionHook(dispatchHook)
+		consumerPipeline.SetEventDispatch(dispatchHook)
 	}
 
-	consumerPipeline.AddArgumentResolver(
+	consumerPipeline.AddArgumentResolver(consumerArgumentResolvers(validator)...)
+	return consumerPipeline
+}
+
+func consumerArgumentResolvers(validator validation.Validator) []resolver.ArgumentResolver {
+	return []resolver.ArgumentResolver{
 		&resolver.StdContextResolver{},
+		&resolver.ControllerContextResolver{RequireExecutionContext: true},
 		&eventResolver.EventNameResolver{},
 		&eventResolver.PayloadResolver{},
 		&eventResolver.DTOResolver{Validator: validator},
-	)
-
-	return consumerPipeline
+	}
 }
 
 func buildWSPipeline(
 	container *container.Container,
-	registry *ws.Registry,
 	dispatchHook *hook.EventDispatchHook,
 	interceptors []core.Interceptor,
 	validator validation.Validator,
 ) *pipeline.Pipeline {
-	wsRouter := spineRouter.NewRouter()
-	for _, reg := range registry.Registrations() {
-		wsRouter.Register("WS", reg.Path, reg.Meta)
-	}
-
-	wsInvoker := invoker.NewInvoker(container)
-	wsPipeline := pipeline.NewPipeline(wsRouter, wsInvoker)
+	wsPipeline := pipeline.NewPipeline(nil, invoker.NewInvoker(container))
 	for _, interceptor := range interceptors {
 		wsPipeline.AddInterceptor(interceptor)
 	}
 
 	if dispatchHook != nil {
-		wsPipeline.AddPostExecutionHook(dispatchHook)
+		wsPipeline.SetEventDispatch(dispatchHook)
 	}
 
-	wsPipeline.AddArgumentResolver(
+	wsPipeline.AddArgumentResolver(webSocketArgumentResolvers(validator)...)
+	return wsPipeline
+}
+
+func webSocketArgumentResolvers(validator validation.Validator) []resolver.ArgumentResolver {
+	return []resolver.ArgumentResolver{
 		&resolver.StdContextResolver{},
+		&resolver.ControllerContextResolver{RequireExecutionContext: true},
 		&wsResolver.ConnectionIDResolver{},
 		&wsResolver.PayloadResolver{},
 		&wsResolver.DTOResolver{Validator: validator},
-	)
+	}
+}
 
-	return wsPipeline
+func messageHandlerIssues(meta execution.HandlerMeta, resolvers []resolver.ArgumentResolver, prefix, transport string) []configuration.ConfigIssue {
+	var issues []configuration.ConfigIssue
+	signature := meta.FunctionType()
+	if signature.IsVariadic() {
+		issues = append(issues, configuration.ConfigIssue{
+			Path: prefix, Code: transport + "_PARAMETER_UNSUPPORTED",
+			Message: "Variadic message handlers are unsupported.",
+			Hint:    "Declare a fixed parameter list.",
+		})
+	}
+	for i := 0; i < signature.NumOut(); i++ {
+		if result := signature.Out(i); !result.Implements(reflect.TypeFor[error]()) {
+			issues = append(issues, configuration.ConfigIssue{
+				Path: fmt.Sprintf("%s.Returns[%d]", prefix, i), Code: transport + "_RETURN_UNSUPPORTED",
+				Message: fmt.Sprintf("No message return handler supports %s.", result),
+				Hint:    "Return an error or use an explicit send or publish API.",
+			})
+		}
+	}
+	for _, parameter := range resolver.HandlerParameters(meta, nil) {
+		if !slices.ContainsFunc(resolvers, func(candidate resolver.ArgumentResolver) bool {
+			return candidate.Supports(parameter)
+		}) {
+			issues = append(issues, configuration.ConfigIssue{
+				Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: transport + "_PARAMETER_UNSUPPORTED",
+				Message: fmt.Sprintf("No resolver supports %s.", parameter.Type),
+				Hint:    "Use a supported context, message identifier, raw bytes, or struct payload.",
+			})
+		}
+	}
+	return issues
 }

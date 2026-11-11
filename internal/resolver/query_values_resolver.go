@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/pkg/query"
 )
 
@@ -15,8 +15,8 @@ func (*QueryValuesResolver) Supports(pm ParameterMeta) bool {
 	return pm.Type == reflect.TypeFor[query.Values]()
 }
 
-func (*QueryValuesResolver) Resolve(ctx core.ExecutionContext, _ ParameterMeta) (any, error) {
-	httpCtx, ok := ctx.(core.HttpRequestContext)
+func (*QueryValuesResolver) Resolve(ctx execution.Context, _ ParameterMeta) (any, error) {
+	httpCtx, ok := ctx.(execution.HTTPRequestContext)
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")
 	}

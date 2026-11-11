@@ -100,7 +100,7 @@ func Build() spine.App {
 
 ## 인터셉터 적용과 호환성
 
-`constructor.Interceptor(...)`는 DI 생성자 등록입니다. 전역 적용, 전송별 범위, 경로별 순서는 기존 `Interceptor`, `InterceptorFor`와 `route.WithInterceptors`로 정합니다. 생성자 등록만으로 인터셉터를 실행하지 않습니다.
+`constructor.Interceptor(...)`는 DI 생성자 등록입니다. 전역 적용, 전송별 범위, 경로별 순서는 `Interceptor`, `InterceptorFor`와 `api.Interceptors`로 정합니다. 생성자 등록만으로 인터셉터를 실행하지 않습니다.
 
 기존 `Constructor(NewUserRepository)` 함수 등록도 유지합니다. 외부 라이브러리 타입을 제공하는 기존 생성자나 이전 앱을 그대로 사용할 수 있습니다. 새 코드에서는 사용자 정의까지 모든 인자를 역할 표식으로 감싸면 각 인자의 역할이 드러납니다. 역할 표식 없이 기존 함수만 등록하는 앱은 이전 초기화 정책을 유지합니다.
 

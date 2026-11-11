@@ -3,20 +3,58 @@ package transport
 import (
 	"context"
 	"errors"
-	bodyinput "github.com/NARUBROWN/spine/internal/input"
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	adapter "github.com/NARUBROWN/spine/contract/http"
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/event/emission"
+	"github.com/NARUBROWN/spine/internal/execution"
+	bodyinput "github.com/NARUBROWN/spine/internal/input"
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 )
 
 type stateWriter struct{ adapter.ResponseWriter }
+
+type publicationProbe struct{}
+
+func (publicationProbe) Name() string          { return "publication-probe" }
+func (publicationProbe) OccurredAt() time.Time { return time.Time{} }
+
+func TestHTTPContextParallelViewsShareOnePublisher(t *testing.T) {
+	request := NewHTTPContext(testScope{ctx: context.Background()}, 0)
+	view := execution.NewContext(request)
+	start := make(chan struct{})
+	publishers := make(chan emission.Publisher, 32)
+	var workers sync.WaitGroup
+	for range cap(publishers) {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			publishers <- emission.FromContext(view.ExecutionContext().Context())
+		}()
+	}
+	close(start)
+	workers.Wait()
+	close(publishers)
+	for got := range publishers {
+		if got == nil {
+			t.Fatal("공개 뷰에 발행 기능이 없습니다")
+		}
+		if _, ok := got.(emission.Bus); ok {
+			t.Fatal("공개 뷰가 내부 큐 제어를 노출합니다")
+		}
+		got.Publish(publicationProbe{})
+	}
+	if events := request.EventBus().Drain(); len(events) != cap(publishers) {
+		t.Fatalf("같은 요청 큐에 쌓인 이벤트 수: %d", len(events))
+	}
+}
 
 func TestHTTPContextTypedStateIsIndependentOfUserStore(t *testing.T) {
 	ctx := NewHTTPContext(testScope{ctx: context.Background()}, 0)
@@ -144,7 +182,7 @@ func (s rawRouteScope) Method() string  { return "GET" }
 
 func TestHTTPRoutingSplitsRawPathBeforeDecoding(t *testing.T) {
 	r := router.NewRouter()
-	r.Register("GET", "/files/:name", core.HandlerMeta{})
+	r.Register("GET", "/files/:name", execution.HandlerMeta{})
 	for _, tc := range []struct{ path, want string }{
 		{"/files/a%2Fb", "a/b"}, {"/files/a%2fb", "a/b"}, {"/files/a%252Fb", "a%2Fb"},
 		{"/files/a%2F", "a/"}, {"/files/%E2%9C%93", "✓"}, {"/files/a%3Fb%23c", "a?b#c"},

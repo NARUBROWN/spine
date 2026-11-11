@@ -7,17 +7,17 @@ import (
 )
 
 func TestRegistryFreezesOwnedSnapshotsAndConfigurationErrors(t *testing.T) {
-	r := New(reflect.TypeFor[*struct{}]())
+	r, collector := New(reflect.TypeFor[*struct{}]())
 	r.GET("/first", func() {})
 	r.POST("/second", func() {})
 	missing := errors.New("missing configuration")
 	r.Error(missing)
-	routes, err := r.Freeze()
+	routes, err := collector.Freeze(r)
 	if !errors.Is(err, missing) || len(routes) != 2 {
 		t.Fatal(routes, err)
 	}
 	routes[0].Path = "changed"
-	another, _ := r.Freeze()
+	another, _ := collector.Freeze(r)
 	if another[0].Path != "/first" {
 		t.Fatal("snapshot aliases internal routes")
 	}
@@ -27,4 +27,15 @@ func TestRegistryFreezesOwnedSnapshotsAndConfigurationErrors(t *testing.T) {
 		}
 	}()
 	r.GET("/late", func() {})
+}
+
+func TestOverwritingRegistryPreservesCollectorError(t *testing.T) {
+	registry, collector := New(nil)
+	registered := errors.New("invalid configuration")
+	registry.Error(registered)
+	*registry = Registry{}
+	routes, err := collector.Freeze(registry)
+	if len(routes) != 0 || !errors.Is(err, registered) {
+		t.Fatal(routes, err)
+	}
 }

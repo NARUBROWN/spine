@@ -13,6 +13,7 @@ import (
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/constructor"
 	"github.com/NARUBROWN/spine/pkg/httpx"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type roleCounters struct{ builds, requests atomic.Int32 }
@@ -54,15 +55,15 @@ func (c *roleController) RegisterRoutes(r *api.Registry) {
 type roleInterceptor struct{ counters *roleCounters }
 
 func (*roleInterceptor) Constructor(c *roleCounters) *roleInterceptor { return &roleInterceptor{c} }
-func (i *roleInterceptor) PreHandle(core.ExecutionContext, core.HandlerMeta) error {
+func (i *roleInterceptor) PreHandle(contextapi.Ctx, core.HandlerMeta) error {
 	i.counters.requests.Add(1)
 	return nil
 }
-func (*roleInterceptor) PostHandle(core.ExecutionContext, core.HandlerMeta) {}
-func (*roleInterceptor) BeforeResponse(core.ExecutionContext, core.HandlerMeta, error) error {
+func (*roleInterceptor) PostHandle(contextapi.Ctx, core.HandlerMeta) {}
+func (*roleInterceptor) BeforeResponse(contextapi.Ctx, core.HandlerMeta, error) error {
 	return nil
 }
-func (*roleInterceptor) AfterCompletion(core.ExecutionContext, core.HandlerMeta, error) {}
+func (*roleInterceptor) AfterCompletion(contextapi.Ctx, core.HandlerMeta, error) {}
 
 func TestRoleConstructorsHTTPAndPreparedIsolation(t *testing.T) {
 	for _, platform := range []string{"echo", "nethttp"} {

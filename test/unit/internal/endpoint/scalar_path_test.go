@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/pkg/input"
 	"github.com/NARUBROWN/spine/pkg/path"
 )
@@ -37,7 +37,7 @@ func TestScalarPathPreparationContracts(t *testing.T) {
 		{"unsupported", "/:id", "HTTP_INPUT_CONTRACT_INVALID", func(input.Path[[]int]) {}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			meta := core.HandlerMeta{Callback: reflect.ValueOf(tc.handler)}
+			meta := execution.HandlerMeta{Callback: reflect.ValueOf(tc.handler)}
 			issues := HandlerDTOParameterIssues(meta, "Routes[0]", tc.route)
 			if tc.code == "" && len(issues) != 0 {
 				t.Fatalf("%+v", issues)

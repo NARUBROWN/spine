@@ -5,15 +5,16 @@ import (
 	"reflect"
 
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/componentregistration"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/pkg/api"
 	"github.com/NARUBROWN/spine/pkg/boot"
-	"github.com/NARUBROWN/spine/pkg/constructor"
 )
 
-func (a *app) componentRegistration(registration constructor.Registration) {
+func (a *app) componentRegistration(registration componentregistration.Registration) {
 	var contract reflect.Type
-	switch registration.Role() {
+	role, value := componentregistration.Unpack(registration)
+	switch role {
 	case "Custom", "Repository", "Service":
 	case "Controller":
 		contract = reflect.TypeFor[api.Controller]()
@@ -23,7 +24,7 @@ func (a *app) componentRegistration(registration constructor.Registration) {
 		a.componentIssues = append(a.componentIssues, boot.ConfigIssue{Path: "Constructors", Code: "COMPONENT_CONSTRUCTOR_INVALID", Message: "component registration must declare a role", Hint: "Use constructor.Custom, Repository, Service, Controller or Interceptor."})
 		return
 	}
-	a.componentConstructors(registration.Role(), contract, []any{registration.Value()})
+	a.componentConstructors(role, contract, []any{value})
 }
 
 func (a *app) componentConstructors(role string, contract reflect.Type, prototypes []any) {

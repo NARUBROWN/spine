@@ -19,6 +19,7 @@ import (
 	spinerouter "github.com/NARUBROWN/spine/internal/router"
 	wsruntime "github.com/NARUBROWN/spine/internal/ws"
 	"github.com/NARUBROWN/spine/pkg/boot"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 	pkgws "github.com/NARUBROWN/spine/pkg/ws"
 	"github.com/gorilla/websocket"
 )
@@ -33,16 +34,18 @@ type requestAwareInterceptor struct {
 	messageRemote string
 }
 
-func (i *requestAwareInterceptor) PreHandshake(ctx core.WebSocketHandshakeContext, _ core.HandlerMeta) error {
-	i.handshakeAuth = ctx.Header("Authorization")
+func (i *requestAwareInterceptor) PreHandshake(ctx contextapi.Ctx, _ core.HandlerMeta) error {
+	request, _ := ctx.WebSocket()
+	i.handshakeAuth = request.Header("Authorization")
 	close(i.handshakeSeen)
 	return nil
 }
 
-func (i *requestAwareInterceptor) PreHandle(ctx core.ExecutionContext, _ core.HandlerMeta) error {
-	i.messageAuth = ctx.Header("Authorization")
-	i.messageQuery = ctx.Queries()["token"][0]
-	if requestCtx, ok := ctx.(core.WebSocketMessageContext); ok {
+func (i *requestAwareInterceptor) PreHandle(ctx contextapi.Ctx, _ core.HandlerMeta) error {
+	request, _ := ctx.WebSocket()
+	i.messageAuth = request.Header("Authorization")
+	i.messageQuery = request.Queries()["token"][0]
+	if requestCtx, ok := ctx.WebSocket(); ok {
 		i.messageCookie, _ = requestCtx.Cookie("session")
 		i.messageRemote = requestCtx.RemoteAddr()
 	}
@@ -50,11 +53,11 @@ func (i *requestAwareInterceptor) PreHandle(ctx core.ExecutionContext, _ core.Ha
 	return nil
 }
 
-func (*requestAwareInterceptor) PostHandle(core.ExecutionContext, core.HandlerMeta) {}
-func (*requestAwareInterceptor) BeforeResponse(core.ExecutionContext, core.HandlerMeta, error) error {
+func (*requestAwareInterceptor) PostHandle(contextapi.Ctx, core.HandlerMeta) {}
+func (*requestAwareInterceptor) BeforeResponse(contextapi.Ctx, core.HandlerMeta, error) error {
 	return nil
 }
-func (*requestAwareInterceptor) AfterCompletion(core.ExecutionContext, core.HandlerMeta, error) {}
+func (*requestAwareInterceptor) AfterCompletion(contextapi.Ctx, core.HandlerMeta, error) {}
 
 type cancellationController struct {
 	started  chan struct{}

@@ -17,6 +17,7 @@ import (
 	"github.com/NARUBROWN/spine/pkg/header"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	"github.com/NARUBROWN/spine/pkg/query"
+	handlerctx "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type legacyContextKey struct{}
@@ -34,8 +35,8 @@ type legacyValuesResult struct {
 	User    string `json:"user"`
 }
 
-func (*legacyValuesController) Get(ctx context.Context, view core.ControllerContext, q query.Values, h header.Values, page query.Pagination) httpx.Response[legacyValuesResult] {
-	user, _ := view.Get("user")
+func (*legacyValuesController) Get(ctx context.Context, view handlerctx.Ctx, q query.Values, h header.Values, page query.Pagination) httpx.Response[legacyValuesResult] {
+	user, _ := view.ExecutionContext().Get("user")
 	return httpx.Response[legacyValuesResult]{Body: legacyValuesResult{
 		Tag: q.String("tag"), Count: q.Int("count", 7), Enabled: q.GetBoolByKey("enabled", false),
 		Header: h.Get("X-Test"), Empty: h.Has("X-Empty"), Host: h.Get("Host"), Page: page.Page, Size: page.Size,
@@ -59,15 +60,15 @@ func (v *legacyValuesValidator) DescribeSchema(reflect.Type) (validation.SchemaD
 
 type legacyValuesInterceptor struct{}
 
-func (*legacyValuesInterceptor) PreHandle(ctx core.ExecutionContext, _ core.HandlerMeta) error {
-	ctx.Set("user", "stored-user")
+func (*legacyValuesInterceptor) PreHandle(ctx handlerctx.Ctx, _ core.HandlerMeta) error {
+	ctx.ExecutionContext().Set("user", "stored-user")
 	return nil
 }
-func (*legacyValuesInterceptor) PostHandle(core.ExecutionContext, core.HandlerMeta) {}
-func (*legacyValuesInterceptor) BeforeResponse(core.ExecutionContext, core.HandlerMeta, error) error {
+func (*legacyValuesInterceptor) PostHandle(handlerctx.Ctx, core.HandlerMeta) {}
+func (*legacyValuesInterceptor) BeforeResponse(handlerctx.Ctx, core.HandlerMeta, error) error {
 	return nil
 }
-func (*legacyValuesInterceptor) AfterCompletion(core.ExecutionContext, core.HandlerMeta, error) {}
+func (*legacyValuesInterceptor) AfterCompletion(handlerctx.Ctx, core.HandlerMeta, error) {}
 
 func TestDeprecatedValuesWorkOverHTTPAndLeaveDynamicInputsUnresolved(t *testing.T) {
 	for _, configured := range []bool{false, true} {

@@ -12,9 +12,10 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"slices"
 
-	"github.com/NARUBROWN/spine/pkg/httperr"
-	"github.com/NARUBROWN/spine/pkg/jsonx"
+	"github.com/NARUBROWN/spine/internal/httpfailure"
+	"github.com/NARUBROWN/spine/internal/jsondecode"
 )
 
 const (
@@ -79,7 +80,8 @@ func NewBody(ctx context.Context, reader io.Reader, contentType string, options 
 
 // Bind는 본문만 한 번 바인딩합니다. URL 쿼리나 라우팅 결과는 받지 않습니다.
 // 폼 DTO와 MultipartForm은 같은 파싱 결과를 사용하며 실패한 파싱도 반복하지 않습니다.
-func (b *Body) Bind(target any) (err error) {
+// allowedMedia를 지정하면 빈 본문 확인 뒤, 디코더 실행 전에 허용 형식을 검사합니다.
+func (b *Body) Bind(target any, allowedMedia ...[]string) (err error) {
 	if err := b.active(); err != nil {
 		return err
 	}
@@ -93,19 +95,14 @@ func (b *Body) Bind(target any) (err error) {
 	defer func() { b.bindErr = err }()
 
 	// 파일 리졸버가 먼저 파싱했다면 스트림의 EOF를 빈 본문으로 오인하지 않습니다.
-	if b.formParsed {
-		form, err := b.MultipartForm()
-		if err != nil {
-			return err
+	if !b.formParsed {
+		if _, err := b.reader.Peek(1); err != nil {
+			if errors.Is(err, io.EOF) {
+				b.empty = true
+				return nil
+			}
+			return b.readError(err)
 		}
-		return b.decodeError(bindBodyForm(b.ctx, target, form.Value, form.File))
-	}
-	if _, err := b.reader.Peek(1); err != nil {
-		if errors.Is(err, io.EOF) {
-			b.empty = true
-			return nil
-		}
-		return b.readError(err)
 	}
 	media, params, err := mime.ParseMediaType(b.contentType)
 	if err != nil {
@@ -114,8 +111,18 @@ func (b *Body) Bind(target any) (err error) {
 		}
 		return b.decodeError(err)
 	}
+	if len(allowedMedia) > 0 && !slices.Contains(allowedMedia[0], media) {
+		return bodyHTTPError(http.StatusUnsupportedMediaType, nil)
+	}
+	if b.formParsed {
+		form, err := b.MultipartForm()
+		if err != nil {
+			return err
+		}
+		return b.decodeError(bindBodyForm(b.ctx, target, form.Value, form.File))
+	}
 	if media == "multipart/form-data" {
-		form, err := b.multipartForm(media, params)
+		form, err := b.multipartForm(params)
 		if err != nil {
 			return err
 		}
@@ -133,9 +140,9 @@ func (b *Body) Bind(target any) (err error) {
 	}
 	switch media {
 	case "application/json":
-		err = jsonx.Unmarshal(data, target)
+		err = jsondecode.Unmarshal(data, target)
 	case "application/xml", "text/xml":
-		err = xml.NewDecoder(bytes.NewReader(data)).Decode(target)
+		err = decodeXML(data, target)
 	case "application/x-www-form-urlencoded":
 		var values url.Values
 		values, err = url.ParseQuery(string(data))
@@ -144,6 +151,47 @@ func (b *Body) Bind(target any) (err error) {
 		}
 	}
 	return b.decodeError(err)
+}
+
+func decodeXML(data []byte, target any) error {
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		if root, ok := token.(xml.StartElement); ok {
+			if err := decoder.DecodeElement(target, &root); err != nil {
+				return err
+			}
+			break
+		}
+		if text, ok := token.(xml.CharData); ok && len(bytes.Trim(text, " \t\r\n")) != 0 {
+			return fmt.Errorf("unexpected XML content before the root element")
+		}
+	}
+	for {
+		token, err := decoder.Token()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		switch value := token.(type) {
+		case xml.Comment:
+			continue
+		case xml.ProcInst:
+			if value.Target != "xml" {
+				continue
+			}
+		case xml.CharData:
+			if len(bytes.Trim(value, " \t\r\n")) == 0 {
+				continue
+			}
+		}
+		return fmt.Errorf("unexpected XML content after the root element")
+	}
 }
 
 // MultipartForm은 요청별 파싱 결과와 오류를 캐시합니다. 파일과 폼 리졸버의 순서는 무관합니다.
@@ -162,18 +210,16 @@ func (b *Body) MultipartForm() (*multipart.Form, error) {
 	}
 	media, params, err := mime.ParseMediaType(b.contentType)
 	if err != nil {
-		b.formParsed, b.formErr = true, b.decodeError(err)
-		return nil, b.formErr
+		return nil, b.decodeError(err)
 	}
-	return b.multipartForm(media, params)
+	if media != "multipart/form-data" {
+		return nil, b.decodeError(http.ErrNotMultipart)
+	}
+	return b.multipartForm(params)
 }
 
-func (b *Body) multipartForm(media string, params map[string]string) (*multipart.Form, error) {
+func (b *Body) multipartForm(params map[string]string) (*multipart.Form, error) {
 	b.formParsed = true
-	if media != "multipart/form-data" {
-		b.formErr = b.decodeError(http.ErrNotMultipart)
-		return nil, b.formErr
-	}
 	boundary := params["boundary"]
 	if boundary == "" {
 		b.formErr = b.decodeError(http.ErrMissingBoundary)
@@ -252,7 +298,7 @@ func (b *Body) multipartError(err error) error {
 }
 
 func bodyHTTPError(status int, cause error) error {
-	return &httperr.HTTPError{Status: status, Message: http.StatusText(status), Cause: cause}
+	return &httpfailure.HTTPError{Status: status, Message: http.StatusText(status), Cause: cause}
 }
 
 type bodyContextReader struct {

@@ -7,20 +7,24 @@ import (
 	"mime/multipart"
 	"net/url"
 	"slices"
+	"sync"
 
 	adapter "github.com/NARUBROWN/spine/contract/http"
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/event/emission"
 	"github.com/NARUBROWN/spine/internal/event/publish"
+	"github.com/NARUBROWN/spine/internal/execution"
+	"github.com/NARUBROWN/spine/internal/httpfailure"
 	"github.com/NARUBROWN/spine/internal/input"
-	"github.com/NARUBROWN/spine/pkg/httperr"
 )
 
 // HTTPContext는 독립 HTTP scope에 Spine 요청 store와 이벤트 버스를 결합합니다.
 type HTTPContext struct {
+	execution.Store
 	scope                adapter.HTTPContext
-	store                map[string]any
-	bus                  core.EventBus
-	writer               core.ResponseWriter
+	bus                  emission.Bus
+	busOnce              sync.Once
+	writerMu             sync.Mutex
+	writer               adapter.ResponseWriter
 	params               map[string]string
 	pathKeys             []string
 	multipartMemoryBytes int64
@@ -30,15 +34,35 @@ type HTTPContext struct {
 	closed               bool
 }
 
-var _ core.ExecutionContext = (*HTTPContext)(nil)
-var _ core.HttpRequestContext = (*HTTPContext)(nil)
+var _ execution.Context = (*HTTPContext)(nil)
+var _ execution.HTTPRequestContext = (*HTTPContext)(nil)
 
 func NewHTTPContext(scope adapter.HTTPContext, multipartMemoryBytes int64) *HTTPContext {
-	return &HTTPContext{scope: scope, store: make(map[string]any), writer: scope.Writer(), multipartMemoryBytes: multipartMemoryBytes}
+	return &HTTPContext{scope: scope, writer: scope.Writer(), multipartMemoryBytes: multipartMemoryBytes}
 }
 
-func (c *HTTPContext) ResponseWriter() core.ResponseWriter          { return c.writer }
-func (c *HTTPContext) SetResponseWriter(writer core.ResponseWriter) { c.writer = writer }
+func (c *HTTPContext) ResponseWriter() adapter.ResponseWriter {
+	c.writerMu.Lock()
+	defer c.writerMu.Unlock()
+	return c.writer
+}
+
+func (c *HTTPContext) SetResponseWriter(writer adapter.ResponseWriter) {
+	c.writerMu.Lock()
+	defer c.writerMu.Unlock()
+	c.writer = writer
+}
+
+// UseResponseWriter는 공개 뷰의 호출이 요청 정리보다 먼저 끝나도록 보장합니다.
+func (c *HTTPContext) UseResponseWriter(use func(adapter.ResponseWriter)) bool {
+	c.writerMu.Lock()
+	defer c.writerMu.Unlock()
+	if c.writer == nil {
+		return false
+	}
+	use(c.writer)
+	return true
+}
 func (c *HTTPContext) SetRoute(params map[string]string, pathKeys []string) {
 	c.params = maps.Clone(params)
 	c.pathKeys = slices.Clone(pathKeys)
@@ -70,13 +94,11 @@ func (c *HTTPContext) RawQuery() string { return c.scope.RawQuery() }
 
 func (c *HTTPContext) Header(name string) string    { return c.scope.Header(name) }
 func (c *HTTPContext) Headers() map[string][]string { return c.scope.Headers() }
-func (c *HTTPContext) Set(key string, value any)    { c.store[key] = value }
-func (c *HTTPContext) Get(key string) (any, bool)   { value, ok := c.store[key]; return value, ok }
-func (c *HTTPContext) Bind(out any) error {
+func (c *HTTPContext) Bind(out any, allowedMedia ...[]string) error {
 	if err := c.prepareBody(); err != nil {
 		return err
 	}
-	return normalizeInputError(c.body.Bind(out))
+	return normalizeInputError(c.body.Bind(out, allowedMedia...))
 }
 
 func (c *HTTPContext) prepareBody() error {
@@ -93,6 +115,7 @@ func (c *HTTPContext) prepareBody() error {
 
 // Cleanup은 완료 훅 뒤 공통 파서가 만든 파일만 회수합니다. 원본 스트림은 플랫폼 소유입니다.
 func (c *HTTPContext) Cleanup() error {
+	c.SetResponseWriter(nil)
 	c.closed = true
 	if c.body == nil {
 		return nil
@@ -128,17 +151,19 @@ func (c *HTTPContext) PathKeys() []string {
 	return slices.Clone(c.pathKeys)
 }
 
-func (c *HTTPContext) EventBus() core.EventBus {
-	if c.bus == nil {
-		c.bus = publish.NewEventBus()
-	}
+func (c *HTTPContext) EventBus() emission.Bus {
+	c.busOnce.Do(func() {
+		if c.bus == nil {
+			c.bus = publish.NewEventBus()
+		}
+	})
 	return c.bus
 }
 
 func normalizeInputError(err error) error {
 	var input *adapter.RequestError
 	if errors.As(err, &input) {
-		return &httperr.HTTPError{Status: input.Status, Message: input.Error(), Cause: err}
+		return &httpfailure.HTTPError{Status: input.Status, Message: input.Error(), Cause: err}
 	}
 	return err
 }

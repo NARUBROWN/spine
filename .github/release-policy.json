@@ -2,7 +2,7 @@
   "schema_version": "spine.release-policy/v2",
   "kind": "core",
   "module": "github.com/NARUBROWN/spine",
-  "next_version": "v0.7.2",
+  "next_version": "v0.7.5",
   "preview_hours": 72,
   "rc_hours": 24,
   "stable_interval_hours": 168,
@@ -15,7 +15,7 @@
   },
   "channels": {
     "preview": {
-      "core_version": "v0.7.2-preview.3",
+      "core_version": "v0.7.5-preview.1",
       "modules": {
         "github.com/NARUBROWN/spine-echo-platform": "v0.2.1-preview.1",
         "github.com/NARUBROWN/spine-nethttp-platform": "v0.1.0-preview.2",
@@ -27,7 +27,7 @@
       }
     },
     "rc": {
-      "core_version": "v0.7.2-rc.1",
+      "core_version": "v0.7.5-rc.1",
       "modules": {
         "github.com/NARUBROWN/spine-echo-platform": "v0.2.1-preview.1",
         "github.com/NARUBROWN/spine-nethttp-platform": "v0.1.0-preview.2",
@@ -39,7 +39,7 @@
       }
     },
     "stable": {
-      "core_version": "v0.7.2",
+      "core_version": "v0.7.5",
       "modules": {
         "github.com/NARUBROWN/spine-echo-platform": "v0.2.1-preview.1",
         "github.com/NARUBROWN/spine-nethttp-platform": "v0.1.0-preview.2",

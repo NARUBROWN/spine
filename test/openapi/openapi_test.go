@@ -54,7 +54,7 @@ type bodyDTO struct {
 }
 
 type uploadDTO struct {
-	Avatar      *multipart.FileHeader   `json:"avatar" form:"avatar" validate:"required"`
+	Avatar      *multipart.FileHeader   `json:"-" xml:"-" form:"avatar" validate:"required"`
 	Attachments []*multipart.FileHeader `json:"attachments" form:"attachments"`
 }
 type searchResult struct {
@@ -317,7 +317,11 @@ func TestSeparateQueryAndHeaderDTOsBindValidateAndDescribeTheirFields(t *testing
 
 func TestExistingFormUploadsAndReturnTypesWithoutDeclarations(t *testing.T) {
 	h, doc := application(t)
-	if len(operation(doc, "/upload", "post")["requestBody"].(map[string]any)["content"].(map[string]any)) != 1 {
+	requestBody := operation(doc, "/upload", "post")["requestBody"].(map[string]any)
+	if requestBody["required"] != true {
+		t.Fatal("필수 멀티파트 파일은 요청 본문도 필수로 표시해야 합니다")
+	}
+	if len(requestBody["content"].(map[string]any)) != 1 {
 		t.Fatal("파일 DTO는 multipart 미디어로만 기술해야 합니다")
 	}
 	for _, name := range []string{"a", "alice"} {

@@ -3,7 +3,7 @@ package handler
 import (
 	"reflect"
 
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/execution"
 )
 
 /*
@@ -15,5 +15,5 @@ type ReturnValueHandler interface {
 	Supports(returnType reflect.Type) bool
 
 	// Handle은 핸들러의 반환값을 실제 응답으로 처리합니다.
-	Handle(value any, ctx core.ExecutionContext) error
+	Handle(value any, ctx execution.Context) error
 }

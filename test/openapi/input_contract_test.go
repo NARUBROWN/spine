@@ -123,6 +123,42 @@ func TestHTTPValidationUsesBoundSourceAndWireNames(t *testing.T) {
 	}
 }
 
+func TestXMLRequestMediaAndWireNamesMatchOpenAPI(t *testing.T) {
+	h := sourceApplication(t, true)
+	document := serve(h, "GET", "/openapi.json", "", nil)
+	var spec struct {
+		Paths map[string]map[string]struct {
+			RequestBody struct {
+				Content map[string]struct {
+					Schema struct {
+						Ref string `json:"$ref"`
+					}
+				}
+			}
+		}
+		Components struct {
+			Schemas map[string]struct {
+				Properties map[string]json.RawMessage
+				Required   []string
+			}
+		}
+	}
+	if err := json.Unmarshal(document.Body.Bytes(), &spec); err != nil || document.Code != http.StatusOK {
+		t.Fatalf("OpenAPI: %d %v %s", document.Code, err, document.Body)
+	}
+	for _, media := range []string{"application/xml", "text/xml"} {
+		result := serve(h, "POST", "/body", media, strings.NewReader("<request><xml_id>bound</xml_id></request>"))
+		if result.Code != http.StatusOK || !strings.Contains(result.Body.String(), `"id":"bound"`) {
+			t.Fatalf("%s: %d %s", media, result.Code, result.Body)
+		}
+		ref := spec.Paths["/body"]["post"].RequestBody.Content[media].Schema.Ref
+		schema := spec.Components.Schemas[strings.TrimPrefix(ref, "#/components/schemas/")]
+		if schema.Properties["xml_id"] == nil || schema.Properties["id"] != nil || !reflect.DeepEqual(schema.Required, []string{"xml_id"}) {
+			t.Fatalf("%s schema %s: %+v", media, ref, schema)
+		}
+	}
+}
+
 func TestHeaderMultiplicityAndQuotedListsUseTheSameRulesWithOrWithoutValidator(t *testing.T) {
 	for _, configured := range []bool{false, true} {
 		h := sourceApplication(t, configured)

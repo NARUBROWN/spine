@@ -1,10 +1,10 @@
 package resolver
 
 import (
-	"github.com/NARUBROWN/spine/core"
-	"github.com/NARUBROWN/spine/internal/input"
 	"reflect"
 
+	"github.com/NARUBROWN/spine/internal/execution"
+	"github.com/NARUBROWN/spine/internal/input"
 	"github.com/NARUBROWN/spine/pkg/header"
 	"github.com/NARUBROWN/spine/pkg/path"
 	"github.com/NARUBROWN/spine/pkg/query"
@@ -15,7 +15,7 @@ func Parameters(method reflect.Method, pathKeys []string) []ParameterMeta {
 	return callableParameters(method.Type, 1, pathKeys)
 }
 
-func HandlerParameters(meta core.HandlerMeta, pathKeys []string) []ParameterMeta {
+func HandlerParameters(meta execution.HandlerMeta, pathKeys []string) []ParameterMeta {
 	return callableParameters(meta.FunctionType(), meta.ArgumentOffset(), pathKeys)
 }
 
