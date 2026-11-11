@@ -14,6 +14,8 @@
 
 **Preview** | 公開済みコアタグ [`v0.7.2-preview.3`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.3)
 
+次のソース候補は `v0.7.5-preview.1` です。互換性を壊す変更は[移行ガイド](docs/migration/v0.7.5.md)を参照してください。このタグはまだ公開していません。
+
 他のチャネル | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 
 ## コアコンセプト

@@ -96,14 +96,18 @@ func (c *firstFacadeController) Write(ctx contextapi.Ctx, path input.Path[firstF
 	store.Set("value", path.Token)
 	shared := c.second.Share(ctx)
 	c.state.retain(ctx)
-	httpView, ok := ctx.HTTP()
+	request, ok := ctx.HTTPRequestContext()
 	if !ok {
 		return httpx.Response[facadeResult]{}, fmt.Errorf("HTTP view is missing")
 	}
 	if _, ok := ctx.WebSocket(); ok {
 		return httpx.Response[facadeResult]{}, fmt.Errorf("HTTP execution exposes a WebSocket view")
 	}
-	httpView.Response().SetHeader("X-Context-View", path.Token)
+	response, ok := ctx.HTTPResponseContext()
+	if !ok {
+		return httpx.Response[facadeResult]{}, fmt.Errorf("HTTP response view is missing")
+	}
+	response.SetHeader("X-Context-View", path.Token)
 	switch path.Mode {
 	case "error":
 		return httpx.Response[facadeResult]{}, httperr.BadRequest("rejected")
@@ -112,15 +116,15 @@ func (c *firstFacadeController) Write(ctx contextapi.Ctx, path input.Path[firstF
 	}
 	return httpx.Response[facadeResult]{Body: facadeResult{
 		Found: true, Value: path.Token, Shared: shared,
-		RequestID: httpView.Request().Header("X-Request-ID"),
+		RequestID: request.Header("X-Request-ID"),
 	}}, nil
 }
 
 type facadeObserver struct{ state *facadeState }
 
 func (*facadeObserver) PreHandle(ctx contextapi.Ctx, _ core.HandlerMeta) error {
-	httpView, _ := ctx.HTTP()
-	ctx.ExecutionContext().Set("requestID", httpView.Request().Header("X-Request-ID"))
+	request, _ := ctx.HTTPRequestContext()
+	ctx.ExecutionContext().Set("requestID", request.Header("X-Request-ID"))
 	return nil
 }
 
@@ -145,8 +149,8 @@ func (o *facadeObserver) PostHandle(ctx contextapi.Ctx, _ core.HandlerMeta) {
 func (o *facadeObserver) BeforeResponse(ctx contextapi.Ctx, _ core.HandlerMeta, _ error) error {
 	o.record("before", ctx)
 	if value, ok := ctx.ExecutionContext().Get("value"); ok {
-		httpView, _ := ctx.HTTP()
-		httpView.Response().SetHeader("X-Controller-Value", value.(string))
+		response, _ := ctx.HTTPResponseContext()
+		response.SetHeader("X-Controller-Value", value.(string))
 	}
 	return nil
 }

@@ -449,7 +449,7 @@ func TestHandshakeContextStoreIsSharedAndReleased(t *testing.T) {
 			read := false
 			writer := &handshakeStoreProbe{run: func(ctx contextapi.Ctx) error {
 				retained = ctx
-				if _, ok := ctx.HTTP(); ok {
+				if _, ok := ctx.HTTPRequestContext(); ok {
 					t.Fatal("handshake가 HTTP 실행 뷰를 노출합니다")
 				}
 				socket, ok := ctx.WebSocket()

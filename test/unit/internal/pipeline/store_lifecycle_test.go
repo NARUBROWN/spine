@@ -70,15 +70,18 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 				t.Run(outcome, func(t *testing.T) {
 					ctx := create()
 					public := execution.NewContext(ctx)
-					if _, ok := public.HTTP(); ok != (name == "http") {
+					if _, ok := public.HTTPRequestContext(); ok != (name == "http") {
 						t.Fatal("전송 종류와 HTTP 뷰 지원 여부가 다릅니다")
 					}
 					if _, ok := public.WebSocket(); ok != (name == "websocket") {
 						t.Fatal("전송 종류와 WebSocket 뷰 지원 여부가 다릅니다")
 					}
 					views := []any{public, public.ExecutionContext()}
-					if httpView, ok := public.HTTP(); ok {
-						views = append(views, httpView, httpView.Request())
+					if request, ok := public.HTTPRequestContext(); ok {
+						views = append(views, request)
+					}
+					if response, ok := public.HTTPResponseContext(); ok {
+						views = append(views, response)
 					}
 					if socket, ok := public.WebSocket(); ok {
 						views = append(views, socket)

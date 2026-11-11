@@ -47,8 +47,8 @@ func (s *responseBaselineState) observe(phase string, ctx contextapi.Ctx) {
 		event.successHeader = s.recorder.Header().Get("X-Success")
 	}
 	if ctx != nil {
-		if response, ok := ctx.HTTP(); ok && response.Response() != nil {
-			event.prepared = response.Response().IsCommitted()
+		if response, ok := ctx.HTTPResponseContext(); ok {
+			event.prepared = response.IsCommitted()
 		}
 	}
 

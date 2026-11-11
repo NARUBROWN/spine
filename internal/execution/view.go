@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"encoding/json"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -22,20 +23,19 @@ func (v publicContext) Get(key string) (any, bool) { return v.source.Get(key) }
 func (v publicContext) ExecutionContext() contextview.ExecutionContextView {
 	return executionView{source: v.source}
 }
-func (v publicContext) HTTP() (contextview.HTTPView, bool) {
+func (v publicContext) HTTPRequestContext() (contextview.HTTPRequestView, bool) {
 	request, ok := v.source.(HTTPRequestContext)
 	if !ok {
 		return nil, false
 	}
+	return httpRequestView{source: v.source, request: request}, true
+}
+func (v publicContext) HTTPResponseContext() (contextview.HTTPResponseView, bool) {
 	response, ok := v.source.(HTTPResponseContext)
-	if !ok {
+	if !ok || response.ResponseWriter() == nil {
 		return nil, false
 	}
-	return httpView{
-		source:   v.source,
-		request:  request,
-		response: response,
-	}, true
+	return httpResponseView{response: response}, true
 }
 func (v publicContext) WebSocket() (contextview.WebSocketView, bool) {
 	message, ok := v.source.(WebSocketContext)
@@ -59,26 +59,23 @@ func (v executionView) Context() context.Context   { return GoContext(v.source) 
 func (v executionView) Get(key string) (any, bool) { return v.source.Get(key) }
 func (v executionView) Set(key string, value any)  { v.source.Set(key, value) }
 
-type httpView struct {
-	source   Context
-	request  HTTPRequestContext
-	response HTTPResponseContext
+type httpRequestView struct {
+	source  Context
+	request HTTPRequestContext
 }
 
-func (v httpView) Context() context.Context              { return GoContext(v.source) }
-func (v httpView) Request() contextview.HTTPRequestView  { return v }
-func (v httpView) Response() httpcontract.ResponseWriter { return v.response.ResponseWriter() }
-func (v httpView) Method() string                        { return v.source.Method() }
-func (v httpView) Path() string                          { return v.source.Path() }
-func (v httpView) Params() map[string]string             { return v.source.Params() }
-func (v httpView) PathKeys() []string                    { return v.source.PathKeys() }
-func (v httpView) Header(name string) string             { return v.request.Header(name) }
-func (v httpView) Queries() map[string][]string          { return v.request.Queries() }
+func (v httpRequestView) Context() context.Context     { return GoContext(v.source) }
+func (v httpRequestView) Method() string               { return v.request.Method() }
+func (v httpRequestView) Path() string                 { return v.request.Path() }
+func (v httpRequestView) Params() map[string]string    { return v.request.Params() }
+func (v httpRequestView) PathKeys() []string           { return v.request.PathKeys() }
+func (v httpRequestView) Header(name string) string    { return v.request.Header(name) }
+func (v httpRequestView) Queries() map[string][]string { return v.request.Queries() }
 
-func (v httpView) Param(name string) string     { return v.request.Param(name) }
-func (v httpView) Query(name string) string     { return v.request.Query(name) }
-func (v httpView) Headers() map[string][]string { return v.request.Headers() }
-func (v httpView) MultipartForm() (contextview.MultipartFields, error) {
+func (v httpRequestView) Param(name string) string     { return v.request.Param(name) }
+func (v httpRequestView) Query(name string) string     { return v.request.Query(name) }
+func (v httpRequestView) Headers() map[string][]string { return v.request.Headers() }
+func (v httpRequestView) MultipartForm() (contextview.MultipartFields, error) {
 	form, err := v.request.MultipartForm()
 	if err != nil || form == nil {
 		return contextview.MultipartFields{}, err
@@ -103,6 +100,24 @@ func (v httpView) MultipartForm() (contextview.MultipartFields, error) {
 		fields.File[name] = headers
 	}
 	return fields, nil
+}
+
+// httpResponseView는 staging 변경 뒤에도 현재 writer에 위임합니다.
+type httpResponseView struct{ response HTTPResponseContext }
+
+func (v httpResponseView) writer() httpcontract.ResponseWriter { return v.response.ResponseWriter() }
+func (v httpResponseView) SetHeader(key, value string)         { v.writer().SetHeader(key, value) }
+func (v httpResponseView) AddHeader(key, value string)         { v.writer().AddHeader(key, value) }
+func (v httpResponseView) IsCommitted() bool                   { return v.writer().IsCommitted() }
+func (v httpResponseView) WriteStatus(status int) error        { return v.writer().WriteStatus(status) }
+func (v httpResponseView) WriteJSON(status int, body json.RawMessage) error {
+	return v.writer().WriteJSON(status, body)
+}
+func (v httpResponseView) WriteString(status int, body string) error {
+	return v.writer().WriteString(status, body)
+}
+func (v httpResponseView) WriteBytes(status int, body []byte) error {
+	return v.writer().WriteBytes(status, body)
 }
 
 type webSocketView struct {

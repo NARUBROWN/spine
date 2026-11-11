@@ -109,8 +109,7 @@ func (i *inputV3Interceptor) AfterCompletion(ctx contextapi.Ctx, _ core.HandlerM
 	if _, err := os.Stat(c.path); err != nil {
 		c.t.Errorf("AfterCompletion까지 파일이 있어야 합니다: %v", err)
 	}
-	httpView, _ := ctx.HTTP()
-	request := httpView.Request()
+	request, _ := ctx.HTTPRequestContext()
 	form, err := request.MultipartForm()
 	if err != nil || form.Value["title"][0] != "body" {
 		c.t.Errorf("완료 훅에서 multipart 결과를 읽어야 합니다: %v", err)

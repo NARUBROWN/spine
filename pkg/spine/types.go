@@ -21,18 +21,20 @@ type ExecutionContextView = interface {
 }
 
 // Ctx는 HTTP, 이벤트와 WebSocket 핸들러 및 인터셉터의 공통 진입점입니다.
-// HTTP와 WebSocket은 현재 실행에서 제공하는 뷰와 지원 여부를 반환합니다.
+// 전송별 조회는 현재 실행에서 제공하는 뷰와 지원 여부를 반환합니다.
 // Get은 폐기 예정이며 ExecutionContext().Get으로 전환하세요.
 type Ctx interface {
 	ExecutionContext() ExecutionContextView
-	HTTP() (HTTPView, bool)
+	HTTPRequestContext() (HTTPRequestView, bool)
+	HTTPResponseContext() (HTTPResponseView, bool)
 	WebSocket() (WebSocketView, bool)
 	// Deprecated: ExecutionContext().Get을 사용하세요.
 	Get(key string) (any, bool)
 }
 
-// HTTPView는 HTTP 요청 조회와 현재 응답 writer를 제공합니다.
-type HTTPView = contextview.HTTPView
+// HTTPResponseView는 호출할 때마다 현재 응답 writer를 참조하는 공개 뷰입니다.
+// 응답 writer 교체와 실행 수명 제어는 노출하지 않습니다.
+type HTTPResponseView = contextview.HTTPResponseView
 
 // HTTPRequestView는 HTTP 요청과 동적 멀티파트 필드를 조회합니다.
 type HTTPRequestView = contextview.HTTPRequestView

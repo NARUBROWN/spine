@@ -523,7 +523,7 @@ func (c *AdminController) RegisterRoutes(r *api.Registry) {
 | `input.Body[SomeDTO]` without path/query/header/form tags | Bound request DTO | The request `Content-Type` selects the JSON, XML or form decoder. Malformed input returns HTTP 400. |
 | `input.Body[SomeForm]` with at least one `form` tag | Bound form DTO | The presence of a form tag selects form binding. |
 | `multipart.UploadedFiles` | Uploaded file descriptors | Call each file's `Open` and close the returned stream. |
-| `pkg/spine.Ctx` | Common handler and interceptor context | `ExecutionContext()` provides `Get`, `Set` and `Context()`. `HTTP()` and `WebSocket()` return supported transport views. Direct `Get` is deprecated. |
+| `pkg/spine.Ctx` | Common handler and interceptor context | `ExecutionContext()` provides `Get`, `Set` and `Context()`. `HTTPRequestContext()`, `HTTPResponseContext()` and `WebSocket()` return supported transport views. Direct `Get` is deprecated. |
 
 Arbitrary primitive parameters and application service parameters are not controller arguments. Put services on the controller through constructor injection.
 
@@ -600,8 +600,8 @@ type Interceptor interface {
 - `app.InterceptorFor(boot.InterceptorWebSocket, x)` applies only to WebSocket messages and handshake auth when implemented.
 - `boot.InterceptorAll` means HTTP plus WebSocket, not Kafka/RabbitMQ consumers.
 - Use `api.Interceptors` to apply interceptors to a route or group.
-- Use `httpView, ok := ctx.HTTP()` and guard `ok`. `httpView.Request()` provides headers, params, query and multipart access; `httpView.Response()` returns the current response writer. HTTP and WebSocket views do not expose routing, body binding or writer replacement.
-- Call `publish.Event(ctx.ExecutionContext().Context(), event)` in `PreHandle` to queue an event from an interceptor. Read handler information with `meta.HandlerName()` and `meta.FunctionType()`. WebSocket message views return an independent payload copy. See [the migration guide](docs/migration/v0.7.2.md) for removed execution members.
+- Use `request, ok := ctx.HTTPRequestContext()` for headers, params, query and multipart access. Use `response, ok := ctx.HTTPResponseContext()` for response headers, status and body writing. Guard each boolean. Both views reference the same request execution, and retained response views follow writer replacement. Request and response capabilities are checked independently. Public views do not expose routing, body binding, raw writers or writer replacement.
+- Call `publish.Event(ctx.ExecutionContext().Context(), event)` in `PreHandle` to queue an event from an interceptor. Read handler information with `meta.HandlerName()` and `meta.FunctionType()`. WebSocket message views return an independent payload copy. See [the migration guide](docs/migration/v0.7.5.md) for removed execution members.
 - `ctx.ExecutionContext().Set/Get` shares values throughout one execution, including handler writes read by later interceptor phases. Separate HTTP requests, event messages and WS messages are isolated. After `AfterCompletion`, retained views return `nil, false` and ignore writes. Clearing store references permits GC; it does not force a collection or clear app-owned references.
 - Reusing the same interceptor pointer across scopes merges its scopes and executes that instance once. Different instances of the same type execute independently.
 
@@ -893,7 +893,7 @@ Prepare collects each controller once per prepared application, freezes routes a
 DescribeHTTP before collection returns ErrRoutesNotCollected without constructors or external readiness.
 DescribePreparedHTTP returns the prepared snapshot. CLI runtime export does not call Prepare automatically.
 Validator FieldNameMapper supplies request-local wire names without replacing DTO types or mutating shared validators.
-This describes the original controller-route candidate. The current v0.7.2 source removes unwrapped HTTP DTO pointers and internal core context interfaces; use input wrappers and spine.Ctx as described in docs/migration/v0.7.2.md.
+This describes the original controller-route candidate. The v0.7.5-preview.1 source candidate carries explicit HTTP input wrappers and removes internal core context interfaces. Use spine.Ctx with separate HTTPRequestContext and HTTPResponseContext views as described in docs/migration/v0.7.5.md. The new tag has not been published.
 The matching CLI candidate analyzes Registry callbacks/helpers with go/types and generates RegisterRoutes for cores >=v0.7.0-preview.5.
 Older selected cores keep legacy generation. Local replacements and source tests do not prove public installation support.
 See docs/migration/controller-routes.md for the complete example and lifecycle limits. Publication still requires matching tags.

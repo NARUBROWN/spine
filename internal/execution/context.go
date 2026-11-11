@@ -26,6 +26,9 @@ type Context interface {
 
 type HTTPRequestContext interface {
 	Context() context.Context
+	Method() string
+	Path() string
+	PathKeys() []string
 	Param(name string) string
 	Query(name string) string
 	Header(name string) string

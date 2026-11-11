@@ -107,12 +107,14 @@ func (i *CORSInterceptor) PreHandle(ctx contextapi.Ctx, meta core.HandlerMeta) e
 	if i.configErr != nil {
 		return i.configErr
 	}
-	httpView, ok := ctx.HTTP()
-	if !ok || httpView.Response() == nil {
+	request, ok := ctx.HTTPRequestContext()
+	if !ok {
 		return nil
 	}
-	rw := httpView.Response()
-	request := httpView.Request()
+	rw, ok := ctx.HTTPResponseContext()
+	if !ok {
+		return nil
+	}
 	origin := request.Header("Origin")
 	requestedMethod := request.Header("Access-Control-Request-Method")
 	preflight := request.Method() == http.MethodOptions && origin != "" && requestedMethod != ""

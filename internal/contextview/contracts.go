@@ -19,16 +19,15 @@ type ExecutionContextView = interface {
 
 type Ctx interface {
 	ExecutionContext() ExecutionContextView
-	HTTP() (HTTPView, bool)
+	HTTPRequestContext() (HTTPRequestView, bool)
+	HTTPResponseContext() (HTTPResponseView, bool)
 	WebSocket() (WebSocketView, bool)
 	// Deprecated: ExecutionContext().Get을 사용하세요.
 	Get(key string) (any, bool)
 }
 
-type HTTPView interface {
-	Request() HTTPRequestView
-	Response() httpcontract.ResponseWriter
-}
+// HTTPResponseView는 내부 writer 교체를 허용하지 않는 응답 출력 계약입니다.
+type HTTPResponseView = httpcontract.ResponseWriter
 
 type HTTPRequestView interface {
 	ContextCarrier

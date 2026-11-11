@@ -32,8 +32,8 @@ func (p *corsProbe) Options() httpx.Response[string] {
 type varyProbe struct{}
 
 func (*varyProbe) PreHandle(ctx contextapi.Ctx, _ core.HandlerMeta) error {
-	httpView, _ := ctx.HTTP()
-	httpView.Response().SetHeader("Vary", "Accept-Encoding")
+	response, _ := ctx.HTTPResponseContext()
+	response.SetHeader("Vary", "Accept-Encoding")
 	return nil
 }
 func (*varyProbe) PostHandle(contextapi.Ctx, core.HandlerMeta)                  {}

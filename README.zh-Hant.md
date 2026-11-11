@@ -14,6 +14,8 @@
 
 **Preview** | 已發布的核心標籤 [`v0.7.2-preview.3`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.3)
 
+下一個原始碼候選版本為 `v0.7.5-preview.1`。破壞性變更請參閱[遷移指南](docs/migration/v0.7.5.md)。此標籤尚未發布。
+
 其他管道 | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 
 ## 核心理念
