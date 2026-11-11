@@ -16,11 +16,11 @@ import (
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/configuration"
 	"github.com/NARUBROWN/spine/internal/contextview"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/httpfailure"
 	"github.com/NARUBROWN/spine/internal/pipeline"
-	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 const (
@@ -94,7 +94,7 @@ func (c *trackedConn) writeClose(code int, reason string, timeout time.Duration)
 	return c.conn.WriteClose(code, reason, writeDeadline(timeout))
 }
 
-func NewRuntime(pipeline *pipeline.Pipeline, adapter wsadapter.Adapter, opts boot.WebSocketOptions, handshakeInterceptors ...core.WebSocketHandshakeInterceptor) *Runtime {
+func NewRuntime(pipeline *pipeline.Pipeline, adapter wsadapter.Adapter, opts configuration.WebSocketOptions, handshakeInterceptors ...core.WebSocketHandshakeInterceptor) *Runtime {
 	if wsadapter.ValidateAdapter(adapter) != nil {
 		panic("ws: adapter cannot be nil")
 	}
@@ -116,12 +116,12 @@ func NewRuntime(pipeline *pipeline.Pipeline, adapter wsadapter.Adapter, opts boo
 }
 
 // AdapterOptions는 커널 기본값을 적용한 연결 설정만 플랫폼에 전달합니다.
-func AdapterOptions(opts boot.WebSocketOptions) wsadapter.Options {
+func AdapterOptions(opts configuration.WebSocketOptions) wsadapter.Options {
 	normalized := normalizeWebSocketOptions(opts)
 	return wsadapter.Options{HandshakeTimeout: normalized.HandshakeTimeout, ReadTimeout: normalized.ReadTimeout, MaxMessageBytes: normalized.MaxMessageBytes}
 }
 
-func normalizeWebSocketOptions(opts boot.WebSocketOptions) normalizedWebSocketOptions {
+func normalizeWebSocketOptions(opts configuration.WebSocketOptions) normalizedWebSocketOptions {
 	normalized := normalizedWebSocketOptions{
 		AllowedOrigins:   append([]string(nil), opts.AllowedOrigins...),
 		MaxConnections:   opts.MaxConnections,
@@ -143,7 +143,7 @@ func normalizeWebSocketOptions(opts boot.WebSocketOptions) normalizedWebSocketOp
 		normalized.MaxMessageBytes = defaultWSMaxMessageBytes
 	}
 	if normalized.MaxConnections == 0 {
-		normalized.MaxConnections = boot.DefaultWebSocketMaxConnections
+		normalized.MaxConnections = configuration.DefaultWebSocketMaxConnections
 	}
 	if normalized.CapacityRetry == 0 {
 		normalized.CapacityRetry = defaultWSCapacityRetry

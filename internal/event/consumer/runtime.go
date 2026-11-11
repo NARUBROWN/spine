@@ -10,9 +10,9 @@ import (
 	"time"
 
 	eventadapter "github.com/NARUBROWN/spine/contract/event"
+	"github.com/NARUBROWN/spine/internal/configuration"
 	"github.com/NARUBROWN/spine/internal/event/cleanup"
 	"github.com/NARUBROWN/spine/internal/pipeline"
-	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 type runnerFactory interface {
@@ -91,7 +91,7 @@ func NewTransportRetryPolicy(initialDelay, maxDelay time.Duration, multiplier, j
 	return policy
 }
 
-func NewRuntime(registry *Registry, factory runnerFactory, pipeline *pipeline.Pipeline, history ...boot.CleanupErrorHistoryOptions) *Runtime {
+func NewRuntime(registry *Registry, factory runnerFactory, pipeline *pipeline.Pipeline, history ...configuration.CleanupErrorHistoryOptions) *Runtime {
 	if registry == nil {
 		panic("consumer: registry cannot be nil")
 	}

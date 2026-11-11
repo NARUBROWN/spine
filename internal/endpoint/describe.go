@@ -9,21 +9,21 @@ import (
 
 	"github.com/NARUBROWN/spine/contract/description"
 	validation "github.com/NARUBROWN/spine/contract/validator"
+	"github.com/NARUBROWN/spine/internal/configuration"
 	"github.com/NARUBROWN/spine/internal/handler"
 	inputbinding "github.com/NARUBROWN/spine/internal/input"
 	"github.com/NARUBROWN/spine/internal/resolver"
 	"github.com/NARUBROWN/spine/internal/router"
-	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 // Describe는 타입과 등록만 읽으며 리졸버의 Resolve나 반환 처리의 Handle을 실행하지 않습니다.
-func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator validation.Validator) (description.HTTP, error) {
+func Describe(routes []router.RouteSpec, options *configuration.HTTPOptions, validator validation.Validator) (description.HTTP, error) {
 	result := description.HTTP{ContractVersion: description.ContractVersion, Enabled: options != nil, Routes: []description.Route{}, Schemas: map[string]json.RawMessage{}, Diagnostics: []description.Diagnostic{}}
 	if options == nil {
 		return result, nil
 	}
 	result.PathsOnly = validator == nil
-	if err := boot.ValidationError(options.ValidateIssues("HTTP")...); err != nil {
+	if err := configuration.ValidationError(configuration.ValidateHTTP(*options, "HTTP")...); err != nil {
 		return result, err
 	}
 	prefix := strings.TrimSuffix(options.GlobalPrefix, "/")
@@ -35,22 +35,23 @@ func Describe(routes []router.RouteSpec, options *boot.HTTPOptions, validator va
 		c.diagnostic("VALIDATOR_NOT_CONFIGURED", "HTTP", "Only registered paths and methods are described because no validator is configured.")
 	}
 	seen := map[string]bool{}
-	var inputIssues []boot.ConfigIssue
+	var inputIssues []configuration.ConfigIssue
 	for index, spec := range routes {
 		meta, err := router.Meta(spec)
 		if err != nil {
 			return result, err
 		}
 		inputIssues = append(inputIssues, HandlerDTOParameterIssues(meta, fmt.Sprintf("Routes[%d]", index), spec.Path)...)
+		inputIssues = append(inputIssues, StringResponseIssues(meta, fmt.Sprintf("Routes[%d]", index))...)
 	}
-	if err := boot.ValidationError(inputIssues...); err != nil {
+	if err := configuration.ValidationError(inputIssues...); err != nil {
 		return result, err
 	}
 	for index, spec := range routes {
 		meta, _ := router.Meta(spec)
 		inputIssues = append(inputIssues, HandlerValidationParameterIssues(meta, fmt.Sprintf("Routes[%d]", index), validator)...)
 	}
-	if err := boot.ValidationError(inputIssues...); err != nil {
+	if err := configuration.ValidationError(inputIssues...); err != nil {
 		return result, err
 	}
 	for _, spec := range routes {

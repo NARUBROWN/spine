@@ -1,4 +1,4 @@
-package boot
+package configuration
 
 import (
 	"math"
@@ -7,15 +7,15 @@ import (
 )
 
 func TestConsumerRetryOptionsValidateEveryBound(t *testing.T) {
-	if issues := (ConsumerRetryOptions{}).ValidateIssues("Events.Retry"); len(issues) != 0 {
+	if issues := ValidateConsumerRetry(ConsumerRetryOptions{}, "Events.Retry"); len(issues) != 0 {
 		t.Fatal(issues)
 	}
-	issues := (ConsumerRetryOptions{InitialDelay: 2 * time.Second, MaxDelay: time.Second, Multiplier: .5, Jitter: 1.1, MaxAttempts: -1}).ValidateIssues("Events.Retry")
+	issues := ValidateConsumerRetry(ConsumerRetryOptions{InitialDelay: 2 * time.Second, MaxDelay: time.Second, Multiplier: .5, Jitter: 1.1, MaxAttempts: -1}, "Events.Retry")
 	if len(issues) != 4 {
 		t.Fatalf("경계 오류를 모두 반환해야 합니다: %+v", issues)
 	}
 	for _, value := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
-		if issues := (ConsumerRetryOptions{Multiplier: value, Jitter: value}).ValidateIssues("Retry"); len(issues) != 2 {
+		if issues := ValidateConsumerRetry(ConsumerRetryOptions{Multiplier: value, Jitter: value}, "Retry"); len(issues) != 2 {
 			t.Fatalf("유한하지 않은 재시도 설정을 허용했습니다: %+v", issues)
 		}
 	}
@@ -30,10 +30,10 @@ func TestConfigErrorFormatting(t *testing.T) {
 }
 
 func TestCleanupErrorHistoryOptionsRejectNegativeBounds(t *testing.T) {
-	if issues := (CleanupErrorHistoryOptions{}).ValidateIssues("History"); len(issues) != 0 {
+	if issues := ValidateCleanupHistory(CleanupErrorHistoryOptions{}, "History"); len(issues) != 0 {
 		t.Fatal(issues)
 	}
-	issues := (CleanupErrorHistoryOptions{MaxEntries: -1, MaxAge: -time.Second}).ValidateIssues("History")
+	issues := ValidateCleanupHistory(CleanupErrorHistoryOptions{MaxEntries: -1, MaxAge: -time.Second}, "History")
 	if len(issues) != 2 || issues[0].Path != "History.MaxEntries" || issues[1].Path != "History.MaxAge" {
 		t.Fatal(issues)
 	}

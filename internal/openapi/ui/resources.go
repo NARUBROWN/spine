@@ -7,8 +7,8 @@ import (
 	"path"
 	"strings"
 
+	"github.com/NARUBROWN/spine/internal/configuration"
 	"github.com/NARUBROWN/spine/internal/openapi/resourcepath"
-	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 // RelativeURL은 프록시가 덧붙인 외부 접두사도 유지하는 상대 URL을 만듭니다.
@@ -143,6 +143,6 @@ func ValidatePaths(page, document string) error {
 	return nil
 }
 
-func Asset(page, name, contentType, body string) boot.OpenAPIResource {
-	return boot.OpenAPIResource{Path: page + "/_assets/" + name, ContentType: contentType, Body: body}
+func Asset(page, name, contentType, body string) configuration.OpenAPIResource {
+	return configuration.OpenAPIResource{Path: page + "/_assets/" + name, ContentType: contentType, Body: body}
 }

@@ -22,9 +22,9 @@ for contract in contract/description contract/http contract/event contract/valid
 done
 
 # 공개 인터셉터 계약은 spine.Ctx를 사용하며 내부 구현은 내부 뷰 계약을 사용합니다.
-handler_context=$(go list -f '{{join .Imports "\n"}}' ./internal/... | awk '$0 == "github.com/NARUBROWN/spine/pkg/spine"')
+handler_context=$(go list -f '{{join .Imports "\n"}}' ./internal/... | awk '$0 == "github.com/NARUBROWN/spine/pkg/spine" || $0 == "github.com/NARUBROWN/spine/pkg/boot"')
 if [ -n "$handler_context" ]; then
-  printf 'Internal packages depend on the public handler context package.\n' >&2
+  printf '내부 패키지는 공개 핸들러 컨텍스트와 boot 패키지에 의존하면 안 됩니다.\n%s\n' "$handler_context" >&2
   exit 1
 fi
 

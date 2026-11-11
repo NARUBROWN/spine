@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/NARUBROWN/spine/internal/configuration"
 )
 
 type record struct {
@@ -17,15 +17,15 @@ type record struct {
 // History의 zero value는 기본 정책을 사용합니다. 사용을 시작한 뒤 복사하면 안 됩니다.
 type History struct {
 	mu      sync.Mutex
-	policy  boot.CleanupErrorHistoryOptions
+	policy  configuration.CleanupErrorHistoryOptions
 	entries []record
 	timer   *time.Timer
 	now     func() time.Time
 	closed  bool
 }
 
-func NewHistory(options ...boot.CleanupErrorHistoryOptions) History {
-	var policy boot.CleanupErrorHistoryOptions
+func NewHistory(options ...configuration.CleanupErrorHistoryOptions) History {
+	var policy configuration.CleanupErrorHistoryOptions
 	if len(options) > 0 {
 		policy = options[0]
 	}
@@ -34,10 +34,10 @@ func NewHistory(options ...boot.CleanupErrorHistoryOptions) History {
 
 func (h *History) defaults() {
 	if h.policy.MaxEntries <= 0 {
-		h.policy.MaxEntries = boot.DefaultCleanupErrorHistoryMaxEntries
+		h.policy.MaxEntries = configuration.DefaultCleanupErrorHistoryMaxEntries
 	}
 	if h.policy.MaxAge <= 0 {
-		h.policy.MaxAge = boot.DefaultCleanupErrorHistoryMaxAge
+		h.policy.MaxAge = configuration.DefaultCleanupErrorHistoryMaxAge
 	}
 	if h.now == nil {
 		h.now = time.Now

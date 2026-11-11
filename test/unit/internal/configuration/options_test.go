@@ -1,4 +1,4 @@
-package boot
+package configuration
 
 import (
 	"crypto/tls"
@@ -7,18 +7,18 @@ import (
 )
 
 func TestHTTPOptionsRejectsTLSWithoutCertificateMaterial(t *testing.T) {
-	issues := (HTTPOptions{TLS: &tls.Config{}}).ValidateIssues("HTTP")
+	issues := ValidateHTTP(HTTPOptions{TLS: &tls.Config{}}, "HTTP")
 	if len(issues) != 1 || issues[0].Path != "HTTP.TLS" || issues[0].Code != "HTTP_TLS_INVALID" {
 		t.Fatalf("TLS 설정 진단: %v", issues)
 	}
 }
 
 func TestWebSocketOptionsValidateIssues(t *testing.T) {
-	issues := (WebSocketOptions{
+	issues := ValidateWebSocket(WebSocketOptions{
 		MaxConnections:    -2,
 		AllowedOrigins:    []string{"https://example.test/path"},
 		TrustedProxyCIDRs: []string{"10.0.0.0/99"},
-	}).ValidateIssues("HTTP.WebSocket")
+	}, "HTTP.WebSocket")
 	if len(issues) != 3 {
 		t.Fatalf("issues = %d, want 3: %v", len(issues), issues)
 	}
@@ -41,19 +41,19 @@ func TestWebSocketOptionsNamedConnectionLimits(t *testing.T) {
 	if UnlimitedWebSocketConnections >= 0 {
 		t.Fatal("unlimited WebSocket connection expression must be negative")
 	}
-	if err := (WebSocketOptions{MaxConnections: UnlimitedWebSocketConnections}).Validate(); err != nil {
+	if err := ValidationError(ValidateWebSocket(WebSocketOptions{MaxConnections: UnlimitedWebSocketConnections}, "HTTP.WebSocket")...); err != nil {
 		t.Fatalf("explicit unlimited connection setting must be valid: %v", err)
 	}
 }
 
 func TestWebSocketOptionsRejectsNegativeBoundsAndTimeouts(t *testing.T) {
-	issues := (WebSocketOptions{
+	issues := ValidateWebSocket(WebSocketOptions{
 		MaxMessageBytes:  -1,
 		HandshakeTimeout: -time.Second,
 		ReadTimeout:      -time.Second,
 		WriteTimeout:     -time.Second,
 		PingInterval:     -time.Second,
-	}).ValidateIssues("HTTP.WebSocket")
+	}, "HTTP.WebSocket")
 	want := []string{
 		"WEBSOCKET_MAX_MESSAGE_BYTES_INVALID",
 		"WEBSOCKET_HANDSHAKE_TIMEOUT_INVALID",
@@ -72,14 +72,14 @@ func TestWebSocketOptionsRejectsNegativeBoundsAndTimeouts(t *testing.T) {
 }
 
 func TestHTTPOptionsRejectsNegativeTimeoutsAndHeaderLimitButAllowsUnlimitedBody(t *testing.T) {
-	issues := (HTTPOptions{
+	issues := ValidateHTTP(HTTPOptions{
 		ReadHeaderTimeout: -time.Second,
 		ReadTimeout:       -time.Second,
 		WriteTimeout:      -time.Second,
 		IdleTimeout:       -time.Second,
 		MaxHeaderBytes:    -1,
 		MaxBodyBytes:      -1,
-	}).ValidateIssues("HTTP")
+	}, "HTTP")
 	want := []string{
 		"HTTP_READ_HEADER_TIMEOUT_INVALID",
 		"HTTP_READ_TIMEOUT_INVALID",

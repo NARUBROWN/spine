@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -111,6 +112,41 @@ func TestHTTPOnlyDoesNotRequireOrCreateWSAdapter(t *testing.T) {
 	defer prepared.Close(context.Background())
 	if factory.newCalls != 0 {
 		t.Fatal("WS 경로가 없는 앱에서 WS 구현을 생성하면 안 됩니다")
+	}
+}
+
+func TestWSControllerWarmUpRejectsNilBeforeCreatingAdapter(t *testing.T) {
+	factory := &testWSFactory{version: wsadapter.ContractVersion, instance: &testWSAdapter{}}
+	config := wsFactoryConfig(t, factory)
+	var calls int
+	config.Constructors = []any{func() *wsFactoryController { calls++; return nil }}
+	if err := Validate(config); err != nil || calls != 0 {
+		t.Fatalf("정적 검증에서 생성자를 실행하면 안 됩니다: %v", err)
+	}
+	prepared, err := Prepare(context.Background(), config)
+	if prepared != nil || err == nil || !strings.Contains(err.Error(), "WebSocket controller warm-up failed") || !strings.Contains(err.Error(), "returned nil") {
+		t.Fatalf("WS 생성자 실패를 Prepare에서 진단해야 합니다: %v", err)
+	}
+	if calls != 1 || factory.newCalls != 0 {
+		t.Fatalf("실패한 WS 컨트롤러로 어댑터를 만들면 안 됩니다: %d/%d", calls, factory.newCalls)
+	}
+}
+
+func TestWSControllerWarmUpResolvesSharedControllerOnce(t *testing.T) {
+	factory := &testWSFactory{version: wsadapter.ContractVersion, instance: &testWSAdapter{}}
+	config := wsFactoryConfig(t, factory)
+	if err := config.WebSocketRegistry.Register("/ws/other", (*wsFactoryController).Handle); err != nil {
+		t.Fatal(err)
+	}
+	var calls int
+	config.Constructors = []any{func() *wsFactoryController { calls++; return &wsFactoryController{} }}
+	prepared, err := Prepare(context.Background(), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer prepared.Close(context.Background())
+	if calls != 1 || factory.newCalls != 1 {
+		t.Fatalf("여러 경로가 공유하는 WS 컨트롤러는 한 번 준비해야 합니다: %d/%d", calls, factory.newCalls)
 	}
 }
 

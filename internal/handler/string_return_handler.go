@@ -34,7 +34,7 @@ func (h *StringReturnHandler) Supports(returnType reflect.Type) bool {
 		return false
 	}
 
-	return field.Type.Kind() == reflect.String
+	return field.Type == reflect.TypeFor[string]()
 }
 
 func (h *StringReturnHandler) Handle(value any, ctx execution.Context) error {

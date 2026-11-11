@@ -8,11 +8,11 @@ import (
 	"strings"
 
 	"github.com/NARUBROWN/spine/contract/description"
-	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/NARUBROWN/spine/internal/configuration"
 )
 
 // OpenAPI는 이미 설명한 계약만 직렬화하며 앱이나 검증기를 다시 실행하지 않습니다.
-func OpenAPI(contract description.HTTP, options boot.OpenAPIOptions) (json.RawMessage, error) {
+func OpenAPI(contract description.HTTP, options configuration.OpenAPIOptions) (json.RawMessage, error) {
 	title, version := options.Title, options.Version
 	if title == "" {
 		title = "Spine API"

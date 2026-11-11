@@ -7,6 +7,7 @@ import (
 	"mime/multipart"
 	"net/url"
 	"slices"
+	"sync"
 
 	adapter "github.com/NARUBROWN/spine/contract/http"
 	"github.com/NARUBROWN/spine/core"
@@ -22,6 +23,7 @@ type HTTPContext struct {
 	execution.Store
 	scope                adapter.HTTPContext
 	bus                  emission.Bus
+	busOnce              sync.Once
 	writer               core.ResponseWriter
 	params               map[string]string
 	pathKeys             []string
@@ -129,9 +131,11 @@ func (c *HTTPContext) PathKeys() []string {
 }
 
 func (c *HTTPContext) EventBus() emission.Bus {
-	if c.bus == nil {
-		c.bus = publish.NewEventBus()
-	}
+	c.busOnce.Do(func() {
+		if c.bus == nil {
+			c.bus = publish.NewEventBus()
+		}
+	})
 	return c.bus
 }
 

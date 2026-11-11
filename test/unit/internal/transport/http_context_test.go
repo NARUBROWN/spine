@@ -6,10 +6,12 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	adapter "github.com/NARUBROWN/spine/contract/http"
+	"github.com/NARUBROWN/spine/internal/event/emission"
 	"github.com/NARUBROWN/spine/internal/execution"
 	bodyinput "github.com/NARUBROWN/spine/internal/input"
 	"github.com/NARUBROWN/spine/internal/router"
@@ -17,6 +19,30 @@ import (
 )
 
 type stateWriter struct{ adapter.ResponseWriter }
+
+func TestHTTPContextParallelViewsShareOnePublisher(t *testing.T) {
+	request := NewHTTPContext(testScope{ctx: context.Background()}, 0)
+	view := execution.NewContext(request)
+	start := make(chan struct{})
+	publishers := make(chan emission.Publisher, 32)
+	var workers sync.WaitGroup
+	for range cap(publishers) {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			publishers <- emission.FromContext(view.ExecutionContext().Context())
+		}()
+	}
+	close(start)
+	workers.Wait()
+	close(publishers)
+	for got := range publishers {
+		if got == nil || got != request.EventBus() {
+			t.Fatal("모든 공개 뷰가 같은 요청 publisher를 사용해야 합니다")
+		}
+	}
+}
 
 func TestHTTPContextTypedStateIsIndependentOfUserStore(t *testing.T) {
 	ctx := NewHTTPContext(testScope{ctx: context.Background()}, 0)

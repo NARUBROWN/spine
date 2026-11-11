@@ -6,18 +6,18 @@ import (
 	"slices"
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
+	"github.com/NARUBROWN/spine/internal/configuration"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/input"
-	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 // ValidationParameterIssues는 입력에서 제외한 필드를 검증기가 필수로 요구하는 충돌을 찾습니다.
 // 구조 검사에 성공한 뒤 호출하며 검증 태그나 특정 검증 구현체를 강제하지 않습니다.
-func ValidationParameterIssues(method reflect.Method, prefix string, validator validation.Validator) []boot.ConfigIssue {
+func ValidationParameterIssues(method reflect.Method, prefix string, validator validation.Validator) []configuration.ConfigIssue {
 	return HandlerValidationParameterIssues(execution.HandlerMeta{Method: method}, prefix, validator)
 }
 
-func HandlerValidationParameterIssues(meta execution.HandlerMeta, prefix string, validator validation.Validator) []boot.ConfigIssue {
+func HandlerValidationParameterIssues(meta execution.HandlerMeta, prefix string, validator validation.Validator) []configuration.ConfigIssue {
 	signature, offset := meta.FunctionType(), meta.ArgumentOffset()
 	name := meta.Method.Name
 	if meta.Callback.IsValid() {
@@ -27,7 +27,7 @@ func HandlerValidationParameterIssues(meta execution.HandlerMeta, prefix string,
 	if !ok {
 		return nil
 	}
-	var issues []boot.ConfigIssue
+	var issues []configuration.ConfigIssue
 	for i := offset; i < signature.NumIn(); i++ {
 		t, source, ok := input.DTO(signature.In(i))
 		if !ok {
@@ -63,7 +63,7 @@ func HandlerValidationParameterIssues(meta execution.HandlerMeta, prefix string,
 			}
 			for _, index := range excluded {
 				if len(field.Index) >= len(index) && slices.Equal(field.Index[:len(index)], index) {
-					issues = append(issues, boot.ConfigIssue{
+					issues = append(issues, configuration.ConfigIssue{
 						Path: fmt.Sprintf("%s.Parameters[%d]", prefix, i-offset), Code: "HTTP_INPUT_VALIDATION_CONFLICT",
 						Message: fmt.Sprintf("Handler %s excludes a %s field at index %v that its validator requires.", name, source, field.Index),
 						Hint:    "Bind the field or remove its required validation constraint.",

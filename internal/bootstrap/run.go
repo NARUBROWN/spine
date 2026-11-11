@@ -2,8 +2,10 @@ package bootstrap
 
 import (
 	"context"
+
 	"errors"
 	"fmt"
+	"github.com/NARUBROWN/spine/internal/configuration"
 	"log"
 	"net"
 	"net/url"
@@ -103,7 +105,7 @@ func (a *Application) run(ctx context.Context) error {
 		httpErrors = make(chan error, 1)
 		log.Printf("[Bootstrap] Server listening on: %s", listener.Addr())
 		if a.config.HTTP != nil && a.config.HTTP.OpenAPI.Enabled {
-			log.Printf("[OpenAPI] %s", openAPIURL(listener.Addr(), a.config.HTTP.OpenAPI.DocumentPath(), a.config.HTTP.TLS != nil))
+			log.Printf("[OpenAPI] %s", openAPIURL(listener.Addr(), configuration.DocumentPath(a.config.HTTP.OpenAPI), a.config.HTTP.TLS != nil))
 		}
 		go func() {
 			err := a.server.Serve(a.listener)

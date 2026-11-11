@@ -13,6 +13,7 @@ import (
 	adapter "github.com/NARUBROWN/spine/contract/http"
 	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/configuration"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/endpoint"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
@@ -23,7 +24,6 @@ import (
 	spineRouter "github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/transport"
 	"github.com/NARUBROWN/spine/internal/ws"
-	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 // Prepare는 실행 작업이나 리스너를 시작하지 않고 앱 자원을 준비합니다.
@@ -39,12 +39,12 @@ func Prepare(ctx context.Context, config Config) (*Application, error) {
 	return prepare(ctx, config, resources)
 }
 
-func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResource) (result *Application, err error) {
+func prepare(ctx context.Context, config Config, resources []configuration.OpenAPIResource) (result *Application, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	var openAPIDocument []byte
-	openAPIResources := map[string]boot.OpenAPIResource{}
+	openAPIResources := map[string]configuration.OpenAPIResource{}
 
 	application := &Application{config: config, closeDone: make(chan struct{})}
 	ready := false
@@ -266,6 +266,15 @@ func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResourc
 		var upgrades []adapter.NetHTTPUpgradeRoute
 		if config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0 {
 			wsRegistrations := config.WebSocketRegistry.Registrations()
+			controllerTypes := make([]reflect.Type, 0, len(wsRegistrations))
+			for _, registration := range wsRegistrations {
+				if registration.Meta.ControllerType != nil {
+					controllerTypes = append(controllerTypes, registration.Meta.ControllerType)
+				}
+			}
+			if err := container.WarmUp(controllerTypes); err != nil {
+				return nil, fmt.Errorf("[Bootstrap] WebSocket controller warm-up failed: %w", err)
+			}
 			log.Println("[Bootstrap] Configuring WebSocket runtime")
 			log.Printf("[Bootstrap] Configuring WebSocket routes (%d routes)", len(wsRegistrations))
 
@@ -312,7 +321,7 @@ func prepare(ctx context.Context, config Config, resources []boot.OpenAPIResourc
 					}
 					return scope.Writer().WriteString(http.StatusOK, resource.Body)
 				}
-				if len(openAPIDocument) > 0 && request.Path() == config.HTTP.OpenAPI.DocumentPath() && (scope.Method() == http.MethodGet || scope.Method() == http.MethodHead) {
+				if len(openAPIDocument) > 0 && request.Path() == configuration.DocumentPath(config.HTTP.OpenAPI) && (scope.Method() == http.MethodGet || scope.Method() == http.MethodHead) {
 					scope.Writer().SetHeader("Cache-Control", "no-cache")
 					if scope.Method() == http.MethodHead {
 						scope.Writer().SetHeader("Content-Type", "application/json")

@@ -8,16 +8,16 @@ import (
 	"time"
 
 	eventadapter "github.com/NARUBROWN/spine/contract/event"
-	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/NARUBROWN/spine/internal/configuration"
 )
 
 // PlatformFactory는 공개 전송 계약을 커널의 공통 실행 런타임에 연결합니다.
 type PlatformFactory struct {
 	factory eventadapter.Factory
-	options boot.EventOptions
+	options configuration.EventOptions
 }
 
-func NewPlatformFactory(factory eventadapter.Factory, options boot.EventOptions) *PlatformFactory {
+func NewPlatformFactory(factory eventadapter.Factory, options configuration.EventOptions) *PlatformFactory {
 	if options.SettlementTimeout == 0 {
 		options.SettlementTimeout = 5 * time.Second
 	}
