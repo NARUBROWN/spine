@@ -1,7 +1,6 @@
 package pipeline
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -76,6 +75,7 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 	var routeFinalizers []core.Interceptor
 	var results []any
 	var returnedErr error
+	var interceptorErr error
 	beforeResponseCalled := false
 	responseStage := stageResponseWriter(ctx)
 
@@ -117,12 +117,12 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 		}
 		if responseStage != nil {
 			responseStage.rollbackSuccessResponse()
-			if errors.Is(finalErr, hook.ErrPublisherUnavailable) {
+			if interceptorErr != nil || errors.Is(finalErr, hook.ErrPublisherUnavailable) {
 				responseStage.prepared = false
 			}
 		}
 
-		if returnedErr != nil {
+		if returnedErr != nil && interceptorErr == nil {
 			handled, err := callHandleErrorReturn(p, ctx, returnedErr)
 			if err != nil {
 				finalErr = errors.Join(finalErr, err)
@@ -131,7 +131,11 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 			}
 		}
 
-		if err := callHandleExecutionError(p, ctx, finalErr); err != nil {
+		responseErr := finalErr
+		if interceptorErr != nil {
+			responseErr = interceptorErr
+		}
+		if err := callHandleExecutionError(p, ctx, responseErr); err != nil {
 			finalErr = errors.Join(finalErr, err)
 		}
 	}()
@@ -142,7 +146,11 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 			finalErr = panicAsError(recovered)
 		}
 		if !beforeResponseCalled {
-			finalErr = runBeforeResponse(interceptorCtx, globalMeta, routeFinalizers, globalFinalizers, finalErr)
+			var beforeErr error
+			finalErr, beforeErr = runBeforeResponse(interceptorCtx, globalMeta, routeFinalizers, globalFinalizers, finalErr)
+			if beforeErr != nil {
+				interceptorErr = beforeErr
+			}
 			beforeResponseCalled = true
 		}
 	}()
@@ -154,6 +162,7 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 				// 인터셉터가 의도적으로 요청을 종료함(응답은 이미 작성됨)
 				return nil
 			}
+			interceptorErr = err
 			return err
 		}
 		globalFinalizers = append(globalFinalizers, it)
@@ -187,6 +196,7 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 				// 인터셉터가 의도적으로 요청을 종료함(응답은 이미 작성됨)
 				return nil
 			}
+			interceptorErr = err
 			return err
 		}
 		routeFinalizers = append(routeFinalizers, it)
@@ -244,7 +254,7 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 		return err
 	}
 
-	finalErr = runBeforeResponse(interceptorCtx, globalMeta, routeFinalizers, globalFinalizers, nil)
+	finalErr, interceptorErr = runBeforeResponse(interceptorCtx, globalMeta, routeFinalizers, globalFinalizers, nil)
 	beforeResponseCalled = true
 	if finalErr != nil {
 		return finalErr
@@ -271,19 +281,22 @@ func runBeforeResponse(
 	routeInterceptors []core.Interceptor,
 	globalInterceptors []core.Interceptor,
 	executionErr error,
-) error {
+) (error, error) {
 	finalErr := executionErr
+	var responseErr error
 	for i := len(routeInterceptors) - 1; i >= 0; i-- {
 		if err := callBeforeResponse(routeInterceptors[i], ctx, meta, finalErr); err != nil {
 			finalErr = errors.Join(finalErr, err)
+			responseErr = err
 		}
 	}
 	for i := len(globalInterceptors) - 1; i >= 0; i-- {
 		if err := callBeforeResponse(globalInterceptors[i], ctx, meta, finalErr); err != nil {
 			finalErr = errors.Join(finalErr, err)
+			responseErr = err
 		}
 	}
-	return finalErr
+	return finalErr, responseErr
 }
 
 func callBeforeResponse(
@@ -457,39 +470,7 @@ func (p *Pipeline) handleExecutionError(ctx execution.Context, err error) error 
 		return nil
 	}
 
-	status := http.StatusInternalServerError
-	message := "Internal server error"
-	var responseErr error
-	var body json.RawMessage
-	var httpErr *httpfailure.HTTPError
-	if errors.As(err, &httpErr) {
-		if httpErr.Status < 400 || httpErr.Status > 599 {
-			responseErr = fmt.Errorf("invalid HTTP error status %d", httpErr.Status)
-		} else {
-			status = httpErr.Status
-			message = httpErr.Message
-		}
-	} else if errors.Is(err, hook.ErrPublisherUnavailable) {
-		status = http.StatusServiceUnavailable
-		message = hook.ErrPublisherUnavailable.Error()
-	} else if validationBody, ok := handler.ValidationErrorJSON(err); ok {
-		status = http.StatusBadRequest
-		body = validationBody
-	} else {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			status = http.StatusRequestEntityTooLarge
-			message = "Request entity too large"
-		}
-	}
-
-	if body == nil {
-		body = handler.InputErrorJSON(err, status, message)
-	}
-	if writeErr := rw.WriteJSON(status, body); writeErr != nil {
-		responseErr = errors.Join(responseErr, fmt.Errorf("write execution error response: %w", writeErr))
-	}
-	return responseErr
+	return handler.WriteErrorResponse(rw, err)
 }
 
 func stageResponseWriter(ctx execution.Context) *stagedResponseWriter {

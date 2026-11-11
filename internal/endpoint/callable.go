@@ -51,6 +51,9 @@ func CallableIssues(meta execution.HandlerMeta, prefix string) []configuration.C
 func ResponseTypeIssues(meta execution.HandlerMeta, prefix string) []configuration.ConfigIssue {
 	var issues []configuration.ConfigIssue
 	signature := meta.FunctionType()
+	if meta.Callback.IsValid() {
+		issues = append(issues, responseCountIssues(signature, prefix)...)
+	}
 	for index := 0; index < signature.NumOut(); index++ {
 		result := signature.Out(index)
 		if result.Kind() == reflect.Pointer {
@@ -78,6 +81,37 @@ func ResponseTypeIssues(meta execution.HandlerMeta, prefix string) []configurati
 				Hint:    "Use a JSON-compatible type or implement JSON serialization.",
 			})
 		}
+	}
+	return issues
+}
+
+func responseCountIssues(signature reflect.Type, prefix string) []configuration.ConfigIssue {
+	var issues []configuration.ConfigIssue
+	first := -1
+	for index := 0; index < signature.NumOut(); index++ {
+		result := signature.Out(index)
+		if result.Implements(reflect.TypeFor[error]()) {
+			continue
+		}
+		supported := false
+		for _, candidate := range Returns() {
+			if candidate.Supports(result) {
+				supported = true
+				break
+			}
+		}
+		if !supported {
+			continue
+		}
+		if first < 0 {
+			first = index
+			continue
+		}
+		issues = append(issues, configuration.ConfigIssue{
+			Path: fmt.Sprintf("%s.Returns[%d]", prefix, index), Code: "HTTP_RESPONSE_RETURNS_DUPLICATED",
+			Message: fmt.Sprintf("Handler declares HTTP responses at return indexes %d and %d.", first, index),
+			Hint:    "Return at most one HTTP response, optionally accompanied by an error.",
+		})
 	}
 	return issues
 }

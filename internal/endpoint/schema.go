@@ -299,6 +299,10 @@ func (c *catalog) structure(t reflect.Type, mode string, planned ...[]input.Fiel
 			}
 		}
 		if exists {
+			// 필수 여부는 값 제약을 wire 스키마로 표현할 수 있는지와 별개입니다.
+			if constraint.Required {
+				required = append(required, field.name)
+			}
 			var value map[string]any
 			decoder := json.NewDecoder(strings.NewReader(string(constraint.Schema)))
 			decoder.UseNumber()
@@ -306,9 +310,6 @@ func (c *catalog) structure(t reflect.Type, mode string, planned ...[]input.Fiel
 				c.diagnostic("VALIDATION_SCHEMA_UNRESOLVED", t.String()+"."+field.name, "The field constraint has no supported wire schema.")
 			} else {
 				schema = map[string]any{"allOf": []any{schema, value}}
-				if constraint.Required {
-					required = append(required, field.name)
-				}
 			}
 		}
 		if strings.HasSuffix(mode, "/path") || strings.HasPrefix(mode, "response/") && !field.optional && !field.indirect {

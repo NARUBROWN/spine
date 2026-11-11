@@ -350,8 +350,11 @@ func callPreHandshake(interceptor core.WebSocketHandshakeInterceptor, ctx contex
 func writeHandshakeRejection(w http.ResponseWriter, err error) {
 	status := http.StatusUnauthorized
 	var httpErr *httpfailure.HTTPError
-	if errors.As(err, &httpErr) && httpErr.Status >= 400 && httpErr.Status <= 499 {
-		status = httpErr.Status
+	if errors.As(err, &httpErr) {
+		status = http.StatusInternalServerError
+		if httpErr != nil && httpErr.Status >= 400 && httpErr.Status <= 599 {
+			status = httpErr.Status
+		}
 	}
 	http.Error(w, http.StatusText(status), status)
 }

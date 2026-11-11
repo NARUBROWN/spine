@@ -23,7 +23,8 @@ type Interceptor interface {
 		BeforeResponse는 핸들러 실행과 후속 훅이 끝난 뒤, 응답을 쓰기 전에 실행된다.
 		PreHandle을 성공한 Interceptor만 역순으로 호출된다.
 		executionErr는 이 시점까지 발생한 최종 오류이며, 구현체가 반환한 오류는
-		최종 실행 오류에 포함된다.
+		최종 실행 오류에 포함된다. HTTP 응답은 마지막으로 오류를 반환한
+		BeforeResponse의 오류를 우선하며, 이전 오류도 완료 훅에 전달한다.
 	*/
 	BeforeResponse(ctx spine.Ctx, meta HandlerMeta, executionErr error) error
 

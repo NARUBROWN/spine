@@ -1,12 +1,10 @@
 package handler
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 
 	"github.com/NARUBROWN/spine/internal/execution"
-	"github.com/NARUBROWN/spine/internal/httpfailure"
 )
 
 type ErrorReturnHandler struct{}
@@ -27,17 +25,5 @@ func (h *ErrorReturnHandler) Handle(value any, ctx execution.Context) error {
 		return fmt.Errorf("ErrorReturnHandler only supports error values: %T", value)
 	}
 
-	status := 500
-	message := "Internal server error"
-
-	// HTTPError면 상태 코드를 추출한다.
-	var httpErr *httpfailure.HTTPError
-	if errors.As(err, &httpErr) {
-		status = httpErr.Status
-		message = httpErr.Message
-	} else if body, ok := ValidationErrorJSON(err); ok {
-		return rw.WriteJSON(400, body)
-	}
-
-	return rw.WriteJSON(status, InputErrorJSON(err, status, message))
+	return WriteErrorResponse(rw, err)
 }
