@@ -177,6 +177,7 @@ func validate(config Config) ([]configuration.OpenAPIResource, error) {
 		openAPIResources = resources
 		issues = append(issues, resourceIssues...)
 		issues = append(issues, openAPICollisionIssues(config, resources)...)
+		issues = append(issues, httpWebSocketCollisionIssues(config)...)
 	}
 	for i, route := range config.Routes {
 		if meta, err := spineRouter.Meta(route); err == nil {
@@ -457,7 +458,7 @@ func buildConsumerPipeline(container *container.Container, dispatchHook *hook.Ev
 	consumerPipeline := pipeline.NewPipeline(nil, invoker.NewInvoker(container))
 
 	if dispatchHook != nil {
-		consumerPipeline.AddPostExecutionHook(dispatchHook)
+		consumerPipeline.SetEventDispatch(dispatchHook)
 	}
 
 	consumerPipeline.AddArgumentResolver(consumerArgumentResolvers(validator)...)
@@ -486,7 +487,7 @@ func buildWSPipeline(
 	}
 
 	if dispatchHook != nil {
-		wsPipeline.AddPostExecutionHook(dispatchHook)
+		wsPipeline.SetEventDispatch(dispatchHook)
 	}
 
 	wsPipeline.AddArgumentResolver(webSocketArgumentResolvers(validator)...)

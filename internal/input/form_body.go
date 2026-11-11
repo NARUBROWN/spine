@@ -5,6 +5,8 @@ import (
 	"encoding"
 	"fmt"
 	"mime/multipart"
+	"net/http"
+	"net/textproto"
 	"reflect"
 )
 
@@ -13,6 +15,16 @@ func FormFileType(t reflect.Type) bool {
 	return t == reflect.TypeFor[*multipart.FileHeader]() ||
 		t == reflect.TypeFor[[]*multipart.FileHeader]() ||
 		t == reflect.TypeFor[[]multipart.FileHeader]()
+}
+
+// CloneFileHeader는 메타데이터를 복사하고 Open에 필요한 업로드 참조를 유지합니다.
+func CloneFileHeader(file *multipart.FileHeader) *multipart.FileHeader {
+	if file == nil {
+		return nil
+	}
+	header := *file
+	header.Header = textproto.MIMEHeader(http.Header(file.Header).Clone())
+	return &header
 }
 
 // bindBodyForm은 사전 검사와 명세가 사용하는 폼 필드 목록으로 본문 값만 매핑합니다.
@@ -38,15 +50,21 @@ func bindBodyForm(ctx context.Context, target any, values map[string][]string, f
 		if headers := files[field.Name]; len(headers) > 0 {
 			switch fieldValue.Type() {
 			case reflect.TypeFor[*multipart.FileHeader]():
-				fieldValue.Set(reflect.ValueOf(headers[0]))
+				fieldValue.Set(reflect.ValueOf(CloneFileHeader(headers[0])))
 				continue
 			case reflect.TypeFor[[]*multipart.FileHeader]():
-				fieldValue.Set(reflect.ValueOf(append([]*multipart.FileHeader(nil), headers...)))
+				cloned := make([]*multipart.FileHeader, len(headers))
+				for i, header := range headers {
+					cloned[i] = CloneFileHeader(header)
+				}
+				fieldValue.Set(reflect.ValueOf(cloned))
 				continue
 			case reflect.TypeFor[[]multipart.FileHeader]():
 				copy := make([]multipart.FileHeader, len(headers))
 				for i, header := range headers {
-					copy[i] = *header
+					if header != nil {
+						copy[i] = *CloneFileHeader(header)
+					}
 				}
 				fieldValue.Set(reflect.ValueOf(copy))
 				continue
@@ -58,6 +76,9 @@ func bindBodyForm(ctx context.Context, target any, values map[string][]string, f
 		}
 		if !supported(field.Type) {
 			return fmt.Errorf("unsupported form field %s: %s", field.Name, field.Type)
+		}
+		if len(raw) > 1 && !queryList(field.Type) {
+			return fmt.Errorf("multiple values for form field %s", field.Name)
 		}
 		if err := setFormValue(fieldValue, raw); err != nil {
 			return fmt.Errorf("invalid form field %s: %w", field.Name, err)

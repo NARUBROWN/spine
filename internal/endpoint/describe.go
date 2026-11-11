@@ -160,7 +160,7 @@ func Describe(routes []router.RouteSpec, options *configuration.HTTPOptions, val
 					declaration, _ := resolver.DescribeValidation(describer, payload)
 					input.Content = make(map[string]json.RawMessage)
 					for _, media := range inputbinding.BodyMediaTypes(payload, declaration) {
-						mode := "request/" + inputbinding.BodyFieldTag(media)
+						mode := "request/" + inputbinding.BodySchemaMode(media)
 						input.Content[media] = raw(c.schema(payload, mode))
 						if schema, ok := c.schemas[c.ids[schemaKey{payload, mode}]].(map[string]any); ok {
 							names, _ := schema["required"].([]string)

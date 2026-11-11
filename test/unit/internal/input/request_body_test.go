@@ -250,8 +250,16 @@ func TestRequestBodyMultipartSharesParsingAndOwnsDiskCleanup(t *testing.T) {
 			}
 			reads := source.reads
 			parsed, err := body.MultipartForm()
-			if err != nil || parsed == nil || filesFirst && parsed != form || source.reads != reads || dto.Name != "upload" || dto.File != parsed.File["file"][0] {
+			if err != nil || parsed == nil || filesFirst && parsed != form || source.reads != reads || dto.Name != "upload" || dto.File == nil {
 				t.Fatalf("폼과 파일은 같은 파싱을 공유해야 합니다: %+v, 오류 = %v", dto, err)
+			}
+			original := parsed.File["file"][0]
+			if dto.File == original || dto.File.Filename != original.Filename || dto.File.Size != original.Size {
+				t.Fatalf("DTO 파일 헤더에 원본과 같은 정보의 사본을 기대했습니다: %+v", dto.File)
+			}
+			dto.File.Header.Set("X-Changed", "yes")
+			if original.Header.Get("X-Changed") != "" {
+				t.Fatal("DTO의 헤더 변경이 원본에 반영됐습니다")
 			}
 			file, err := dto.File.Open()
 			if err != nil {

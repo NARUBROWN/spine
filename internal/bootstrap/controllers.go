@@ -72,7 +72,7 @@ func registerController(controller api.Controller, registry *api.Registry) (err 
 }
 
 func validateCollectedRoutes(config Config, resources []configuration.OpenAPIResource) error {
-	issues := openAPICollisionIssues(config, resources)
+	issues := append(openAPICollisionIssues(config, resources), httpWebSocketCollisionIssues(config)...)
 	paths := map[string][]string{}
 	for index, spec := range config.Routes {
 		meta, err := router.Meta(spec)
@@ -140,6 +140,34 @@ func componentValidationIssues(config Config) []configuration.ConfigIssue {
 	if config.TypedComponents {
 		if err := container.ValidateConstructors(config.Constructors); err != nil {
 			issues = append(issues, configuration.ConfigIssue{Path: "Constructors", Code: "COMPONENT_DEPENDENCIES_INVALID", Message: err.Error(), Hint: "Register one provider per type and resolve missing or circular dependencies before initialization."})
+		}
+	}
+	return issues
+}
+
+// httpWebSocketCollisionIssues는 접두사를 적용한 HTTP 경로와 WebSocket 경로의 충돌을 확인합니다.
+func httpWebSocketCollisionIssues(config Config) []configuration.ConfigIssue {
+	if config.HTTP == nil || config.WebSocketRegistry == nil {
+		return nil
+	}
+	webSockets := config.WebSocketRegistry.Registrations()
+	var issues []configuration.ConfigIssue
+	for index, route := range config.Routes {
+		if route.Method != "GET" {
+			continue
+		}
+		path, err := joinPath(config.HTTP.GlobalPrefix, route.Path)
+		if err != nil {
+			continue
+		}
+		for _, socket := range webSockets {
+			if assertNoAmbiguousRoute(route.Method, path, []string{socket.Path}) != nil {
+				issues = append(issues, configuration.ConfigIssue{
+					Path: fmt.Sprintf("Routes[%d].Path", index), Code: "HTTP_WEBSOCKET_ROUTE_CONFLICT",
+					Message: fmt.Sprintf("HTTP GET %s overlaps WebSocket %s.", path, socket.Path),
+					Hint:    "Register the WebSocket on a path that no HTTP GET route matches.",
+				})
+			}
 		}
 	}
 	return issues

@@ -82,17 +82,19 @@ type app struct {
 }
 
 // Option은 애플리케이션의 통합 구현을 명시적으로 선택하는 생성 옵션입니다.
-type Option func(*app)
+type Option struct {
+	apply func(*app)
+}
 
 // WithHTTPAdapter는 HTTP 실행에 사용할 독립 계약의 factory를 지정합니다.
 func WithHTTPAdapter(factory adapter.Factory) Option {
-	return func(a *app) { a.httpAdapterFactory = factory }
+	return Option{apply: func(a *app) { a.httpAdapterFactory = factory }}
 }
 
 // WithWebSocketAdapter는 HTTP 플랫폼과 독립적으로 WebSocket 구현을 선택합니다.
 // WS 경로를 등록한 앱은 factory를 명시해야 합니다.
 func WithWebSocketAdapter(factory wsadapter.Factory) Option {
-	return func(a *app) { a.websocketAdapterFactory = factory }
+	return Option{apply: func(a *app) { a.websocketAdapterFactory = factory }}
 }
 
 // EventAdapterOption은 브로커 공통 실행 정책을 설정합니다.
@@ -107,9 +109,9 @@ func WithEventAdapter(name string, factory eventadapter.Factory, options ...Even
 			option(&settings)
 		}
 	}
-	return func(a *app) {
+	return Option{apply: func(a *app) {
 		a.eventAdapters = append(a.eventAdapters, bootstrap.EventAdapterBinding{Name: name, Factory: factory, Options: settings})
-	}
+	}}
 }
 
 // WithEventConsumerRetry는 Reader 생성과 재연결의 공통 backoff를 설정합니다.
@@ -135,10 +137,10 @@ func WithEventConsumerErrorHistory(policy boot.CleanupErrorHistoryOptions) Event
 // WithValidator는 모든 기본 DTO 리졸버가 사용할 검증기를 등록합니다.
 // 생략하면 검증하지 않으며, 명시적으로 등록한 nil은 앱 사전 검사에서 거부합니다.
 func WithValidator(validator validation.Validator) Option {
-	return func(a *app) {
+	return Option{apply: func(a *app) {
 		a.validator = validator
 		a.validatorConfigured = true
-	}
+	}}
 }
 
 // New는 특정 HTTP 서버 구현을 선택하지 않는 Spine 커널 앱을 생성합니다.
@@ -150,8 +152,8 @@ func New(options ...Option) App {
 		websocketRegistry: ws.NewRegistry(),
 	}
 	for _, option := range options {
-		if option != nil {
-			option(a)
+		if option.apply != nil {
+			option.apply(a)
 		}
 	}
 	return a

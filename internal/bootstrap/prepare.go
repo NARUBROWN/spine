@@ -235,7 +235,7 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 		httpInvoker := invoker.NewInvoker(container)
 		httpPipeline := pipeline.NewPipeline(router, httpInvoker)
 
-		httpPipeline.AddPostExecutionHook(dispatchHook)
+		httpPipeline.SetEventDispatch(dispatchHook)
 
 		log.Println("[Bootstrap] Registering argument resolvers")
 		httpPipeline.AddArgumentResolver(endpoint.Resolvers(config.Validator)...)

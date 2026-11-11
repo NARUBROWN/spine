@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"mime/multipart"
-	"net/http"
-	"net/textproto"
 	"slices"
 
 	httpcontract "github.com/NARUBROWN/spine/contract/http"
 	"github.com/NARUBROWN/spine/internal/contextview"
+	"github.com/NARUBROWN/spine/internal/input"
 )
 
 // NewContext는 내부 실행을 감싼 공통 공개 컨텍스트를 반환합니다.
@@ -92,11 +91,7 @@ func (v httpRequestView) MultipartForm() (contextview.MultipartFields, error) {
 	for name, files := range form.File {
 		headers := make([]*multipart.FileHeader, len(files))
 		for index, file := range files {
-			if file != nil {
-				header := *file
-				header.Header = textproto.MIMEHeader(http.Header(file.Header).Clone())
-				headers[index] = &header
-			}
+			headers[index] = input.CloneFileHeader(file)
 		}
 		fields.File[name] = headers
 	}

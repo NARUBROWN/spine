@@ -14,8 +14,11 @@ import (
 	"github.com/NARUBROWN/spine"
 	gorillaPlatform "github.com/NARUBROWN/spine-gorilla-platform"
 	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/pkg/api"
+
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httperr"
+	"github.com/NARUBROWN/spine/pkg/input"
 	handlerspine "github.com/NARUBROWN/spine/pkg/spine"
 	ws "github.com/NARUBROWN/spine/pkg/ws"
 	"github.com/gorilla/websocket"
@@ -214,6 +217,29 @@ func TestWebSocketExecutesTheHandlerAuthorizedAtUpgrade(t *testing.T) {
 			_, payload, err := conn.ReadMessage()
 			if err != nil || canonical(payload) != `{"message":"authorized"}` {
 				t.Fatalf("승인된 핸들러의 메시지: %s %v", payload, err)
+			}
+		})
+	}
+}
+
+type websocketCollisionController struct{}
+
+func (*websocketCollisionController) RegisterRoutes(r *api.Registry) {
+	r.GET("/socket/:id", func(input.Path[string]) {})
+}
+
+func TestHTTPGetCannotOverlapWebSocket(t *testing.T) {
+	for _, engine := range []string{"echo", "nethttp"} {
+		t.Run(engine, func(t *testing.T) {
+			app := spine.New(spine.WithHTTPAdapter(platformFactory(engine, nativeHooks{})), gorillaPlatform.Option())
+			app.Constructor(func() *websocketController { return &websocketController{} },
+				func() *websocketCollisionController { return &websocketCollisionController{} })
+			if err := app.WebSocket().Register("/v1/socket/chat", (*websocketController).Message); err != nil {
+				t.Fatal(err)
+			}
+			_, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{GlobalPrefix: "/v1"}})
+			if err == nil || !strings.Contains(err.Error(), "HTTP_WEBSOCKET_ROUTE_CONFLICT") {
+				t.Fatalf("HTTP GET과 WebSocket 경로 충돌을 기대했습니다: %v", err)
 			}
 		})
 	}

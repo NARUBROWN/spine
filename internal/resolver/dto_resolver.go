@@ -43,32 +43,43 @@ func resolveBodyDTO(ctx execution.Context, parameter ParameterMeta, validator va
 	payload := parameter.Type.Elem()
 	available, cached := mediaCache.Load(payload)
 	if !cached {
-		var declaration validation.SchemaDescription
+		var plan bodyMediaPlan
 		if describer, ok := validator.(validation.SchemaDescriber); ok && input.BodyMediaNeedsValidation(payload) {
-			declaration, _ = DescribeValidation(describer, payload)
+			plan.validation, _ = DescribeValidation(describer, payload)
 		}
-		available, _ = mediaCache.LoadOrStore(payload, input.BodyMediaTypes(payload, declaration))
+		plan.mediaTypes = input.BodyMediaTypes(payload, plan.validation)
+		available, _ = mediaCache.LoadOrStore(payload, plan)
 	}
-	mediaTypes := available.([]string)
-	media, _, _ := mime.ParseMediaType(httpCtx.Header("Content-Type"))
-	switch media {
-	case "application/json", "application/xml", "text/xml", "application/x-www-form-urlencoded", "multipart/form-data":
-		if !slices.Contains(mediaTypes, media) {
+	plan := available.(bodyMediaPlan)
+	var media string
+	if contentType := httpCtx.Header("Content-Type"); contentType != "" {
+		var err error
+		media, _, err = mime.ParseMediaType(contentType)
+		if err != nil {
+			return nil, &inputerr.Error{Source: "body", Cause: httpfailure.BadRequest("Invalid Content-Type")}
+		}
+		if !slices.Contains(plan.mediaTypes, media) {
 			return nil, &inputerr.Error{Source: "body", Cause: &httpfailure.HTTPError{
 				Status: http.StatusUnsupportedMediaType, Message: "Unsupported Media Type",
 			}}
 		}
-	case "":
-		if len(mediaTypes) > 0 {
-			media = mediaTypes[0]
-		}
+	} else if len(plan.mediaTypes) > 0 {
+		media = plan.mediaTypes[0]
 	}
 	dto := reflect.New(payload)
 	if err := httpCtx.Bind(dto.Interface()); err != nil {
 		return nil, &inputerr.Error{Source: "body", Cause: err}
 	}
+	if input.ActiveUnbindableBodyField(dto.Elem(), media, plan.validation) {
+		return nil, &inputerr.Error{Source: "body", Cause: httpfailure.BadRequest("The request body format cannot supply a required field in the provided object")}
+	}
 	if err := ValidateHTTPDTO(ctx.Context(), validator, dto.Interface(), "body", input.BodyFieldTag(media)); err != nil {
 		return nil, err
 	}
 	return dto.Convert(parameter.Type).Interface(), nil
+}
+
+type bodyMediaPlan struct {
+	mediaTypes []string
+	validation validation.SchemaDescription
 }

@@ -28,7 +28,8 @@ func BodyMediaNeedsValidation(t reflect.Type) bool {
 		for i := 0; i < t.NumField(); i++ {
 			field := t.Field(i)
 			if (field.IsExported() || field.Anonymous) &&
-				(field.Tag.Get("json") == "-" || field.Tag.Get("xml") == "-" || excluded(field.Type)) {
+				(field.Tag.Get("json") == "-" || field.Tag.Get("xml") == "-" ||
+					!bodyTypeBindable(field.Type, "xml") || !bodyTypeBindable(field.Type, "json") || excluded(field.Type)) {
 				return true
 			}
 		}
@@ -111,9 +112,7 @@ func bodyFieldBindable(t reflect.Type, index []int, mode string, form []BodyFiel
 			return false
 		}
 		pointer := reflect.PointerTo(t)
-		if pointer.Implements(reflect.TypeFor[encoding.TextUnmarshaler]()) ||
-			mode == "json" && pointer.Implements(reflect.TypeFor[json.Unmarshaler]()) ||
-			mode == "xml" && pointer.Implements(reflect.TypeFor[xml.Unmarshaler]()) {
+		if bodyDecoder(pointer, mode) {
 			return true
 		}
 		field := t.Field(position)
@@ -129,7 +128,85 @@ func bodyFieldBindable(t reflect.Type, index []int, mode string, form []BodyFiel
 		}
 		t = field.Type
 	}
-	return len(index) > 0
+	return len(index) > 0 && bodyTypeBindable(t, mode)
+}
+
+func bodyDecoder(pointer reflect.Type, mode string) bool {
+	return pointer.Implements(reflect.TypeFor[encoding.TextUnmarshaler]()) ||
+		mode == "json" && pointer.Implements(reflect.TypeFor[json.Unmarshaler]()) ||
+		mode == "xml" && pointer.Implements(reflect.TypeFor[xml.Unmarshaler]())
+}
+
+func bodyTypeBindable(t reflect.Type, mode string) bool {
+	seen := map[reflect.Type]bool{}
+	for !seen[t] {
+		seen[t] = true
+		if t.Kind() == reflect.Pointer {
+			t = t.Elem()
+			continue
+		}
+		if bodyDecoder(reflect.PointerTo(t), mode) {
+			return true
+		}
+		switch t.Kind() {
+		case reflect.Slice:
+			if mode == "json" {
+				return true
+			}
+		case reflect.Array:
+			return mode == "json"
+		case reflect.Map:
+			return mode == "json" && JSONMapKeyBindable(t.Key())
+		case reflect.Interface:
+			return mode == "json" && t.NumMethod() == 0
+		case reflect.Chan, reflect.Func, reflect.Complex64, reflect.Complex128, reflect.UnsafePointer:
+			return false
+		default:
+			return true
+		}
+		t = t.Elem()
+	}
+	return true
+}
+
+// JSONMapKeyBindable은 encoding/json이 역직렬화할 수 있는 키를 판별합니다.
+func JSONMapKeyBindable(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.String, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return true
+	default:
+		return reflect.PointerTo(t).Implements(reflect.TypeFor[encoding.TextUnmarshaler]())
+	}
+}
+
+// ActiveUnbindableBodyField는 요청에 포함된 선택 객체의 필수 필드를 현재 형식으로
+// 채울 수 없어 그 필드가 비어 있는지 확인합니다.
+func ActiveUnbindableBodyField(dto reflect.Value, media string, declaration validation.SchemaDescription) bool {
+	if len(declaration.Fields) == 0 {
+		return false
+	}
+	mode := BodySchemaMode(media)
+	form, _ := BodyFields(dto.Type(), true)
+	for _, field := range declaration.Fields {
+		if !field.Required || !optionalPointerAncestor(dto.Type(), field.Index, declaration.Fields) ||
+			bodyFieldBindable(dto.Type(), field.Index, mode, form) {
+			continue
+		}
+		value := dto
+		for _, index := range field.Index {
+			value = reflect.Indirect(value)
+			if !value.IsValid() || value.Kind() != reflect.Struct || index < 0 || index >= value.NumField() {
+				value = reflect.Value{}
+				break
+			}
+			value = value.Field(index)
+		}
+		if value.IsValid() && value.IsZero() {
+			return true
+		}
+	}
+	return false
 }
 
 // BodyFieldTag는 요청 형식을 검증 오류의 필드 태그와 연결합니다.
@@ -142,4 +219,12 @@ func BodyFieldTag(media string) string {
 	default:
 		return "json"
 	}
+}
+
+// BodySchemaMode는 검증에 같은 태그를 쓰는 두 폼의 명세를 구분합니다.
+func BodySchemaMode(media string) string {
+	if media == "multipart/form-data" {
+		return "multipart"
+	}
+	return BodyFieldTag(media)
 }

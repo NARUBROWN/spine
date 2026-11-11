@@ -27,6 +27,7 @@ type Pipeline struct {
 	returnHandlers    []handler.ReturnValueHandler
 	invoker           *invoker.Invoker
 	postHooks         []hook.PostExecutionHook
+	eventDispatch     *hook.EventDispatchHook
 }
 
 func NewPipeline(router router.Router, invoker *invoker.Invoker) *Pipeline {
@@ -225,6 +226,10 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 		}
 	}
 
+	if err := p.dispatchEvents(ctx); err != nil {
+		return err
+	}
+
 	// 라우트 인터셉터의 사후 처리 실행(역순)
 	for i := len(routeInterceptors) - 1; i >= 0; i-- {
 		routeInterceptors[i].PostHandle(interceptorCtx, meta.View())
@@ -235,13 +240,17 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 		p.interceptors[i].PostHandle(interceptorCtx, meta.View())
 	}
 
+	if err := p.dispatchEvents(ctx); err != nil {
+		return err
+	}
+
 	finalErr = runBeforeResponse(interceptorCtx, globalMeta, routeFinalizers, globalFinalizers, nil)
 	beforeResponseCalled = true
 	if finalErr != nil {
 		return finalErr
 	}
 
-	return nil
+	return p.dispatchEvents(ctx)
 }
 
 func findReturnedError(results []any) error {
@@ -502,4 +511,15 @@ func panicAsError(recovered any) error {
 		return fmt.Errorf("panic recovered: %w\n%s", err, debug.Stack())
 	}
 	return fmt.Errorf("panic recovered: %v\n%s", recovered, debug.Stack())
+}
+
+func (p *Pipeline) SetEventDispatch(dispatch *hook.EventDispatchHook) {
+	p.eventDispatch = dispatch
+}
+
+func (p *Pipeline) dispatchEvents(ctx execution.Context) error {
+	if p.eventDispatch == nil {
+		return nil
+	}
+	return p.eventDispatch.AfterExecution(ctx)
 }

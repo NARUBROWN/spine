@@ -76,7 +76,7 @@ func (c *catalog) schema(t reflect.Type, mode string) any {
 
 func (c *catalog) schemaValue(t reflect.Type, mode string) any {
 	xmlInput := strings.HasSuffix(mode, "/xml")
-	if strings.HasSuffix(mode, "/form") {
+	if strings.HasSuffix(mode, "/multipart") {
 		if t == reflect.TypeFor[*multipart.FileHeader]() {
 			return map[string]any{"type": "string", "format": "binary"}
 		}
@@ -173,7 +173,11 @@ func (c *catalog) schemaValue(t reflect.Type, mode string) any {
 			return map[string]any{}
 		}
 		key := t.Key()
-		if key.Kind() != reflect.String && !integerKind(key.Kind()) && !key.Implements(reflect.TypeFor[encoding.TextMarshaler]()) {
+		supported := input.JSONMapKeyBindable(key)
+		if strings.HasPrefix(mode, "response/") {
+			supported = key.Kind() == reflect.String || integerKind(key.Kind()) || key.Implements(reflect.TypeFor[encoding.TextMarshaler]())
+		}
+		if !supported {
 			c.diagnostic("MAP_KEY_UNRESOLVED", t.String(), "The map key has no supported JSON object representation.")
 			return map[string]any{}
 		}
@@ -235,7 +239,13 @@ func customCodec(t reflect.Type) bool {
 }
 
 func (c *catalog) structure(t reflect.Type, mode string, planned ...[]input.Field) any {
-	fields := wireFields(t, strings.HasSuffix(mode, "/form"))
+	urlEncoded := strings.HasSuffix(mode, "/form")
+	fields := wireFields(t, urlEncoded || strings.HasSuffix(mode, "/multipart"))
+	if urlEncoded {
+		fields = slices.DeleteFunc(fields, func(field wireField) bool {
+			return input.FormFileType(field.typeOf)
+		})
+	}
 	var xmlRoot map[string]any
 	if strings.HasSuffix(mode, "/xml") {
 		fields, xmlRoot = c.xmlFields(t)

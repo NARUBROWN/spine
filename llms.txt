@@ -337,12 +337,14 @@ global PreHandle
   -> response preparation and validation
   -> queued domain-event dispatch
   -> PostHandle in reverse order
+  -> dispatch events queued during PostHandle
   -> BeforeResponse in reverse order
+  -> dispatch events queued during successful BeforeResponse
   -> transport write
   -> AfterCompletion in reverse order
 ```
 
-On an error, event dispatch and `PostHandle` are skipped; `BeforeResponse`, error rendering, transport write, and `AfterCompletion` finish the failure path. Global `PreHandle` runs before route selection, so its `HandlerMeta` may be empty. Route `PreHandle` runs before body, multipart, and path argument resolution. Put authentication and early rejection there; do not make an interceptor depend on already-resolved controller arguments.
+An execution error skips the remaining event dispatch and `PostHandle` stages. Spine runs `BeforeResponse` with the error if it has yet to run, then renders and writes the error response and runs `AfterCompletion`. Global `PreHandle` runs before route selection, so its `HandlerMeta` may be empty. Route `PreHandle` runs before body, multipart, and path argument resolution. Put authentication and early rejection there; do not make an interceptor depend on already-resolved controller arguments.
 
 ## Non-negotiable rules
 
@@ -520,8 +522,8 @@ func (c *AdminController) RegisterRoutes(r *api.Registry) {
 | Deprecated `query.Pagination` | Existing `page` and `size` input | Missing or malformed numbers retain page 1 and size 20. Cannot share a handler with any new path/query/header DTO; migrate to a query DTO with explicit defaults and validation. |
 | `input.Header[HeadersDTO]` with header tags | Header-only fields | Direct field access; header names are case-insensitive; keep this DTO separate from path, query and body. |
 | Deprecated `header.Values` | Existing dynamic header view | Get/Has and NewValues remain; use a value parameter and migrate the handler to a header DTO. |
-| `input.Body[SomeDTO]` without path/query/header/form tags | Bound request DTO | The request `Content-Type` selects the JSON, XML or form decoder. Malformed input returns HTTP 400. |
-| `input.Body[SomeForm]` with at least one `form` tag | Bound form DTO | The presence of a form tag selects form binding. |
+| `input.Body[SomeDTO]` without form tags | Bound request DTO | Send JSON or XML that can supply every required field. Invalid input returns HTTP 400 and unsupported media returns HTTP 415. |
+| `input.Body[SomeForm]` with `form` tags | Bound request DTO | `Content-Type` selects an available decoder. Send files as multipart. Repeat a form field only if the DTO accepts a list. |
 | `multipart.UploadedFiles` | Uploaded file descriptors | Call each file's `Open` and close the returned stream. |
 | `pkg/spine.Ctx` | Common handler and interceptor context | `ExecutionContext()` provides `Get`, `Set` and `Context()`. `HTTPRequestContext()`, `HTTPResponseContext()` and `WebSocket()` return supported transport views. Direct `Get` is deprecated. |
 
@@ -632,7 +634,7 @@ The Bun demo uses this safe boundary:
 2. The controller reads it through `ctx.ExecutionContext().Get("tx")` and passes it as `bun.IDB` to the service/repository.
 3. `BeforeResponse` rolls back when `executionErr != nil`; otherwise it commits.
 
-Response serialization, cookie validation, event dispatch, and post-processing happen before `BeforeResponse`, so their framework-controlled failures can trigger rollback. This also means a broker event can be published before the transaction commit, and a later commit failure cannot recall it. A database commit is atomic with neither broker publication nor the physical socket write. Use an outbox for database-plus-broker atomicity.
+Response serialization, cookie validation, and dispatch of events from the handler and `PostHandle` happen before `BeforeResponse`, so those failures can trigger rollback. Events added during `BeforeResponse` dispatch after the finalizers succeed. A later dispatch or socket write failure can occur after a transaction commits. Use an outbox when the database write and event recording must be atomic.
 
 ## Runtime OpenAPI and transport extensions
 
@@ -743,7 +745,7 @@ publish.Event(ctx.ExecutionContext().Context(), OrderCreated{
 })
 ```
 
-`publish.Event` adds the event to the current execution context. Spine dispatches queued events only after the handler succeeds and, for HTTP, after response preparation succeeds. The function returns no error. If no writer is configured, the handler can still succeed while nothing is delivered externally, so every publishing process must register an event platform factory with Publish enabled deliberately. The core serializes each queued domain event once before fanout. A failed publisher instance is retired after its active calls finish and recreated on the next publication; failed messages are not immediately resent.
+`publish.Event` queues an event in the current execution and returns no error. Spine dispatches after successful handler execution and HTTP response preparation, after `PostHandle`, and after successful `BeforeResponse`. Use these stages to queue events before the response is written. Configure an event platform factory with Publish enabled. If an execution queues an event without an available publisher, HTTP returns 503, WebSocket closes with code 1011, and the consumer NACKs the message. The core serializes each queued domain event once before fanout. A failed publisher instance is retired after its active calls finish and recreated on the next publication; failed messages are not immediately resent.
 
 Use a consumer signature such as `func (c *OrderConsumer) OnCreated(ctx spine.Ctx, eventName string, event OrderCreated) error`. Register `NewOrderConsumer` with `app.Constructor`, then check the error from `app.Consumers().Register("order.created", (*OrderConsumer).OnCreated)`. Consumer inputs are `spine.Ctx` (standard context injection remains compatible), event name `string`, raw `[]byte`, and a non-pointer struct decoded from JSON. A topic can have only one registered handler; make it idempotent by stable event ID.
 
