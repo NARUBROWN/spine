@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	eventadapter "github.com/NARUBROWN/spine/contract/event"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 	"net"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 type testController struct{}
 
 func (c *testController) Handle() string { return "ok" }
+func (*testController) Consume()         {}
 
 type testTransport struct {
 	initErr    error
@@ -365,7 +367,7 @@ func TestRun_DoesNotExposeHTTPListenerWhenEventReaderStartupFails(t *testing.T) 
 	_ = httpReservation.Close()
 
 	registry := consumer.NewRegistry()
-	if err := registry.Register("orders", (*testController).Handle); err != nil {
+	if err := registry.Register("orders", (*testController).Consume); err != nil {
 		t.Fatalf("register consumer: %v", err)
 	}
 	err = Run(Config{
@@ -391,7 +393,7 @@ func TestRun_DoesNotExposeHTTPListenerWhenEventReaderStartupFails(t *testing.T) 
 
 func TestRequiresShutdownSignalForEveryBlockingRuntimeShape(t *testing.T) {
 	registry := consumer.NewRegistry()
-	if err := registry.Register("topic", (*testController).Handle); err != nil {
+	if err := registry.Register("topic", (*testController).Consume); err != nil {
 		t.Fatalf("register consumer: %v", err)
 	}
 
@@ -584,9 +586,9 @@ func TestValidate_RejectsInvalidInterceptorScopeBeforeStartup(t *testing.T) {
 	}
 }
 
-func TestSpineVersionMatchesV071(t *testing.T) {
-	if spineVersion != "v0.7.2" {
-		t.Fatalf("runtime version = %q, want v0.7.2", spineVersion)
+func TestSpineVersionMatchesV075(t *testing.T) {
+	if spineVersion != "v0.7.5" {
+		t.Fatalf("runtime version = %q, want v0.7.5", spineVersion)
 	}
 }
 
@@ -667,17 +669,17 @@ type bootstrapTestInterceptor struct{ calls atomic.Int32 }
 
 type bootstrapHandshakeInterceptor struct{ bootstrapTestInterceptor }
 
-func (*bootstrapHandshakeInterceptor) PreHandshake(core.WebSocketHandshakeContext, core.HandlerMeta) error {
+func (*bootstrapHandshakeInterceptor) PreHandshake(contextapi.Ctx, core.HandlerMeta) error {
 	return nil
 }
 
-func (i *bootstrapTestInterceptor) PreHandle(core.ExecutionContext, core.HandlerMeta) error {
+func (i *bootstrapTestInterceptor) PreHandle(contextapi.Ctx, core.HandlerMeta) error {
 	i.calls.Add(1)
 	return nil
 }
-func (*bootstrapTestInterceptor) PostHandle(core.ExecutionContext, core.HandlerMeta) {}
-func (*bootstrapTestInterceptor) BeforeResponse(core.ExecutionContext, core.HandlerMeta, error) error {
+func (*bootstrapTestInterceptor) PostHandle(contextapi.Ctx, core.HandlerMeta) {}
+func (*bootstrapTestInterceptor) BeforeResponse(contextapi.Ctx, core.HandlerMeta, error) error {
 	return nil
 }
-func (*bootstrapTestInterceptor) AfterCompletion(core.ExecutionContext, core.HandlerMeta, error) {
+func (*bootstrapTestInterceptor) AfterCompletion(contextapi.Ctx, core.HandlerMeta, error) {
 }

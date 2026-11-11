@@ -16,7 +16,7 @@ type Controller interface {
 // Group은 공통 경로와 설정을 보유합니다.
 type Group = apiregistry.Group
 
-// Option은 Registry와 Group 경로의 문서 및 실행 설정을 선언합니다.
+// Option은 Registry와 Group에 전달하는 경로 설정입니다. Tags, Summary, Description 또는 Interceptors로 만듭니다.
 type Option = apiregistry.Option
 
 var Tags = apiregistry.Tags

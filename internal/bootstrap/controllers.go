@@ -7,11 +7,11 @@ import (
 	"reflect"
 
 	"github.com/NARUBROWN/spine/internal/apiregistry"
+	"github.com/NARUBROWN/spine/internal/configuration"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/endpoint"
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/pkg/api"
-	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 var ErrRoutesNotCollected = errors.New("controller routes require a prepared application; use DescribePreparedHTTP or static CLI export without executing constructors")
@@ -49,12 +49,10 @@ func collectControllers(ctx context.Context, config *Config, container *containe
 		if isNilHTTPValue(value) {
 			return fmt.Errorf("controller %s is nil", owner)
 		}
-		registry := apiregistry.New(owner)
-		if err := registerController(value.(api.Controller), registry); err != nil {
-			return fmt.Errorf("controller %s RegisterRoutes: %w", owner, err)
-		}
-		routes, err := registry.Freeze()
-		if err != nil {
+		registry, collector := apiregistry.New(owner)
+		registerErr := registerController(value.(api.Controller), registry)
+		routes, freezeErr := collector.Freeze(registry)
+		if err := errors.Join(registerErr, freezeErr); err != nil {
 			return fmt.Errorf("controller %s RegisterRoutes: %w", owner, err)
 		}
 		config.Routes = append(config.Routes, routes...)
@@ -73,8 +71,8 @@ func registerController(controller api.Controller, registry *api.Registry) (err 
 	return nil
 }
 
-func validateCollectedRoutes(config Config, resources []boot.OpenAPIResource) error {
-	issues := openAPICollisionIssues(config, resources)
+func validateCollectedRoutes(config Config, resources []configuration.OpenAPIResource) error {
+	issues := append(openAPICollisionIssues(config, resources), httpWebSocketCollisionIssues(config)...)
 	paths := map[string][]string{}
 	for index, spec := range config.Routes {
 		meta, err := router.Meta(spec)
@@ -86,6 +84,8 @@ func validateCollectedRoutes(config Config, resources []boot.OpenAPIResource) er
 		issues = append(issues, endpoint.HandlerValidationParameterIssues(meta, prefix, config.Validator)...)
 		if meta.Callback.IsValid() {
 			issues = append(issues, endpoint.CallableIssues(meta, prefix)...)
+		} else {
+			issues = append(issues, endpoint.ResponseTypeIssues(meta, prefix)...)
 		}
 		path, err := joinPath(config.HTTP.GlobalPrefix, spec.Path)
 		if err != nil {
@@ -101,14 +101,14 @@ func validateCollectedRoutes(config Config, resources []boot.OpenAPIResource) er
 			}
 		}
 	}
-	return boot.ValidationError(issues...)
+	return configuration.ValidationError(issues...)
 }
 
-func controllerProviderIssues(config Config) []boot.ConfigIssue {
+func controllerProviderIssues(config Config) []configuration.ConfigIssue {
 	if config.HTTP == nil {
 		return nil
 	}
-	var issues []boot.ConfigIssue
+	var issues []configuration.ConfigIssue
 	candidates, field := config.controllerCandidates(), "Constructors"
 	if config.ControllerConstructors != nil {
 		field = "ControllerConstructors"
@@ -120,7 +120,7 @@ func controllerProviderIssues(config Config) []boot.ConfigIssue {
 		}
 		output := t.Out(0)
 		if output.Kind() == reflect.Interface && output.Implements(reflect.TypeFor[api.Controller]()) {
-			issues = append(issues, boot.ConfigIssue{Path: fmt.Sprintf("%s[%d]", field, index), Code: "HTTP_CONTROLLER_PROVIDER_ABSTRACT", Message: "HTTP controller constructors must return a concrete controller type.", Hint: "Return *UserController rather than api.Controller so DI can distinguish controllers without executing providers."})
+			issues = append(issues, configuration.ConfigIssue{Path: fmt.Sprintf("%s[%d]", field, index), Code: "HTTP_CONTROLLER_PROVIDER_ABSTRACT", Message: "HTTP controller constructors must return a concrete controller type.", Hint: "Return *UserController rather than api.Controller so DI can distinguish controllers without executing providers."})
 		}
 	}
 	return issues
@@ -135,11 +135,39 @@ func (config Config) controllerCandidates() []any {
 }
 
 // componentValidationIssues는 명세 조회에서도 실행 없이 공통 생성 계약을 검사합니다.
-func componentValidationIssues(config Config) []boot.ConfigIssue {
-	issues := append([]boot.ConfigIssue{}, config.ComponentIssues...)
+func componentValidationIssues(config Config) []configuration.ConfigIssue {
+	issues := append([]configuration.ConfigIssue{}, config.ComponentIssues...)
 	if config.TypedComponents {
 		if err := container.ValidateConstructors(config.Constructors); err != nil {
-			issues = append(issues, boot.ConfigIssue{Path: "Constructors", Code: "COMPONENT_DEPENDENCIES_INVALID", Message: err.Error(), Hint: "Register one provider per type and resolve missing or circular dependencies before initialization."})
+			issues = append(issues, configuration.ConfigIssue{Path: "Constructors", Code: "COMPONENT_DEPENDENCIES_INVALID", Message: err.Error(), Hint: "Register one provider per type and resolve missing or circular dependencies before initialization."})
+		}
+	}
+	return issues
+}
+
+// httpWebSocketCollisionIssues는 접두사를 적용한 HTTP 경로와 WebSocket 경로의 충돌을 확인합니다.
+func httpWebSocketCollisionIssues(config Config) []configuration.ConfigIssue {
+	if config.HTTP == nil || config.WebSocketRegistry == nil {
+		return nil
+	}
+	webSockets := config.WebSocketRegistry.Registrations()
+	var issues []configuration.ConfigIssue
+	for index, route := range config.Routes {
+		if route.Method != "GET" {
+			continue
+		}
+		path, err := joinPath(config.HTTP.GlobalPrefix, route.Path)
+		if err != nil {
+			continue
+		}
+		for _, socket := range webSockets {
+			if assertNoAmbiguousRoute(route.Method, path, []string{socket.Path}) != nil {
+				issues = append(issues, configuration.ConfigIssue{
+					Path: fmt.Sprintf("Routes[%d].Path", index), Code: "HTTP_WEBSOCKET_ROUTE_CONFLICT",
+					Message: fmt.Sprintf("HTTP GET %s overlaps WebSocket %s.", path, socket.Path),
+					Hint:    "Register the WebSocket on a path that no HTTP GET route matches.",
+				})
+			}
 		}
 	}
 	return issues

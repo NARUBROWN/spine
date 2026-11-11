@@ -7,8 +7,8 @@ import (
 	"sync"
 
 	eventadapter "github.com/NARUBROWN/spine/contract/event"
+	"github.com/NARUBROWN/spine/internal/configuration"
 	"github.com/NARUBROWN/spine/internal/event/cleanup"
-	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 // PlatformPublisher는 실패한 발행기를 분리하고 다음 호출에서 새 자원을 준비합니다.
@@ -36,7 +36,7 @@ type publisherInstance struct {
 	done      chan struct{}
 }
 
-func NewPlatformPublisher(factory eventadapter.Factory, native eventadapter.Publisher, history ...boot.CleanupErrorHistoryOptions) *PlatformPublisher {
+func NewPlatformPublisher(factory eventadapter.Factory, native eventadapter.Publisher, history ...configuration.CleanupErrorHistoryOptions) *PlatformPublisher {
 	p := &PlatformPublisher{factory: factory, closeDone: make(chan struct{}), cleanupHistory: cleanup.NewHistory(history...)}
 	instance := &publisherInstance{owner: p, native: native, done: make(chan struct{})}
 	p.current = instance

@@ -71,24 +71,24 @@ return err
 
 HTTP 400에는 바인딩 오류의 `message`, 출처인 `in`과 DTO 검증 오류의 선택적 `fields`를 기술합니다. 검증 필드에는 입력 출처와 실제 바인딩 필드명을 사용합니다. 태그 없는 본문과 검증 태그 없는 DTO도 사용할 수 있습니다.
 
-## 기존 입력과 반환형 사용
+## 핸들러 입력과 반환형 사용
 
-명세 생성은 기존 DTO와 핸들러 반환형을 읽습니다. 명세를 위해 입력을 래퍼로 감싸거나 라우트에 응답 타입을 다시 선언하지 않습니다.
+명세 생성은 핸들러의 입력 래퍼와 반환형을 읽습니다. 라우트에 응답 타입을 다시 선언할 필요가 없습니다.
 
 ```go
 type CreateUserDTO struct {
     Name string `json:"name" validate:"required,min=2"`
 }
-func (*UserController) Create(input *CreateUserDTO) httpx.Response[UserDTO] {
-    return httpx.Response[UserDTO]{Body: UserDTO{Name: input.Name}}
+func (c *UserController) RegisterRoutes(r *api.Registry) {
+    r.POST("/users", func(body input.Body[CreateUserDTO]) httpx.Response[UserDTO] {
+        return httpx.Response[UserDTO]{Body: UserDTO{Name: body.Name}}
+    })
 }
-
-app.Route("POST", "/users", (*UserController).Create)
 ```
 
-위 코드는 앱이 정의한 `UserController`, `UserDTO`와 `pkg/httpx`를 사용하는 예입니다. 입력 필드는 `input.Name`으로 직접 읽습니다. 명세는 등록된 메서드와 경로, JSON 필드, 반환형의 본문 타입을 추출합니다. 검증기를 등록하면 설명 가능한 `validate` 규칙도 반영합니다.
+이 예는 `pkg/api`, `pkg/input`, `pkg/httpx`를 사용합니다. 입력 필드는 `body.Name`으로 읽습니다. 명세는 등록된 메서드와 경로, JSON과 XML의 입력 필드, 반환형의 본문 타입을 설명합니다. 검증기를 등록하면 설명 가능한 `validate` 규칙도 반영합니다.
 
-경로, 쿼리와 헤더는 각각 별도 구조체 포인터로 받습니다. path 태그는 라우트의 경로 변수 이름과 정확히 연결하며 구조체 필드 순서에 의존하지 않습니다. 경로 파라미터는 검증 태그와 무관하게 required로 설명하고 포인터 필드도 null로 표시하지 않습니다. `query` 필드 태그가 있는 DTO는 쿼리에서, `header` 필드 태그가 있는 DTO는 헤더에서만 읽습니다. 함수 안에서는 일반 필드로 직접 접근하며 본문이 값을 덮어쓰지 않습니다. 서로 다른 출처의 필드는 한 DTO에 섞지 않습니다.
+경로, 쿼리와 헤더 DTO는 각각 `input.Path[T]`, `input.Query[T]`, `input.Header[T]`로 받습니다. path 태그는 라우트의 경로 변수 이름과 정확히 연결하며 구조체 필드 순서에 의존하지 않습니다. 경로 파라미터는 검증 태그와 무관하게 required로 설명하고 포인터 필드도 null로 표시하지 않습니다. `query` 필드 태그가 있는 DTO는 쿼리에서, `header` 필드 태그가 있는 DTO는 헤더에서만 읽습니다. 함수 안에서는 일반 필드로 직접 접근하며 본문이 값을 덮어쓰지 않습니다. 서로 다른 출처의 필드는 한 DTO에 섞지 않습니다.
 
 기존 query.Values와 header.Values, 조회 메서드와 NewValues, query.Pagination은 Deprecated로 유지합니다. path.Int, path.String, path.Boolean도 같은 전환 정책을 따릅니다. 같은 핸들러에서 Deprecated 입력과 새 Path, Query, Header DTO를 함께 받으면 출처와 무관하게 부팅 전에 거부합니다. 본문 DTO와 컨텍스트는 기존 입력과 함께 사용할 수 있습니다. query.Pagination은 다른 Deprecated 입력과 함께 사용할 수 있으며 page, size의 명세와 기존 기본값도 유지합니다. Values가 함수 안에서 읽는 키는 추측하지 않으며 `LEGACY_QUERY_VALUES_UNRESOLVED`, `LEGACY_HEADER_VALUES_UNRESOLVED`로 상세 입력 명세의 한계를 남깁니다. [구조체 입력 전환 안내](../../docs/migration/structured-inputs.md)를 참고하세요.
 
@@ -98,7 +98,7 @@ app.Route("POST", "/users", (*UserController).Create)
 
 ## CLI 연동
 
-CLI 연동은 코어 입력 스펙 확정 후 별도 이슈로 진행합니다. 현재 변경의 명세 생성과 입력 검사는 런타임 코어의 동작이며 CLI 변경을 전제로 하지 않습니다.
+CLI의 정적 명세는 소스에서 확인한 계약을 출력합니다. 준비된 Registry 라우트의 런타임 명세를 내보내려면 `spine contract export --format openapi --source runtime --prepare`를 사용하세요. 설정한 생성자와 외부 초기화가 실행될 수 있습니다.
 
 ## 현재 지원 범위
 

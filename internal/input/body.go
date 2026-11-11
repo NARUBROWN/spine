@@ -6,9 +6,22 @@ import (
 	"reflect"
 )
 
-// CheckBody는 태그 없는 JSON 필드의 기본 이름을 허용하면서 다른 입력 출처의 혼합을 검사합니다.
-// 사용자 정의 JSON 디코더의 내부 필드는 해당 구현이 소유합니다.
+// CheckBody는 JSON과 폼 필드 이름, XML 경로의 충돌과 입력 출처 혼합을 검사합니다.
+// 사용자 정의 JSON과 XML 디코더의 내부 필드는 해당 구현이 소유합니다.
 func CheckBody(t reflect.Type) error {
+	formFields, conflicts := BodyFields(t, true)
+	if len(conflicts) > 0 {
+		return fmt.Errorf("body DTO %s repeats input key %q", t, conflicts[0])
+	}
+	for _, field := range formFields {
+		if !FormFileType(field.Type) && !supported(field.Type) {
+			return fmt.Errorf("unsupported form field %s: %s", field.Name, field.Type)
+		}
+	}
+	if err := checkXMLBody(t); err != nil {
+		return fmt.Errorf("body DTO %s has conflicting XML fields: %w", t, err)
+	}
+
 	seen := map[reflect.Type]bool{}
 	var walk func(reflect.Type) error
 	walk = func(current reflect.Type) error {
@@ -23,11 +36,8 @@ func CheckBody(t reflect.Type) error {
 		case reflect.Pointer, reflect.Slice, reflect.Array, reflect.Map:
 			return walk(current.Elem())
 		case reflect.Struct:
-			for _, form := range []bool{false, true} {
-				_, conflicts := BodyFields(current, form)
-				if len(conflicts) > 0 {
-					return fmt.Errorf("body DTO %s repeats input key %q", current, conflicts[0])
-				}
+			if _, conflicts := BodyFields(current, false); len(conflicts) > 0 {
+				return fmt.Errorf("body DTO %s repeats input key %q", current, conflicts[0])
 			}
 			for i := 0; i < current.NumField(); i++ {
 				field := current.Field(i)

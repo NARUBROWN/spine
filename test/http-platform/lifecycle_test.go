@@ -13,7 +13,13 @@ import (
 
 	"github.com/NARUBROWN/spine"
 	gorillaPlatform "github.com/NARUBROWN/spine-gorilla-platform"
+	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/pkg/api"
+
 	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/NARUBROWN/spine/pkg/httperr"
+	"github.com/NARUBROWN/spine/pkg/input"
+	handlerspine "github.com/NARUBROWN/spine/pkg/spine"
 	ws "github.com/NARUBROWN/spine/pkg/ws"
 	"github.com/gorilla/websocket"
 )
@@ -147,6 +153,93 @@ func TestWebSocketAndRuntimeOpenAPIOverTCP(t *testing.T) {
 			}
 			if _, _, err := conn.ReadMessage(); err == nil {
 				t.Fatal("앱 종료 뒤 WebSocket 연결이 남았습니다")
+			}
+		})
+	}
+}
+
+func (*websocketController) Restricted(ctx handlerspine.Ctx) error {
+	return ws.Send(ctx.ExecutionContext().Context(), ws.TextMessage, []byte("restricted"))
+}
+
+type websocketRouteAuthorization struct{}
+
+func (websocketRouteAuthorization) PreHandshake(_ handlerspine.Ctx, meta core.HandlerMeta) error {
+	if meta.MethodName == "Restricted" {
+		return &httperr.HTTPError{Status: http.StatusForbidden, Message: "Forbidden"}
+	}
+	return nil
+}
+func (websocketRouteAuthorization) PreHandle(handlerspine.Ctx, core.HandlerMeta) error { return nil }
+func (websocketRouteAuthorization) PostHandle(handlerspine.Ctx, core.HandlerMeta)      {}
+func (websocketRouteAuthorization) BeforeResponse(handlerspine.Ctx, core.HandlerMeta, error) error {
+	return nil
+}
+func (websocketRouteAuthorization) AfterCompletion(handlerspine.Ctx, core.HandlerMeta, error) {}
+
+func TestWebSocketExecutesTheHandlerAuthorizedAtUpgrade(t *testing.T) {
+	for _, engine := range []string{"echo", "nethttp"} {
+		t.Run(engine, func(t *testing.T) {
+			app := spine.New(spine.WithHTTPAdapter(platformFactory(engine, nativeHooks{})), gorillaPlatform.Option())
+			app.Constructor(func() *websocketController { return &websocketController{} })
+			app.InterceptorFor(boot.InterceptorWebSocket, websocketRouteAuthorization{})
+			if err := app.WebSocket().Register("/ws", (*websocketController).Message); err != nil {
+				t.Fatal(err)
+			}
+			if err := app.WebSocket().Register("/ws/", (*websocketController).Restricted); err != nil {
+				t.Fatal(err)
+			}
+			if err := app.WebSocket().Register("/ws", (*websocketController).Restricted); err == nil {
+				t.Fatal("같은 WebSocket 경로를 다시 등록했습니다")
+			}
+			prepared := prepare(t, app, boot.HTTPOptions{})
+			base, _ := managedServer(t, prepared)
+			wsBase := "ws" + strings.TrimPrefix(base, "http")
+			denied, response, err := websocket.DefaultDialer.Dial(wsBase+"/ws/", nil)
+			if denied != nil {
+				_ = denied.Close()
+			}
+			if response != nil {
+				defer response.Body.Close()
+			}
+			if err == nil || response == nil || response.StatusCode != http.StatusForbidden {
+				t.Fatalf("제한된 핸들러의 업그레이드 결과: %v %v", response, err)
+			}
+			conn, _, err := websocket.DefaultDialer.Dial(wsBase+"/ws", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.Close()
+			_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+			if err := conn.WriteJSON(websocketBody{Message: "authorized"}); err != nil {
+				t.Fatal(err)
+			}
+			_, payload, err := conn.ReadMessage()
+			if err != nil || canonical(payload) != `{"message":"authorized"}` {
+				t.Fatalf("승인된 핸들러의 메시지: %s %v", payload, err)
+			}
+		})
+	}
+}
+
+type websocketCollisionController struct{}
+
+func (*websocketCollisionController) RegisterRoutes(r *api.Registry) {
+	r.GET("/socket/:id", func(input.Path[string]) {})
+}
+
+func TestHTTPGetCannotOverlapWebSocket(t *testing.T) {
+	for _, engine := range []string{"echo", "nethttp"} {
+		t.Run(engine, func(t *testing.T) {
+			app := spine.New(spine.WithHTTPAdapter(platformFactory(engine, nativeHooks{})), gorillaPlatform.Option())
+			app.Constructor(func() *websocketController { return &websocketController{} },
+				func() *websocketCollisionController { return &websocketCollisionController{} })
+			if err := app.WebSocket().Register("/v1/socket/chat", (*websocketController).Message); err != nil {
+				t.Fatal(err)
+			}
+			_, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{GlobalPrefix: "/v1"}})
+			if err == nil || !strings.Contains(err.Error(), "HTTP_WEBSOCKET_ROUTE_CONFLICT") {
+				t.Fatalf("HTTP GET과 WebSocket 경로 충돌을 기대했습니다: %v", err)
 			}
 		})
 	}

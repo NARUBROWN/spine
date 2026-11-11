@@ -3,7 +3,7 @@ module github.com/NARUBROWN/spine/test/nats-e2e
 go 1.26.0
 
 require (
-	github.com/NARUBROWN/spine v0.7.2-rc.1
+	github.com/NARUBROWN/spine v0.7.5-rc.1
 	github.com/NARUBROWN/spine-echo-platform v0.2.1-preview.1
 	github.com/NARUBROWN/spine-nats-platform v0.1.0-preview.1
 	github.com/nats-io/nats.go v1.55.0

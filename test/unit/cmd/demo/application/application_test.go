@@ -1,6 +1,10 @@
 package application
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/NARUBROWN/spine"
+)
 
 func TestBuildApplication(t *testing.T) {
 	for _, tt := range []struct {
@@ -26,8 +30,9 @@ func TestBuildApplication(t *testing.T) {
 			if options.Address != tt.want || options.HTTP == nil || !options.EnableGracefulShutdown {
 				t.Fatalf("앱 실행 설정이 다릅니다: %+v", options)
 			}
-			if len(app.Consumers().Registrations()) != 0 {
-				t.Fatal("최소 E2E 앱은 외부 브로커를 요구하지 않아야 합니다")
+			registrations, err := spine.DescribeRegistrations(app)
+			if err != nil || len(registrations.Consumers) != 0 {
+				t.Fatalf("최소 E2E 앱에 소비자 등록이 없어야 합니다: %+v, %v", registrations, err)
 			}
 		})
 	}

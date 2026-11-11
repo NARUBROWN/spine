@@ -141,6 +141,7 @@ func TestAppIntegration_HTTPBindingBaseline(t *testing.T) {
 		{name: "unsupported_type", method: "POST", target: "/body", contentType: "text/plain", body: "payload", status: 415, message: "Unsupported Media Type"},
 		{name: "missing_content_type", method: "POST", target: "/body", body: `{}`, status: 415, message: "Unsupported Media Type"},
 		{name: "empty_body_skips_content_type", method: "POST", target: "/body", contentType: "text/plain", status: 200},
+		{name: "empty_body_skips_invalid_content_type", method: "POST", target: "/body", contentType: "application/json; =bad", status: 200},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/pkg/path"
 )
 
@@ -14,8 +14,8 @@ func (r *PathStringResolver) Supports(parameterMeta ParameterMeta) bool {
 	return parameterMeta.Type == reflect.TypeFor[path.String]()
 }
 
-func (r *PathStringResolver) Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error) {
-	httpCtx, ok := ctx.(core.HttpRequestContext)
+func (r *PathStringResolver) Resolve(ctx execution.Context, parameterMeta ParameterMeta) (any, error) {
+	httpCtx, ok := ctx.(execution.HTTPRequestContext)
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")
 	}

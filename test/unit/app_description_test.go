@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/NARUBROWN/spine/contract/description"
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httpx"
@@ -22,6 +23,44 @@ type descriptionPath struct {
 	ID int64 `path:"id"`
 }
 type descriptionController struct{}
+
+func (*descriptionController) Handle() {}
+
+func TestDescribeRegistrationsCopiesPublicMetadataWithoutInitializing(t *testing.T) {
+	app := New()
+	app.Constructor(func() *descriptionController { panic("생성자를 실행하면 안 됩니다") })
+	handler := (*descriptionController).Handle
+	if err := app.Consumers().Register("orders", handler); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.WebSocket().Register("/chat", handler); err != nil {
+		t.Fatal(err)
+	}
+	for _, registrar := range []Registrar{app.Consumers(), app.WebSocket()} {
+		registry := reflect.TypeOf(registrar)
+		for _, method := range []string{"Registrations", "Snapshot"} {
+			if _, ok := registry.MethodByName(method); ok {
+				t.Fatalf("등록 경로에 내부 메서드가 노출되었습니다: %s", method)
+			}
+		}
+	}
+	receiver := reflect.TypeFor[descriptionController]()
+	wantHandler := description.Handler{PackagePath: receiver.PkgPath(), Receiver: receiver.Name(), Method: "Handle"}
+	want := description.Registrations{
+		Consumers:  []description.ConsumerRegistration{{Topic: "orders", Handler: wantHandler}},
+		WebSockets: []description.WebSocketRegistration{{Path: "/chat", Handler: wantHandler}},
+	}
+	got, err := DescribeRegistrations(app)
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("등록 설명이 다릅니다: %+v, %v", got, err)
+	}
+	got.Consumers[0].Handler.Method = "changed"
+	got.WebSockets[0].Path = "/changed"
+	again, err := DescribeRegistrations(app)
+	if err != nil || !reflect.DeepEqual(again, want) {
+		t.Fatalf("설명 결과의 수정이 앱 등록에 반영되었습니다: %+v, %v", again, err)
+	}
+}
 
 func (*descriptionController) Create(httpinput.Body[descriptionDTO]) httpx.Response[descriptionDTO] {
 	panic("핸들러를 실행하면 안 됩니다")

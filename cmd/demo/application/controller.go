@@ -5,6 +5,7 @@ import httpinput "github.com/NARUBROWN/spine/pkg/input"
 import (
 	"context"
 
+	"github.com/NARUBROWN/spine/pkg/api"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	"github.com/NARUBROWN/spine/pkg/ws"
 )
@@ -12,7 +13,13 @@ import (
 // Controller는 최소 E2E에서 사용할 HTTP와 WS 경로를 제공합니다.
 type Controller struct{}
 
-func NewController() *Controller { return &Controller{} }
+func (*Controller) Constructor() *Controller { return &Controller{} }
+
+func (c *Controller) RegisterRoutes(r *api.Registry) {
+	r.GET("/health", c.Health)
+	r.GET("/users/:id", c.User)
+	r.POST("/echo", c.Echo)
+}
 
 func (*Controller) Health() httpx.Response[map[string]string] {
 	return httpx.Response[map[string]string]{Body: map[string]string{"status": "ok"}}

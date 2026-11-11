@@ -9,15 +9,13 @@ import (
 	platform "github.com/NARUBROWN/spine-echo-platform"
 	gorillaplatform "github.com/NARUBROWN/spine-gorilla-platform"
 	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/NARUBROWN/spine/pkg/constructor"
 )
 
 // BuildApplication은 리스너나 외부 브로커를 열지 않고 최소 HTTP/WS 앱을 구성합니다.
 func BuildApplication() (spine.App, boot.Options, error) {
 	app := spine.New(gorillaplatform.Option(), platform.Option())
-	app.Constructor(NewController)
-	app.Route("GET", "/health", (*Controller).Health)
-	app.Route("GET", "/users/:id", (*Controller).User)
-	app.Route("POST", "/echo", (*Controller).Echo)
+	app.Constructor(constructor.Controller(&Controller{}))
 	if err := app.WebSocket().Register("/ws/echo", (*Controller).WebSocketEcho); err != nil {
 		return nil, boot.Options{}, err
 	}

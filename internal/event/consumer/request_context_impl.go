@@ -4,16 +4,18 @@ import (
 	"context"
 	"maps"
 	"slices"
+	"sync"
 
-	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/event/publish"
+	"github.com/NARUBROWN/spine/internal/execution"
 )
 
 type ConsumerRequestContextImpl struct {
+	execution.Store
 	ctx      context.Context
 	msg      *Message
 	eventBus publish.EventBus
-	store    map[string]any
+	busOnce  sync.Once
 	params   map[string]string
 	pathKeys []string
 }
@@ -22,7 +24,7 @@ func NewRequestContext(
 	ctx context.Context,
 	msg *Message,
 	eventBus publish.EventBus,
-) core.ExecutionContext {
+) execution.Context {
 	return &ConsumerRequestContextImpl{
 		ctx:      ctx,
 		msg:      msg,
@@ -43,25 +45,12 @@ func (c *ConsumerRequestContextImpl) Payload() []byte {
 }
 
 func (c *ConsumerRequestContextImpl) EventBus() publish.EventBus {
-	if c.eventBus == nil {
-		c.eventBus = publish.NewEventBus()
-	}
+	c.busOnce.Do(func() {
+		if c.eventBus == nil {
+			c.eventBus = publish.NewEventBus()
+		}
+	})
 	return c.eventBus
-}
-
-func (c *ConsumerRequestContextImpl) Get(key string) (any, bool) {
-	if c.store == nil {
-		return nil, false
-	}
-	v, ok := c.store[key]
-	return v, ok
-}
-
-func (c *ConsumerRequestContextImpl) Set(key string, value any) {
-	if c.store == nil {
-		c.store = make(map[string]any)
-	}
-	c.store[key] = value
 }
 
 func (c *ConsumerRequestContextImpl) Header(key string) string {

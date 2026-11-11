@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/NARUBROWN/spine/core"
 	left "github.com/NARUBROWN/spine/internal/endpoint/testdata/left"
 	right "github.com/NARUBROWN/spine/internal/endpoint/testdata/right"
 	"github.com/NARUBROWN/spine/pkg/path"
+	"github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type bodyDTO struct{ Name string }
@@ -35,7 +35,7 @@ func (*controller) Form(httpinput.Body[formDTO], httpinput.Body[formDTO])       
 func (*controller) Alias(httpinput.Body[bodyDTO], httpinput.Body[bodyAlias])                     {}
 func (*controller) SeparateTypes(httpinput.Body[bodyDTO], httpinput.Body[otherBody])             {}
 func (*controller) SeparatePackages(httpinput.Body[left.Request], httpinput.Body[right.Request]) {}
-func (*controller) Contexts(context.Context, context.Context, core.ControllerContext, core.ControllerContext) {
+func (*controller) Contexts(context.Context, context.Context, spine.Ctx, spine.Ctx) {
 }
 func (*controller) Paths(path.Int, path.Int) {}
 func (*controller) AfterContext(context.Context, httpinput.Body[bodyDTO], httpinput.Body[bodyDTO]) {

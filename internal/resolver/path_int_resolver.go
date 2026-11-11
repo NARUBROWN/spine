@@ -2,12 +2,13 @@ package resolver
 
 import (
 	"fmt"
+	"github.com/NARUBROWN/spine/internal/inputerr"
 	"net/http"
 	"reflect"
 	"strconv"
 
-	"github.com/NARUBROWN/spine/core"
-	"github.com/NARUBROWN/spine/pkg/httperr"
+	"github.com/NARUBROWN/spine/internal/execution"
+	"github.com/NARUBROWN/spine/internal/httpfailure"
 	"github.com/NARUBROWN/spine/pkg/path"
 )
 
@@ -17,8 +18,8 @@ func (r *PathIntResolver) Supports(parameterMeta ParameterMeta) bool {
 	return parameterMeta.Type == reflect.TypeFor[path.Int]()
 }
 
-func (r *PathIntResolver) Resolve(ctx core.ExecutionContext, parameterMeta ParameterMeta) (any, error) {
-	httpCtx, ok := ctx.(core.HttpRequestContext)
+func (r *PathIntResolver) Resolve(ctx execution.Context, parameterMeta ParameterMeta) (any, error) {
+	httpCtx, ok := ctx.(execution.HTTPRequestContext)
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")
 	}
@@ -33,7 +34,7 @@ func (r *PathIntResolver) Resolve(ctx core.ExecutionContext, parameterMeta Param
 
 	value, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil {
-		return nil, &httperr.InputError{Source: "path", Cause: &httperr.HTTPError{
+		return nil, &inputerr.Error{Source: "path", Cause: &httpfailure.HTTPError{
 			Status:  http.StatusBadRequest,
 			Message: fmt.Sprintf("Invalid path parameter: %s", parameterMeta.PathKey),
 			Cause:   err,

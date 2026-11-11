@@ -18,8 +18,8 @@ func TestHandlerNameAcceptsGlobalAndRoutedMetadata(t *testing.T) {
 		want string
 	}{
 		{"global", HandlerMeta{}, ""},
-		{"method", HandlerMeta{ControllerType: owner, Method: method}, owner.String() + ".Handle"},
-		{"callback", HandlerMeta{ControllerType: owner, Callback: reflect.ValueOf(func() {})}, owner.String() + ".RegisterRoutes"},
+		{"method", HandlerMeta{ControllerType: owner, MethodName: method.Name, Signature: method.Type}, owner.String() + ".Handle"},
+		{"callback", HandlerMeta{ControllerType: owner, CallbackRoute: true, Signature: reflect.TypeFor[func()]()}, owner.String() + ".RegisterRoutes"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.meta.HandlerName(); got != tc.want {

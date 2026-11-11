@@ -1,26 +1,18 @@
 package httperr
 
-type HTTPError struct {
-	Status  int
-	Message string
-	Cause   error
-}
+import "github.com/NARUBROWN/spine/internal/httpfailure"
 
-// 오류 인터페이스의 계약 구현
-func (e *HTTPError) Error() string {
-	return e.Message
-}
-
-func (e *HTTPError) Unwrap() error {
-	return e.Cause
-}
+// HTTPError는 애플리케이션이 HTTP 상태와 응답 메시지를 지정할 때 사용하는 오류입니다.
+// 핸들러와 인터셉터 모두 오류 상태인 400~599만 허용합니다.
+// 범위를 벗어나면 일반 500 응답으로 대체하고 잘못된 상태를 실행 오류에 추가합니다.
+type HTTPError = httpfailure.HTTPError
 
 func NotFound(msg string) error {
 	return &HTTPError{Status: 404, Message: msg}
 }
 
 func BadRequest(msg string) error {
-	return &HTTPError{Status: 400, Message: msg}
+	return httpfailure.BadRequest(msg)
 }
 
 func Unauthorized(msg string) error {

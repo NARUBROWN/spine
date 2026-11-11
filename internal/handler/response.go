@@ -2,16 +2,16 @@ package handler
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
+	"github.com/NARUBROWN/spine/internal/inputerr"
 
+	httpcontract "github.com/NARUBROWN/spine/contract/http"
 	validation "github.com/NARUBROWN/spine/contract/validator"
-	"github.com/NARUBROWN/spine/core"
-	"github.com/NARUBROWN/spine/pkg/httperr"
+	"github.com/NARUBROWN/spine/internal/execution"
 )
 
-func responseWriter(ctx core.ExecutionContext) (core.ResponseWriter, error) {
-	response, ok := ctx.(core.HTTPResponseContext)
+func responseWriter(ctx execution.Context) (httpcontract.ResponseWriter, error) {
+	response, ok := ctx.(execution.HTTPResponseContext)
 	if !ok || response.ResponseWriter() == nil {
 		return nil, fmt.Errorf("ResponseWriter not found in ExecutionContext")
 	}
@@ -28,7 +28,7 @@ func ErrorJSON(message string) json.RawMessage {
 
 // InputErrorJSON은 외부에 공개할 HTTP 입력 오류에만 출처를 덧붙입니다.
 func InputErrorJSON(err error, status int, message string) json.RawMessage {
-	source := inputSource(err)
+	source, _ := inputerr.Source(err)
 	if status < 400 || status >= 500 || source == "" {
 		return ErrorJSON(message)
 	}
@@ -50,7 +50,7 @@ func ValidationErrorJSON(err error) (json.RawMessage, bool) {
 		validation.FieldError
 		In string `json:"in,omitempty"`
 	}
-	source := inputSource(err)
+	source, _ := inputerr.Source(err)
 	fields := make([]field, len(failure.Fields))
 	for i, original := range failure.Fields {
 		fields[i] = field{FieldError: original, In: source}
@@ -60,17 +60,6 @@ func ValidationErrorJSON(err error) (json.RawMessage, bool) {
 		Fields  []field `json:"fields"`
 	}{Message: "Validation failed", Fields: fields})
 	return encoded, true
-}
-
-func inputSource(err error) string {
-	var input *httperr.InputError
-	if errors.As(err, &input) && input != nil {
-		switch input.Source {
-		case "body", "path", "query", "header":
-			return input.Source
-		}
-	}
-	return ""
 }
 
 func ValidateStatus(status int) error {

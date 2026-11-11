@@ -49,9 +49,10 @@ app.Constructor(constructor.Controller(&controller.UserController{}))
 | --- | --- | --- |
 | `input.Path[T]` | URL 경로 매개변수 | `path` 태그가 우선이며 없으면 lowerCamel |
 | `input.Query[T]` | URL 쿼리 | `query` 태그가 우선이며 없으면 lowerCamel |
-| `input.Body[T]` | 기존 JSON, 폼 등 요청 본문 디코더 | 기존 `encoding/json`과 폼 규칙 유지 |
+| `input.Header[T]` | HTTP 헤더 | `header` 태그가 우선이며 헤더 이름은 대소문자를 구분하지 않음 |
+| `input.Body[T]` | JSON, XML, 폼 요청 본문 | 각 디코더의 이름과 태그 규칙 |
 
-`input.Query[T]`와 `input.Body[T]`의 `T`는 구조체여야 합니다. `input.Path[T]`는 구조체 또는 기본 스칼라 타입을 허용하며 준비 단계에서 검사합니다. `Name`, `ID`, `UserID`, `HTTPCode`의 기본 경로와 쿼리 이름은 각각 `name`, `id`, `userId`, `httpCode`입니다. 해당 출처 태그의 `-`는 필드를 제외합니다. `json` 태그가 경로나 쿼리 이름을 덮어쓰지는 않습니다.
+`input.Query[T]`, `input.Header[T]`, `input.Body[T]`의 `T`는 구조체여야 합니다. `input.Path[T]`는 구조체 또는 기본 스칼라 타입을 허용하며 준비 단계에서 검사합니다. `Name`, `ID`, `UserID`, `HTTPCode`의 기본 경로와 쿼리 이름은 각각 `name`, `id`, `userId`, `httpCode`입니다. 해당 출처 태그의 `-`는 필드를 제외합니다. `json` 태그가 경로나 쿼리 이름을 덮어쓰지는 않습니다.
 
 ```go
 type UserPath struct { ID int }
@@ -64,7 +65,7 @@ type SearchUsers struct {
 
 요청 처리에서는 `p.ID`, `q.UserID`, `a.Name`으로 바로 접근합니다. 입력 표식은 이름이 있는 포인터 타입입니다. DTO 메서드가 필요하면 `(*a).Validate()`처럼 명시적으로 호출합니다. 프레임워크가 수동 DTO 메서드를 자동으로 호출하지 않습니다.
 
-한 콜백에 본문 DTO는 하나만 둡니다. 서로 다른 출처를 한 DTO에 섞거나 외부 필드 이름을 중복 선언하면 준비 단계에서 오류가 납니다. 기존 포인터 DTO와 컨텍스트 주입도 계속 사용할 수 있습니다. 바깥쪽 입력 포인터만으로 HTTP 본문의 optional 또는 nullable 여부를 결정하지 않습니다.
+한 콜백에 본문 DTO는 하나만 둡니다. 서로 다른 출처를 한 DTO에 섞거나 외부 필드 이름을 중복 선언하면 준비 단계에서 오류가 납니다. HTTP 구조체 입력에는 출처에 맞는 `input` 래퍼를 사용하세요. 핸들러에 컨텍스트가 필요하면 `spine.Ctx`를 받고 `ctx.ExecutionContext().Context()`로 표준 Go 컨텍스트를 가져오세요. 바깥쪽 입력 포인터만으로 HTTP 본문의 optional 또는 nullable 여부를 결정하지 않습니다.
 
 선택한 검증기는 실제 `T` 또는 `*T`를 받습니다. 새 필드 이름을 오류에도 사용하려는 검증 구현은 `contract/validator`의 요청별 `FieldNameMapper`를 반영해야 합니다. 함께 변경한 playground 후보는 이 매핑을 사용하며 공유 검증기 설정은 변경하지 않습니다. 이전 구현의 검증 규칙은 계속 동작하지만 태그 없는 필드 오류 이름은 해당 구현의 기존 규칙을 따를 수 있습니다.
 
@@ -100,7 +101,7 @@ r.GET("/:id/:name", func(id input.Path[int64], name input.Path[string]) httpx.Re
 
 `Prepare`는 HTTP가 켜진 앱에서 DI의 구체 반환 타입이 `api.Controller`를 구현하는지 확인하고 실제 인스턴스를 호출합니다. 컨트롤러마다 준비한 앱 인스턴스별로 한 번 수집한 뒤 등록을 고정합니다. 요청이나 문서 조회에서는 다시 실행하지 않습니다. HTTP를 끈 앱은 HTTP 컨트롤러를 생성하지 않습니다.
 
-`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`가 제공됩니다. 기존 `route.WithInterceptors(...)`를 선택 인자로 전달할 수 있습니다. 사용자 구성 오류는 `r.Error(err)`로 전달합니다. 등록 패닉, nil 핸들러, 지원하지 않는 입력이나 반환, 중복 경로와 OpenAPI 리소스 충돌은 리스너 시작 전에 실패합니다.
+`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`가 제공됩니다. `api.Interceptors(...)`를 선택 인자로 전달할 수 있습니다. 사용자 구성 오류는 `r.Error(err)`로 전달합니다. 등록 패닉, nil 핸들러, 지원하지 않는 입력이나 반환, 중복 경로와 OpenAPI 리소스 충돌은 리스너 시작 전에 실패합니다.
 
 기존 `app.Route`, 메서드형 HTTP, WebSocket과 이벤트 핸들러는 유지합니다. 사용자 인터셉터가 호출 정보를 읽는 경우 `HandlerMeta.FunctionType()`, `ArgumentOffset()`, `HandlerName()`을 사용하면 메서드와 콜백을 함께 처리할 수 있습니다. `Method` 필드는 기존 메서드 표현식 경로에 남아 있으며 새 콜백의 메서드 정보를 나타내지는 않습니다. 일반 DTO 직접 반환을 새로 지원하지는 않습니다. `httpx.Response[T]`, `error`와 기존 반환 처리기가 지원하는 타입을 사용하세요. 준비 실패 때 임의의 DI 객체나 DB에 `Close`를 자동 호출하는 동작은 추가하지 않습니다.
 
@@ -127,7 +128,7 @@ spine contract export --format openapi --source static --output openapi.json
 spine verify --json
 ```
 
-CLI `--source runtime`도 새 컨트롤러를 위해 `Prepare`를 자동 실행하지 않습니다. 수집 전이면 오류를 반환하므로 정적 내보내기 또는 이미 준비된 앱의 조회를 사용하세요. 새 콜백의 operationId는 런타임과 같은 HTTP 메서드와 최종 경로의 해시를 사용합니다.
+등록된 컨트롤러의 런타임 명세를 CLI에서 내보내려면 `spine contract export --format openapi --source runtime --prepare`를 사용하세요. `--prepare`는 리스너를 열지 않고 앱을 준비하며 생성자와 설정된 외부 초기화가 실행될 수 있습니다. 기본 정적 내보내기는 앱을 실행하지 않습니다. 새 콜백의 operationId는 런타임과 같은 HTTP 메서드와 최종 경로의 해시를 사용합니다.
 
 ## 기존 컨트롤러 전환
 

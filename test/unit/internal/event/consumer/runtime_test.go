@@ -10,19 +10,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
 	eventresolver "github.com/NARUBROWN/spine/internal/event/consumer/resolver"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/pkg/boot"
 )
 
 type runtimeTestRouter struct {
-	meta core.HandlerMeta
+	meta execution.HandlerMeta
 }
 
-func (r *runtimeTestRouter) Route(ctx core.ExecutionContext) (core.HandlerMeta, error) {
+func (r *runtimeTestRouter) Route(ctx execution.Context) (execution.HandlerMeta, error) {
 	return r.meta, nil
 }
 
@@ -208,13 +208,13 @@ type runtimeTestPostHook struct {
 	err error
 }
 
-func (h *runtimeTestPostHook) AfterExecution(ctx core.ExecutionContext) error {
+func (h *runtimeTestPostHook) AfterExecution(ctx execution.Context) error {
 	return h.err
 }
 
 type failOnceRuntimeTestPostHook struct{ calls atomic.Int32 }
 
-func (h *failOnceRuntimeTestPostHook) AfterExecution(core.ExecutionContext) error {
+func (h *failOnceRuntimeTestPostHook) AfterExecution(execution.Context) error {
 	if h.calls.Add(1) == 1 {
 		return errors.New("first delivery fails")
 	}
@@ -288,7 +288,7 @@ func newRuntimePipeline(t *testing.T, methodName string, hookErr error) *pipelin
 
 	p := pipeline.NewPipeline(
 		&runtimeTestRouter{
-			meta: core.HandlerMeta{
+			meta: execution.HandlerMeta{
 				ControllerType: controllerType,
 				Method:         method,
 			},
@@ -317,7 +317,7 @@ func newBlockingRuntimePipeline(t *testing.T, controller *blockingRuntimeTestCon
 		t.Fatal("blocking handler method not found")
 	}
 	p := pipeline.NewPipeline(
-		&runtimeTestRouter{meta: core.HandlerMeta{ControllerType: controllerType, Method: method}},
+		&runtimeTestRouter{meta: execution.HandlerMeta{ControllerType: controllerType, Method: method}},
 		invoker.NewInvoker(ctr),
 	)
 	p.AddArgumentResolver(&eventresolver.PayloadResolver{})

@@ -3,7 +3,6 @@ package resolver
 import (
 	"context"
 	"errors"
-	httpinput "github.com/NARUBROWN/spine/pkg/input"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -11,12 +10,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NARUBROWN/spine/core"
+	"github.com/NARUBROWN/spine/internal/event/emission"
+	"github.com/NARUBROWN/spine/internal/execution"
 	eventpublish "github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/NARUBROWN/spine/pkg/httperr"
+	httpinput "github.com/NARUBROWN/spine/pkg/input"
 	pkgmultipart "github.com/NARUBROWN/spine/pkg/multipart"
 	"github.com/NARUBROWN/spine/pkg/path"
 	"github.com/NARUBROWN/spine/pkg/query"
+	"github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type fakeHttpCtx struct {
@@ -31,7 +33,7 @@ type fakeHttpCtx struct {
 	bindErr       error
 	multipartForm *multipart.Form
 	multipartErr  error
-	bus           core.EventBus
+	bus           emission.Bus
 }
 
 func newFakeHttpCtx() *fakeHttpCtx {
@@ -48,7 +50,7 @@ func newFakeHttpCtx() *fakeHttpCtx {
 
 // 실행 컨텍스트
 func (c *fakeHttpCtx) Context() context.Context  { return context.Background() }
-func (c *fakeHttpCtx) EventBus() core.EventBus   { return c.bus }
+func (c *fakeHttpCtx) EventBus() emission.Bus    { return c.bus }
 func (c *fakeHttpCtx) Method() string            { return c.method }
 func (c *fakeHttpCtx) Path() string              { return c.path }
 func (c *fakeHttpCtx) Params() map[string]string { return c.params }
@@ -72,7 +74,7 @@ func (c *fakeHttpCtx) Query(name string) string {
 	return ""
 }
 func (c *fakeHttpCtx) Headers() map[string][]string { return c.headers }
-func (c *fakeHttpCtx) Bind(out any) error {
+func (c *fakeHttpCtx) Bind(out any, _ ...[]string) error {
 	if c.bindErr != nil {
 		return c.bindErr
 	}
@@ -261,29 +263,46 @@ func TestFormDTOResolver_SupportsAndResolve(t *testing.T) {
 
 func TestControllerContextResolver_Resolve(t *testing.T) {
 	r := &ControllerContextResolver{}
-	pm := ParameterMeta{Type: reflect.TypeOf((*core.ControllerContext)(nil)).Elem()}
 	ctx := newFakeHttpCtx()
 	ctx.store["userID"] = 7
 
-	if !r.Supports(pm) {
-		t.Fatal("ControllerContextResolver는 ControllerContext를 지원해야 합니다")
+	type getOnly interface {
+		Get(string) (any, bool)
 	}
-
-	val, err := r.Resolve(ctx, pm)
-	if err != nil {
-		t.Fatalf("ControllerContextResolver Resolve 실패: %v", err)
+	for _, typ := range []reflect.Type{reflect.TypeFor[spine.Ctx](), reflect.TypeFor[getOnly]()} {
+		t.Run(typ.String(), func(t *testing.T) {
+			pm := ParameterMeta{Type: typ}
+			if !r.Supports(pm) {
+				t.Fatalf("컨텍스트 입력 %s를 지원해야 합니다", typ)
+			}
+			val, err := r.Resolve(ctx, pm)
+			if err != nil || val == nil || !reflect.TypeOf(val).AssignableTo(typ) {
+				t.Fatalf("컨텍스트 입력 %s에 %T를 할당할 수 없습니다: %v", typ, val, err)
+			}
+			got, ok := val.(spine.Ctx).Get("userID")
+			if !ok || got != 7 {
+				t.Fatalf("컨텍스트가 store를 읽지 못했습니다: %v %v", got, ok)
+			}
+			view := val.(spine.Ctx).ExecutionContext()
+			if got, ok := view.Get("userID"); !ok || got != 7 {
+				t.Fatalf("실행 뷰가 같은 값을 읽지 못했습니다: %v %v", got, ok)
+			}
+			if _, ok := view.(execution.Context); ok {
+				t.Fatal("핸들러 실행 뷰에서 변경 가능한 코어 컨텍스트에 접근할 수 있습니다")
+			}
+		})
 	}
-
-	controllerCtx := val.(core.ControllerContext)
-	got, ok := controllerCtx.Get("userID")
-	if !ok || got.(int) != 7 {
-		t.Fatalf("ControllerContext가 store를 읽지 못했습니다: %v %v", got, ok)
+	strict := &ControllerContextResolver{RequireExecutionContext: true}
+	if strict.Supports(ParameterMeta{Type: reflect.TypeFor[getOnly]()}) ||
+		strict.Supports(ParameterMeta{Type: reflect.TypeFor[any]()}) ||
+		!strict.Supports(ParameterMeta{Type: reflect.TypeFor[spine.Ctx]()}) {
+		t.Fatal("전송 핸들러는 전체 컨텍스트 계약을 선언한 인자만 해석해야 합니다")
 	}
 }
 
 func TestControllerContextResolver_DoesNotClaimUnsupportedExtendedInterface(t *testing.T) {
 	type extended interface {
-		core.ControllerContext
+		spine.Ctx
 		Principal() string
 	}
 

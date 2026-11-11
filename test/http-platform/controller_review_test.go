@@ -2,8 +2,10 @@ package httpplatform_test
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -13,6 +15,8 @@ import (
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/constructor"
 	"github.com/NARUBROWN/spine/pkg/httpx"
+	"github.com/NARUBROWN/spine/pkg/input"
+	handlerspine "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type reviewController struct{}
@@ -22,20 +26,24 @@ func (*reviewController) Legacy() httpx.Response[string] {
 	return httpx.Response[string]{Body: "legacy"}
 }
 func (*reviewController) RegisterRoutes(r *api.Registry) {
-	r.GET("/modern", func() httpx.Response[string] { return httpx.Response[string]{Body: "modern"} })
+	r.GET("/modern", func(ctx handlerspine.Ctx) httpx.Response[string] {
+		value, _ := ctx.ExecutionContext().Get("review")
+		return httpx.Response[string]{Body: value.(string)}
+	})
 }
 
 type handlerNameInterceptor struct{}
 
-func (*handlerNameInterceptor) PreHandle(_ core.ExecutionContext, meta core.HandlerMeta) error {
+func (*handlerNameInterceptor) PreHandle(ctx handlerspine.Ctx, meta core.HandlerMeta) error {
 	_ = meta.HandlerName()
+	ctx.ExecutionContext().Set("review", "modern")
 	return nil
 }
-func (*handlerNameInterceptor) PostHandle(core.ExecutionContext, core.HandlerMeta) {}
-func (*handlerNameInterceptor) BeforeResponse(core.ExecutionContext, core.HandlerMeta, error) error {
+func (*handlerNameInterceptor) PostHandle(handlerspine.Ctx, core.HandlerMeta) {}
+func (*handlerNameInterceptor) BeforeResponse(handlerspine.Ctx, core.HandlerMeta, error) error {
 	return nil
 }
-func (*handlerNameInterceptor) AfterCompletion(core.ExecutionContext, core.HandlerMeta, error) {}
+func (*handlerNameInterceptor) AfterCompletion(handlerspine.Ctx, core.HandlerMeta, error) {}
 
 func TestLegacyAndControllerRoutesCoexistWithGlobalHandlerNames(t *testing.T) {
 	for _, platform := range []string{"echo", "nethttp"} {
@@ -75,6 +83,51 @@ func TestLegacyAndControllerRoutesCoexistWithGlobalHandlerNames(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), "/modern") {
 				t.Fatal(err)
+			}
+		})
+	}
+}
+
+type boundaryController struct{}
+
+func (c *boundaryController) RegisterRoutes(r *api.Registry) {
+	r.GET("/boundary/:id", func(id input.Path[string]) httpx.Response[string] {
+		return httpx.Response[string]{Body: *id}
+	}, api.Interceptors(&boundaryInterceptor{}))
+}
+
+type boundaryInterceptor struct{ handlerNameInterceptor }
+
+func (*boundaryInterceptor) PreHandle(ctx handlerspine.Ctx, meta core.HandlerMeta) error {
+	for _, name := range []string{"SetRoute", "SetResponseWriter", "EventBus"} {
+		if _, ok := reflect.TypeOf(ctx).MethodByName(name); ok {
+			return fmt.Errorf("public interceptor exposes %s", name)
+		}
+	}
+	if len(meta.PathKeys) != 1 || meta.PathKeys[0] != "id" || meta.FunctionType() == nil {
+		return fmt.Errorf("unexpected route metadata: %+v", meta)
+	}
+	meta.PathKeys[0] = "changed"
+	return nil
+}
+
+func TestPublicInterceptorMetadataCannotChangeRouteBinding(t *testing.T) {
+	for _, platform := range []string{"echo", "nethttp"} {
+		t.Run(platform, func(t *testing.T) {
+			app := spine.New(spine.WithHTTPAdapter(platformFactory(platform, nativeHooks{})))
+			app.Constructor(func() *boundaryController { return &boundaryController{} })
+			prepared := prepare(t, app, boot.HTTPOptions{})
+			base, client := managedServer(t, prepared)
+			for _, id := range []string{"first", "second"} {
+				response, err := client.Get(base + "/boundary/" + id)
+				if err != nil {
+					t.Fatal(err)
+				}
+				body, err := io.ReadAll(response.Body)
+				response.Body.Close()
+				if err != nil || response.StatusCode != http.StatusOK || string(body) != id {
+					t.Fatalf("status=%d body=%s err=%v", response.StatusCode, body, err)
+				}
 			}
 		})
 	}

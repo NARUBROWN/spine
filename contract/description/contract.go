@@ -1,4 +1,4 @@
-// Package description은 실행된 등록을 HTTP 명세로 읽는 공개 데이터 계약입니다.
+// Package description은 앱 등록을 읽는 공개 데이터 계약입니다.
 // 생성자나 전송 구현을 포함하지 않으며 표준 라이브러리만 사용합니다.
 package description
 
@@ -51,4 +51,27 @@ type Diagnostic struct {
 	Code    string `json:"code"`
 	Target  string `json:"target"`
 	Message string `json:"message"`
+}
+
+// Registrations는 앱의 이벤트 소비자와 WebSocket 등록을 복사한 결과입니다.
+type Registrations struct {
+	Consumers  []ConsumerRegistration  `json:"consumers"`
+	WebSockets []WebSocketRegistration `json:"websockets"`
+}
+
+type ConsumerRegistration struct {
+	Topic   string  `json:"topic"`
+	Handler Handler `json:"handler"`
+}
+
+type WebSocketRegistration struct {
+	Path    string  `json:"path"`
+	Handler Handler `json:"handler"`
+}
+
+// Handler는 등록된 메서드를 식별합니다.
+type Handler struct {
+	PackagePath string `json:"package_path"`
+	Receiver    string `json:"receiver"`
+	Method      string `json:"method"`
 }

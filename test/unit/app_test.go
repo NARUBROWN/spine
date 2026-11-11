@@ -6,13 +6,14 @@ import (
 
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/pkg/boot"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type appTestInterceptor struct{}
 
-func (*appTestInterceptor) PreHandle(core.ExecutionContext, core.HandlerMeta) error { return nil }
-func (*appTestInterceptor) PostHandle(core.ExecutionContext, core.HandlerMeta)      {}
-func (*appTestInterceptor) BeforeResponse(core.ExecutionContext, core.HandlerMeta, error) error {
+func (*appTestInterceptor) PreHandle(contextapi.Ctx, core.HandlerMeta) error { return nil }
+func (*appTestInterceptor) PostHandle(contextapi.Ctx, core.HandlerMeta)      {}
+func (*appTestInterceptor) BeforeResponse(contextapi.Ctx, core.HandlerMeta, error) error {
 	return nil
 }
 
@@ -29,7 +30,7 @@ func TestAppValidateRejectsNilRouteHandler(t *testing.T) {
 		t.Fatalf("unexpected validation issues: %+v", configErr.Issues)
 	}
 }
-func (*appTestInterceptor) AfterCompletion(core.ExecutionContext, core.HandlerMeta, error) {
+func (*appTestInterceptor) AfterCompletion(contextapi.Ctx, core.HandlerMeta, error) {
 }
 
 func TestAppInterceptorDefaultsToAllTransportsAndSupportsExplicitScope(t *testing.T) {

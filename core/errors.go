@@ -1,5 +1,5 @@
 package core
 
-import "errors"
+import "github.com/NARUBROWN/spine/internal/pipelinecontrol"
 
-var ErrAbortPipeline = errors.New("abort pipeline")
+var ErrAbortPipeline = pipelinecontrol.ErrAbort

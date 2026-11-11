@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/NARUBROWN/spine/core"
+	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type testExecutionContext struct {
@@ -25,7 +26,6 @@ func newTestExecutionContext(method string) *testExecutionContext {
 }
 
 func (c *testExecutionContext) Context() context.Context     { return context.Background() }
-func (c *testExecutionContext) EventBus() core.EventBus      { return nil }
 func (c *testExecutionContext) Method() string               { return c.method }
 func (c *testExecutionContext) Path() string                 { return "/" }
 func (c *testExecutionContext) Params() map[string]string    { return map[string]string{} }
@@ -301,4 +301,19 @@ func TestCORSConfigValidation(t *testing.T) {
 			t.Fatalf("%+v: %v", config, err)
 		}
 	}
+}
+
+func (c *testExecutionContext) ExecutionContext() contextapi.ExecutionContextView { return c }
+func (c *testExecutionContext) HTTPRequestContext() (contextapi.HTTPRequestView, bool) {
+	return c, true
+}
+func (c *testExecutionContext) HTTPResponseContext() (contextapi.HTTPResponseView, bool) {
+	return c.writer, c.writer != nil
+}
+func (*testExecutionContext) WebSocket() (contextapi.WebSocketView, bool) { return nil, false }
+func (*testExecutionContext) Param(string) string                         { return "" }
+func (*testExecutionContext) Query(string) string                         { return "" }
+func (*testExecutionContext) Headers() map[string][]string                { return nil }
+func (*testExecutionContext) MultipartForm() (contextapi.MultipartFields, error) {
+	return contextapi.MultipartFields{}, nil
 }

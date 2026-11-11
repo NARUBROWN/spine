@@ -87,12 +87,11 @@ func TestAppIntegration_PrepareFreezesConsumerRegistrationsBeforeNativeHooks(t *
 	}))
 	app.Constructor(func() *preparationController { return &preparationController{generation: 1} })
 	app.Route("GET", "/generation", (*preparationController).Generation)
-	app.Consumers()
-
 	options := boot.Options{HTTP: &boot.HTTPOptions{}}
 	first := prepareForHTTPTest(t, app, context.Background(), options)
-	if len(app.Consumers().Registrations()) != 1 {
-		t.Fatal("원본 앱의 등록 변경은 다음 준비에 반영돼야 합니다")
+	registrations, err := spine.DescribeRegistrations(app)
+	if err != nil || len(registrations.Consumers) != 1 || registrations.Consumers[0].Topic != "later" {
+		t.Fatalf("원본 앱에 새 소비자 등록이 있어야 합니다: %+v, %v", registrations, err)
 	}
 	if prepared, err := app.Prepare(context.Background(), options); err == nil || prepared != nil {
 		if prepared != nil {
