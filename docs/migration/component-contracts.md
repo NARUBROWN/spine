@@ -2,7 +2,7 @@
 
 `app.Constructor(...)` 안에서 객체의 역할을 표시하고 생성 계약과 실행 계약을 앱 시작 전에 검사합니다. 모든 역할은 하나의 DI 컨테이너를 공유합니다.
 
-`github.com/NARUBROWN/spine/pkg/constructor`의 `Custom`, `Repository`, `Service`, `Controller`, `Interceptor`는 각각 인자 하나를 받아 `constructor.Registration` 표식을 반환합니다. 표식을 만들 때 생성자나 의존성을 실행하지 않으며 제네릭 타입 인자를 직접 적을 필요가 없습니다. 이 문서는 미공개 `v0.7.0-preview.7` 후보 소스의 동작을 설명하며 공개 태그 설치 검증을 뜻하지 않습니다.
+`github.com/NARUBROWN/spine/pkg/constructor`의 `Custom`, `Repository`, `Service`, `Controller`, `Interceptor`는 각각 인자 하나를 받아 `constructor.Registration` 표식을 반환합니다. 표식을 만들 때 생성자나 의존성을 실행하지 않으며 제네릭 타입 인자를 직접 적을 필요가 없습니다. 선택적 오류 반환은 이 기능을 지원하는 코어와 CLI 조합에서 사용합니다.
 
 ## 공통 생성 계약
 
@@ -16,9 +16,9 @@ func (*UserRepository) Constructor(db *bun.DB) *UserRepository {
 
 - 등록 값은 구조체 포인터이며 `Constructor` 메서드가 있어야 합니다.
 - 의존성 인자는 없거나 여러 개일 수 있고, 각 인자의 타입으로 DI에서 해결합니다.
-- 반환 값은 정확히 자기 타입 포인터 하나입니다. 다른 타입, 인터페이스, `(T, error)`와 가변 인자는 거부합니다.
+- 첫 번째 반환 값은 자기 타입의 포인터입니다. 초기화가 실패할 수 있으면 두 번째 반환 값으로 내장 `error`를 사용할 수 있습니다. 가변 인자는 거부합니다.
 - 등록한 객체는 타입을 나타내는 표식입니다. 필드 값은 복사하지 않습니다. 실제 호출 때 새 receiver를 만들고, 반환한 객체를 앱별 singleton으로 관리합니다.
-- 메서드는 새 객체를 반환하거나 초기화한 receiver를 반환할 수 있습니다. nil 반환과 패닉은 생성 실패 오류로 처리합니다.
+- 메서드는 새 객체를 반환하거나 초기화한 receiver를 반환할 수 있습니다. nil 반환과 패닉은 생성 실패 오류로 처리합니다. 생성자가 오류를 반환하면 해당 인스턴스를 저장하지 않고, 의존성 경로를 붙여 `Prepare`나 `Run`에 전달합니다. `errors.Is`와 `errors.As`로 원인을 확인할 수 있습니다.
 
 의존성 인자 목록은 구현마다 다르므로 하나의 Go 인터페이스 메서드로 이 형식을 표현하지 않습니다. 예를 들어 `Constructor(...any) any`는 `Constructor(*bun.DB) *UserRepository`와 다른 시그니처입니다. Spine은 공통 생성 계약을 메서드 형식으로 검사하고, 고정된 실행 계약은 Go 인터페이스로 검사합니다.
 
@@ -34,7 +34,7 @@ func (*UserRepository) Constructor(db *bun.DB) *UserRepository {
 
 `api.Controller`는 `RegisterRoutes(*api.Registry)`를 요구합니다. `core.Interceptor`는 기존 `PreHandle`, `PostHandle`, `BeforeResponse`, `AfterCompletion` 계약을 요구합니다. 역할 검사만을 위한 빈 인터페이스나 마커 메서드는 추가하지 않습니다. Repository의 CRUD 메서드와 Service의 업무 메서드는 사용자가 정의합니다.
 
-역할 표식에는 `&Type{}`, `new(Type)`과 타입이 있는 nil 포인터를 전달합니다. `Custom`은 기존 단일 반환 생성자 함수도 받습니다. 예를 들어 외부 DB 타입은 `constructor.Custom(database.NewBunDB)`로 제공합니다. 나머지 역할에 함수 값을 넣으면 생성 계약 오류가 납니다. 빈 `Registration{}`이나 중첩한 역할 표식도 거부합니다.
+역할 표식에는 `&Type{}`, `new(Type)`과 타입이 있는 nil 포인터를 전달합니다. `Custom`은 생성자 함수도 받습니다. 함수는 값 하나 또는 값과 `error`를 반환합니다. 예를 들어 외부 DB 타입은 `constructor.Custom(database.NewBunDB)`로 제공합니다. 나머지 역할에 함수 값을 넣으면 생성 계약 오류가 납니다. 빈 `Registration{}`이나 중첩한 역할 표식도 거부합니다.
 
 ## 등록 예제
 
@@ -109,3 +109,20 @@ Controller 역할로 등록한 객체만 HTTP 경로를 수집합니다. Service
 CLI 후보는 공식 `pkg/constructor` import 경로와 별칭을 확인하고 객체의 생성 메서드와 `Custom`의 프로젝트 내 이름 있는 생성자 함수를 정적으로 분석합니다. 새 코어 대상 생성기는 기존 `Constructor` 호출에 역할 표식을 추가합니다. dry-run, `diff`, `base_hash`, `--if-match` 절차를 유지하며 동적 객체 식이나 역할 표식 변수는 분석 불완전으로 진단합니다.
 
 [컨트롤러 경로와 명세](controller-routes.md)에서 HTTP 수집, 입력, 준비된 명세 조회와 전환 절차를 확인하세요.
+
+## DI 객체의 종료 처리
+
+백그라운드 워커처럼 종료 중 정리가 필요한 객체는 `spine.WithShutdownHook`에 콜백을 전달합니다.
+
+```go
+app := spine.New(spine.WithShutdownHook(func(ctx context.Context, worker *Worker) error {
+    return worker.Stop(ctx)
+}))
+app.Constructor(constructor.Service(&Worker{}))
+```
+
+콜백의 첫 인자는 `context.Context`, 반환 타입은 `error`입니다. 이후 인자는 앱을 준비할 때 같은 DI 컨테이너에서 해결합니다. 의존성을 만들 수 없으면 `Prepare`와 `Run`이 오류를 반환합니다.
+
+관리 실행의 종료 또는 성공한 `PreparedApplication.Close`에서 HTTP, WebSocket, 이벤트 컨슈머와 커스텀 트랜스포트의 정리를 먼저 기다립니다. 이어서 콜백을 등록 순서대로 한 번씩 호출하고 이벤트 발행기를 닫습니다. 콜백의 오류는 다른 정리를 계속한 뒤 `Run` 또는 `Close`의 결과에 포함합니다.
+
+콜백에는 종료를 시작한 시점과 `boot.Options.ShutdownTimeout`으로 계산한 기한이 전달됩니다. 기본값은 10초입니다. 전송 정리가 기한을 소진하면 콜백은 이미 취소된 컨텍스트를 받습니다. 워커가 취소에 응답해야 기한 안에 정리할 수 있습니다.

@@ -16,16 +16,20 @@ func ObjectConstructor(prototype any) (any, error) {
 	}
 	method, ok := owner.MethodByName("Constructor")
 	if !ok {
-		return nil, fmt.Errorf("%v must implement Constructor(dependencies...) %v", owner, owner)
+		return nil, fmt.Errorf("%v must implement Constructor(dependencies...) %v or (%v, error)", owner, owner, owner)
 	}
-	if method.Type.IsVariadic() || method.Type.NumOut() != 1 || method.Type.Out(0) != owner {
-		return nil, fmt.Errorf("%v.Constructor must be non-variadic and return exactly %v", owner, owner)
+	if method.Type.IsVariadic() || !ValidConstructorResults(method.Type) || method.Type.Out(0) != owner {
+		return nil, fmt.Errorf("%v.Constructor must be non-variadic and return %v or (%v, error)", owner, owner, owner)
 	}
 	inputs := make([]reflect.Type, method.Type.NumIn()-1)
 	for i := range inputs {
 		inputs[i] = method.Type.In(i + 1)
 	}
-	signature := reflect.FuncOf(inputs, []reflect.Type{owner}, false)
+	outputs := make([]reflect.Type, method.Type.NumOut())
+	for i := range outputs {
+		outputs[i] = method.Type.Out(i)
+	}
+	signature := reflect.FuncOf(inputs, outputs, false)
 	factory := reflect.MakeFunc(signature, func(args []reflect.Value) []reflect.Value {
 		receiver := reflect.New(owner.Elem())
 		return method.Func.Call(append([]reflect.Value{receiver}, args...))

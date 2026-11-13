@@ -443,3 +443,79 @@ func TestResolve_ConcurrentCycleReturnsErrorWithoutDeadlock(t *testing.T) {
 		}
 	}
 }
+
+func TestFallibleConstructorErrorPreservesCauseAndAllowsRetry(t *testing.T) {
+	cause := errors.New("stock data is corrupt")
+	registry := New()
+	calls, dependentCalls := 0, 0
+	repository := func() (*testRepo, error) {
+		calls++
+		if calls == 1 {
+			return &testRepo{}, cause
+		}
+		return &testRepo{}, nil
+	}
+	service := func(repo *testRepo) *testService {
+		dependentCalls++
+		return &testService{repo: repo}
+	}
+	if err := ValidateConstructors([]any{repository, service}); err != nil || calls != 0 {
+		t.Fatalf("calls=%d err=%v", calls, err)
+	}
+	for _, constructor := range []any{repository, service} {
+		if err := registry.RegisterConstructor(constructor); err != nil {
+			t.Fatal(err)
+		}
+	}
+	target := reflect.TypeFor[*testService]()
+	if _, err := registry.Resolve(target); !errors.Is(err, cause) || dependentCalls != 0 || !strings.Contains(err.Error(), "testRepo") || !strings.Contains(err.Error(), "testService") {
+		t.Fatalf("dependent calls=%d err=%v", dependentCalls, err)
+	}
+	if value, err := registry.Resolve(target); err != nil || value == nil || calls != 2 || dependentCalls != 1 {
+		t.Fatalf("value=%v calls=%d dependent calls=%d err=%v", value, calls, dependentCalls, err)
+	}
+}
+
+func TestFallibleConstructorSharesFailureWithWaiters(t *testing.T) {
+	target := reflect.TypeFor[*testRepo]()
+	cause := errors.New("shared initialization failure")
+	registry := New()
+	entered, release := make(chan struct{}), make(chan struct{})
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	if err := registry.RegisterConstructor(func() (*testRepo, error) {
+		close(entered)
+		<-release
+		return &testRepo{}, cause
+	}); err != nil {
+		t.Fatal(err)
+	}
+	first := make(chan error, 1)
+	go func() {
+		_, err := registry.Resolve(target)
+		first <- err
+	}()
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("constructor did not start")
+	}
+	waiter, wait, building := registry.beginBuild(target)
+	if !wait || !building {
+		t.Fatal("concurrent request did not join the in-flight constructor")
+	}
+	close(release)
+	select {
+	case <-waiter.done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("constructor failure did not release the waiter")
+	}
+	if err := <-first; !errors.Is(err, cause) || waiter.err != err || waiter.instance != nil {
+		t.Fatalf("caller=%v waiter=%v instance=%v", err, waiter.err, waiter.instance)
+	}
+}

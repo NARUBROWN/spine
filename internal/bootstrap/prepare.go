@@ -383,6 +383,14 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	hooks, err := bindShutdownHooks(config.ShutdownHooks, container)
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	application.shutdownHooks = hooks
 	ready = true
 	return application, nil
 }

@@ -79,6 +79,7 @@ type app struct {
 	eventAdapters           []bootstrap.EventAdapterBinding
 	validator               validation.Validator
 	validatorConfigured     bool
+	shutdownHooks           []any
 }
 
 // Option은 애플리케이션의 통합 구현을 명시적으로 선택하는 생성 옵션입니다.
@@ -140,6 +141,16 @@ func WithValidator(validator validation.Validator) Option {
 	return Option{apply: func(a *app) {
 		a.validator = validator
 		a.validatorConfigured = true
+	}}
+}
+
+// WithShutdownHook는 앱 종료 때 호출할 함수를 등록합니다.
+// 함수는 func(context.Context, 의존성...) error 형식이며 의존성은 준비 단계에서 해결합니다.
+// 훅은 전송이 정리된 뒤 발행기를 닫기 전에 등록 순서로 실행합니다.
+// 종료 기한을 지키려면 훅이 컨텍스트 취소에 응답해야 합니다.
+func WithShutdownHook(callback any) Option {
+	return Option{apply: func(a *app) {
+		a.shutdownHooks = append(a.shutdownHooks, callback)
 	}}
 }
 
@@ -220,6 +231,7 @@ func (a *app) bootstrapConfig(opts boot.Options) bootstrap.Config {
 		Routes:                  a.routes,
 		ScopedInterceptors:      a.interceptors,
 		CustomTransports:        a.customTransports,
+		ShutdownHooks:           a.shutdownHooks,
 		EnableGracefulShutdown:  opts.EnableGracefulShutdown,
 		ShutdownTimeout:         opts.ShutdownTimeout,
 		EventAdapters:           a.eventAdapters,

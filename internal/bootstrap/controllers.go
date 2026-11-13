@@ -22,7 +22,7 @@ func controllerTypes(constructors []any) []reflect.Type {
 	contract := reflect.TypeFor[api.Controller]()
 	for _, constructor := range constructors {
 		t := reflect.TypeOf(constructor)
-		if t == nil || t.Kind() != reflect.Func || t.NumOut() != 1 {
+		if t == nil || t.Kind() != reflect.Func || !container.ValidConstructorResults(t) {
 			continue
 		}
 		output := t.Out(0)
@@ -115,7 +115,7 @@ func controllerProviderIssues(config Config) []configuration.ConfigIssue {
 	}
 	for index, constructor := range candidates {
 		t := reflect.TypeOf(constructor)
-		if t == nil || t.Kind() != reflect.Func || t.NumOut() != 1 {
+		if t == nil || t.Kind() != reflect.Func || !container.ValidConstructorResults(t) {
 			continue
 		}
 		output := t.Out(0)
