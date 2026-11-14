@@ -266,6 +266,7 @@ func (c *catalog) structure(t reflect.Type, mode string, planned ...[]input.Fiel
 		}
 	}
 	constraints := map[string]validation.FieldSchema{}
+	var conditional []validation.ConditionalRequired
 	if strings.HasPrefix(mode, "request/") && c.validator != nil {
 		if describer, ok := c.validator.(validation.SchemaDescriber); ok {
 			decl, err := resolver.DescribeValidation(describer, t)
@@ -275,6 +276,7 @@ func (c *catalog) structure(t reflect.Type, mode string, planned ...[]input.Fiel
 				for _, field := range decl.Fields {
 					constraints[fmt.Sprint(field.Index)] = field
 				}
+				conditional = decl.ConditionalRequired
 				for _, rule := range decl.Unresolved {
 					c.diagnostic("VALIDATION_RULE_UNRESOLVED", t.String(), rule)
 				}
@@ -361,6 +363,9 @@ func (c *catalog) structure(t reflect.Type, mode string, planned ...[]input.Fiel
 	}
 	if len(required) > 0 {
 		result["required"] = required
+	}
+	if branches := c.conditionalSchema(t, mode, fields, conditional); len(branches) > 0 {
+		result["allOf"] = branches
 	}
 	return result
 }
