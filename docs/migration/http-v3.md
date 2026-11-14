@@ -102,7 +102,7 @@ Echo의 응답 출력 경로와 사용자 JSONSerializer는 유지합니다. wri
 코어와 v3 Echo 소스 경로를 지정해 검사합니다. 검증기는 임시 main module 설정을 사용하고 원래 go.mod/go.sum을 변경하지 않습니다. 공개 버전 조합의 검증은 아닙니다.
 
 ```sh
-python3 scripts/verify-http-v3.py \
+go run ./scripts/httpverify v3 \
   --echo-root ../spine-echo-platform \
   --output-dir /tmp/spine-http-v3-proof
 ```
@@ -112,7 +112,7 @@ python3 scripts/verify-http-v3.py \
 net/http 플랫폼 자체와 두 플랫폼의 실제 TCP 비교는 별도로 실행합니다.
 
 ```sh
-python3 scripts/verify-http-platforms.py \
+go run ./scripts/httpverify platforms \
   --nethttp-root ../spine-nethttp-platform \
   --echo-root ../spine-echo-platform \
   --output-dir /tmp/spine-http-platform-proof

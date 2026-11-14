@@ -43,12 +43,12 @@ HTTP v3의 net/http 플랫폼을 독립 저장소와 여섯 번째 발행 모듈
 하위 저장소의 기존 정식 태그와 main을 이동하지 않습니다. 먼저 다음 명령으로 preview와 rc 생성 계획을 확인합니다.
 
 ```sh
-python3 scripts/release/configure_branches.py --bootstrap
+go run ./scripts/release/branches --bootstrap
 ```
 
 검토한 설정을 적용할 때만 `--bootstrap --apply`를 사용합니다. 누락된 preview와 rc를 현재 main에서 만들며 이미 존재하는 브랜치는 변경하지 않습니다. 첫 작업 PR은 preview를 대상으로 합니다.
 
-채널 코드가 preview에 반영된 후 `configure_branches.py`로 보호 규칙을 조회하고, 검토한 경우에만 `--apply`를 사용합니다. 이 명령은 기본 브랜치를 preview로 설정하고 세 브랜치의 PR, 대상별 `Verified Source / <대상>`과 `Branch Flow / <대상>` 검사, merge 방식, 버전 태그 수정과 삭제 금지, 발행 환경을 적용합니다. 정식 환경은 지정 리뷰어, 관리자 우회 금지와 main 제한을 요구합니다. 이전 main 보호를 제거해야 할 때는 먼저 새 보호를 적용하고 기존 설정을 로컬 Git 디렉터리에 백업합니다.
+채널 코드가 preview에 반영된 후 `go run ./scripts/release/branches`로 보호 규칙을 조회하고, 검토한 경우에만 `--apply`를 사용합니다. 이 명령은 기본 브랜치를 preview로 설정하고 세 브랜치의 PR, 대상별 `Verified Source / <대상>`과 `Branch Flow / <대상>` 검사, merge 방식, 버전 태그 수정과 삭제 금지, 발행 환경을 적용합니다. 정식 환경은 지정 리뷰어, 관리자 우회 금지와 main 제한을 요구합니다. 이전 main 보호를 제거해야 할 때는 먼저 새 보호를 적용하고 기존 설정을 로컬 Git 디렉터리에 백업합니다.
 
 이 설정은 GitHub 상태를 변경합니다. 저장소와 적용 계획을 검토한 후 실행하세요. 정식 환경 승인은 사용자가 직접 처리합니다.
 
@@ -68,8 +68,8 @@ Preview 전체 조합 완료 후 72시간이 지나야 RC를 발행할 수 있�
 
 ```sh
 git switch -c promote/rc/v0.7.5-rc.1 v0.7.5-preview.1
-python3 scripts/release/pin_channel.py --channel rc
-python3 scripts/release/pin_channel.py --channel rc --apply
+go run ./scripts/release/workspace pin --channel rc
+go run ./scripts/release/workspace pin --channel rc --apply
 ```
 
 이 브랜치의 PR 대상은 rc입니다. 아직 발행되지 않은 코어 RC 태그를 조회하지 않도록 이 단계에서 `--tidy`를 사용하지 않습니다. 코어 RC 후보 태그를 발행한 후 정책에 고정한 기존 플랫폼 태그로 전체 조합을 다시 검증합니다. 플랫폼이 변경되지 않았다면 별도 플랫폼 승격 PR이나 태그는 필요하지 않습니다.
@@ -104,7 +104,7 @@ Publish Preview, Publish Rc, Publish Stable에서 태그 생성에 성공하면 
 GITHUB_REPOSITORY=NARUBROWN/spine \
 GITHUB_ACTOR=NARUBROWN \
 GITHUB_RUN_ID=123456789 \
-python3 .github/actions/discord-tag/notify.py --plan release-plan.json --dry-run
+go run ./.github/actions/discord-tag --plan release-plan.json --dry-run
 ```
 
 ## 검증 증거
@@ -130,8 +130,8 @@ Preview와 RC는 GitHub 사전 릴리스를 만들지 않습니다. artifact는 
 ```sh
 python3 -m unittest discover -s scripts/release -p 'test_*.py'
 node --test scripts/release/branch_flow.test.cjs
-python3 scripts/release/release.py validate-policy
-python3 scripts/release/release.py check-module --channel preview
+go run ./scripts/release/workspace validate-policy
+go run ./scripts/release/workspace check-module --channel preview
 actionlint -shellcheck= -pyflakes=
 ```
 

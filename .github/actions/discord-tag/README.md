@@ -19,7 +19,7 @@ Spine, Spine CLI, Echo, net/http, Gorilla, Kafka, RabbitMQ, NATS와 validator-pl
 
 각 저장소의 **Settings → Secrets and variables → Actions**에 `DISCORD_WEBHOOK_PREVIEW`, `DISCORD_WEBHOOK_RC`, `DISCORD_WEBHOOK_RELEASE`를 repository secret으로 등록하고 해당 입력으로 전달합니다. `N`은 1 이상의 정수이며 알 수 없는 태그 형식과 계획의 채널 불일치는 거부합니다.
 
-Ubuntu runner의 Python 3 표준 라이브러리만 사용합니다. 호출 저장소의 Python 패키지나 `release.py`에 의존하지 않습니다. webhook URL은 코드, step output과 로그로 출력하지 않습니다. 포럼과 미디어 채널은 URL에 대상 `thread_id`가 필요합니다.
+Ubuntu runner에서 Go 표준 라이브러리로 실행합니다. webhook URL은 코드, step output과 로그로 출력하지 않습니다. 포럼과 미디어 채널은 URL에 대상 `thread_id`가 필요합니다.
 
 ## 전송 확인과 실패 처리
 

@@ -30,8 +30,7 @@ jobs:
           test -z "$(gofmt -l .)"
           go run ./scripts/test test -race ./... -count=1 -shuffle=on
           go run ./scripts/test vet ./...
-          python3 scripts/release/release.py validate-policy
-          python3 -m unittest discover -s scripts/release -p 'test_*.py'
+          go run ./scripts/release/workspace validate-policy
           node --test scripts/release/branch_flow.test.cjs
       - name: Record verified source
         id: source

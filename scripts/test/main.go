@@ -114,13 +114,13 @@ func paths(root, module string) (string, string, error) {
 }
 
 func testFiles(root string) (map[string]string, error) {
-	// 새 테스트가 원본 디렉터리에 다시 놓여도 CI에서 바로 알려줍니다.
+	// 제품 테스트는 test/unit에 두고, 검증 도구의 테스트는 도구 패키지에 둡니다.
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if entry.IsDir() {
-			if path == filepath.Join(root, "test") || (path != root && (entry.Name() == "vendor" || strings.HasPrefix(entry.Name(), "."))) {
+			if path == filepath.Join(root, "test") || path == filepath.Join(root, "scripts") || (path != root && (entry.Name() == "vendor" || strings.HasPrefix(entry.Name(), "."))) {
 				return filepath.SkipDir
 			}
 			return nil

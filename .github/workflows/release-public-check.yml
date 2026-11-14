@@ -74,7 +74,7 @@ jobs:
           SPINE_TEST_KAFKA_BROKER: 127.0.0.1:19092
           SPINE_TEST_RABBITMQ_URL: amqp://guest:guest@127.0.0.1:5672/
           SPINE_TEST_NATS_URL: nats://127.0.0.1:4222
-        run: python3 scripts/release/verify_public.py --plan release-plan.json --source ../candidate --query "$RELEASE_QUERY" --scope "$RELEASE_SCOPE" --output release-validation.json
+        run: go run ./scripts/release/public --plan release-plan.json --source ../candidate --query "$RELEASE_QUERY" --scope "$RELEASE_SCOPE" --output release-validation.json
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.artifact }}
