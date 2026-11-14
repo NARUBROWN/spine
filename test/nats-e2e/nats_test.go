@@ -29,19 +29,13 @@ type order struct {
 	ID int `json:"id"`
 }
 
-type orderEvent struct {
-	order
-	topic string
-}
-
-func (e orderEvent) Name() string          { return e.topic }
-func (e orderEvent) OccurredAt() time.Time { return time.Now() }
-
 type senderController struct{}
 
-func (*senderController) Send(ctx context.Context, body input.Body[order]) httpx.Response[string] {
-	publish.Event(ctx, orderEvent{order: *body, topic: "order.created"})
-	return httpx.Response[string]{Body: "accepted"}
+func (*senderController) Send(ctx context.Context, body input.Body[order]) (httpx.Response[string], error) {
+	if err := publish.Event(ctx, "order.created", publish.Fields{"id": body.ID}); err != nil {
+		return httpx.Response[string]{}, err
+	}
+	return httpx.Response[string]{Body: "accepted"}, nil
 }
 
 type workerController struct{ calls atomic.Int32 }
@@ -50,8 +44,7 @@ func (c *workerController) Handle(ctx context.Context, input order) error {
 	if c.calls.Add(1) == 1 {
 		return errors.New("일시적인 처리 실패")
 	}
-	publish.Event(ctx, orderEvent{order: input, topic: "order.completed"})
-	return nil
+	return publish.Event(ctx, "order.completed", publish.Fields{"id": input.ID})
 }
 
 type observedFactory struct {
@@ -123,7 +116,7 @@ func TestHTTPPublishWorkerRedeliveryAndResult(t *testing.T) {
 	defer js.DeleteStream(context.Background(), stream)
 	factory := func(consume, publish bool, prefix string) event.Factory {
 		f, err := natsplatform.NewFactory(natsplatform.Config{
-			URLs: []string{address}, Stream: stream, Consume: consume, Publish: publish,
+			URLs: []string{address}, Stream: stream, Consume: consume, Publish: publish, PublishDestinations: testDestinations{"order.created", "order.completed"},
 			ConsumerPrefix: prefix, TopicPrefix: stream + ".", AllowInsecureTransport: true,
 			FailurePolicy: natsplatform.FailureRequeue, RequeueDelay: 20 * time.Millisecond,
 		})
@@ -213,3 +206,7 @@ func TestHTTPPublishWorkerRedeliveryAndResult(t *testing.T) {
 		t.Fatalf("handler calls: %d", calls)
 	}
 }
+
+type testDestinations []string
+
+func (d testDestinations) PublishDestinations() []string { return d }

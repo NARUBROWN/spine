@@ -28,7 +28,7 @@ func (*auditInterceptor) AfterCompletion(contextapi.Ctx, core.HandlerMeta, error
 
 func secureApp(rabbitURL string) (spine.App, boot.Options, error) {
 	sharedTLS := &tls.Config{MinVersion: tls.VersionTLS12}
-	kafka, err := kafkaplatform.NewFactory(kafkaplatform.Config{Brokers: []string{"kafka.example:9093"}, TLS: sharedTLS, Consume: true, Publish: true, GroupID: "orders"})
+	kafka, err := kafkaplatform.NewFactory(kafkaplatform.Config{Brokers: []string{"kafka.example:9093"}, TLS: sharedTLS, Consume: true, Publish: true, PublishDestinations: publishDestinations{"order.created"}, GroupID: "orders"})
 	if err != nil {
 		return nil, boot.Options{}, err
 	}
@@ -77,3 +77,7 @@ func main() {
 	// 검증 단계에서는 네트워크에 연결하지 않습니다. 실제로 시작하려면 app.Run(options)을 호출하세요.
 	_ = localInsecureConfigs
 }
+
+type publishDestinations []string
+
+func (d publishDestinations) PublishDestinations() []string { return d }

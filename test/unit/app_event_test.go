@@ -145,7 +145,7 @@ func TestAppEventExecutesTrustedSubscriptionAndSerializesOnceBeforeAck(t *testin
 				t.Error("메시지 DTO가 다릅니다")
 			}
 			handlers.Add(1)
-			publish.Event(ctx, &serializedEvent{calls: &encoded, at: at})
+			publish.DomainEvents(ctx, &serializedEvent{calls: &encoded, at: at})
 			return nil
 		}}
 	})
@@ -177,7 +177,7 @@ func TestAppEventNacksAfterPublisherOrSerializationFailure(t *testing.T) {
 					if failure == "serialization" {
 						event.err = cause
 					}
-					publish.Event(ctx, event)
+					publish.DomainEvents(ctx, event)
 					return nil
 				}}
 			})

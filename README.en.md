@@ -14,7 +14,7 @@ It does not hide how a request is resolved and executed.
 
 **Preview** | Published core tag [`v0.7.2-preview.3`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.3)
 
-The next source candidate is `v0.7.5-preview.1`, targeting `v0.7.5`. See the [migration guide](docs/migration/v0.7.5.md) for breaking changes. This tag has not been published.
+The next source candidate is `v0.7.6-preview.1`, targeting `v0.7.6`. See the [migration guide](docs/migration/v0.7.6.md) for breaking changes. This tag has not been published.
 
 Other channels | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 

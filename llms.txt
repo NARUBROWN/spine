@@ -603,7 +603,7 @@ type Interceptor interface {
 - `boot.InterceptorAll` means HTTP plus WebSocket, not Kafka/RabbitMQ consumers.
 - Use `api.Interceptors` to apply interceptors to a route or group.
 - Use `request, ok := ctx.HTTPRequestContext()` for headers, params, query and multipart access. Use `response, ok := ctx.HTTPResponseContext()` for response headers, status and body writing. Guard each boolean. Both views reference the same request execution, and retained response views follow writer replacement. Request and response capabilities are checked independently. Public views do not expose routing, body binding, raw writers or writer replacement.
-- Call `publish.Event(ctx.ExecutionContext().Context(), event)` in `PreHandle` to queue an event from an interceptor. Read handler information with `meta.HandlerName()` and `meta.FunctionType()`. WebSocket message views return an independent payload copy. See [the migration guide](docs/migration/v0.7.5.md) for removed execution members.
+- Call `publish.DomainEvents(ctx.ExecutionContext().Context(), event)` in `PreHandle` to queue an event from an interceptor. Read handler information with `meta.HandlerName()` and `meta.FunctionType()`. WebSocket message views return an independent payload copy. See [the migration guide](docs/migration/v0.7.5.md) for removed execution members.
 - `ctx.ExecutionContext().Set/Get` shares values throughout one execution, including handler writes read by later interceptor phases. Separate HTTP requests, event messages and WS messages are isolated. After `AfterCompletion`, retained views return `nil, false` and ignore writes. Clearing store references permits GC; it does not force a collection or clear app-owned references.
 - Reusing the same interceptor pointer across scopes merges its scopes and executes that instance once. Different instances of the same type execute independently.
 
@@ -738,14 +738,14 @@ func (e OrderCreated) OccurredAt() time.Time { return e.At }
 Queue it from an HTTP, WebSocket, or consumer handler's `spine.Ctx`:
 
 ```go
-publish.Event(ctx.ExecutionContext().Context(), OrderCreated{
+publish.DomainEvents(ctx.ExecutionContext().Context(), OrderCreated{
 	EventID: eventID,
 	OrderID: orderID.Value,
 	At:      time.Now().UTC(),
 })
 ```
 
-`publish.Event` queues an event in the current execution and returns no error. Spine dispatches after successful handler execution and HTTP response preparation, after `PostHandle`, and after successful `BeforeResponse`. Use these stages to queue events before the response is written. Configure an event platform factory with Publish enabled. If an execution queues an event without an available publisher, HTTP returns 503, WebSocket closes with code 1011, and the consumer NACKs the message. The core serializes each queued domain event once before fanout. A failed publisher instance is retired after its active calls finish and recreated on the next publication; failed messages are not immediately resent.
+`publish.DomainEvents` queues typed events without returning an error. Use `publish.Event(ctx, destination, publish.Fields{...})` to encode a JSON body and queue it by destination. It returns registration and encoding errors. Spine dispatches after successful handler execution and HTTP response preparation, after `PostHandle`, and after successful `BeforeResponse`. Use these stages to queue events before the response is written. Configure an event platform factory with Publish enabled. If an execution queues an event without an available publisher, HTTP returns 503, WebSocket closes with code 1011, and the consumer NACKs the message. The core serializes each queued domain event once before fanout. A failed publisher instance is retired after its active calls finish and recreated on the next publication; failed messages are not immediately resent.
 
 Use a consumer signature such as `func (c *OrderConsumer) OnCreated(ctx spine.Ctx, eventName string, event OrderCreated) error`. Register `NewOrderConsumer` with `app.Constructor`, then check the error from `app.Consumers().Register("order.created", (*OrderConsumer).OnCreated)`. Consumer inputs are `spine.Ctx` (standard context injection remains compatible), event name `string`, raw `[]byte`, and a non-pointer struct decoded from JSON. A topic can have only one registered handler; make it idempotent by stable event ID.
 
@@ -757,6 +757,7 @@ Producer and consumer in one process (development source API):
 factory, err := kafkaplatform.NewFactory(kafkaplatform.Config{
     Brokers: []string{"kafka.example.com:9093"},
     Consume: true, Publish: true, GroupID: "order-service", TopicPrefix: "prod.",
+    PublishDestinations: destinations.Catalog{},
 })
 if err != nil { return err }
 app := spine.New(echoplatform.Option(), spine.WithEventAdapter("kafka", factory,

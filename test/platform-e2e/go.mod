@@ -3,11 +3,11 @@ module github.com/NARUBROWN/spine/test/platform-e2e
 go 1.26.0
 
 require (
-	github.com/NARUBROWN/spine v0.7.5-preview.1
+	github.com/NARUBROWN/spine v0.7.6-preview.1
 	github.com/NARUBROWN/spine-echo-platform v0.2.1-preview.1
-	github.com/NARUBROWN/spine-kafka-platform v0.2.0-preview.2
-	github.com/NARUBROWN/spine-rabbitmq-platform v0.2.0-preview.2
-	github.com/NARUBROWN/spine-validator-playground v0.2.0-preview.6
+	github.com/NARUBROWN/spine-kafka-platform v0.3.0-preview.1
+	github.com/NARUBROWN/spine-rabbitmq-platform v0.3.0-preview.1
+	github.com/NARUBROWN/spine-validator-playground v0.2.1-preview.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/rabbitmq/amqp091-go v1.10.0
 	github.com/segmentio/kafka-go v0.4.50

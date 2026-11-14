@@ -326,7 +326,7 @@ func TestStdContextResolver_InjectsPublisher(t *testing.T) {
 	}
 
 	resolvedCtx := val.(context.Context)
-	eventpublish.Event(resolvedCtx, sampleEvent{name: "order.created", at: time.Now()})
+	eventpublish.DomainEvents(resolvedCtx, sampleEvent{name: "order.created", at: time.Now()})
 
 	if len(bus.published) != 1 || bus.published[0].Name() != "order.created" {
 		t.Fatalf("publisher가 context에 주입되지 않았습니다: %+v", bus.published)

@@ -152,7 +152,7 @@ func demoKafkaOptions(allowInsecure bool) *kafkaplatform.Config {
 	if len(brokers) == 0 {
 		return nil
 	}
-	return &kafkaplatform.Config{Brokers: brokers, Consume: true, Publish: true,
+	return &kafkaplatform.Config{Brokers: brokers, Consume: true, Publish: true, PublishDestinations: publishDestinations{"order.created", "stock.created"},
 		GroupID:     envOrDefault("SPINE_DEMO_KAFKA_GROUP_ID", "spine-demo-consumer"),
 		TopicPrefix: strings.TrimSpace(os.Getenv("SPINE_DEMO_KAFKA_TOPIC_PREFIX")), AllowInsecureTransport: allowInsecure}
 }
@@ -162,7 +162,7 @@ func demoRabbitMqOptions(allowInsecure bool) *rabbitmqplatform.Config {
 	if address == "" {
 		return nil
 	}
-	config := &rabbitmqplatform.Config{URL: address, Exchange: envOrDefault("SPINE_DEMO_RABBITMQ_EXCHANGE", "stock-exchange"), Consume: true, Publish: true,
+	config := &rabbitmqplatform.Config{URL: address, Exchange: envOrDefault("SPINE_DEMO_RABBITMQ_EXCHANGE", "stock-exchange"), Consume: true, Publish: true, PublishDestinations: publishDestinations{"order.created", "stock.created"},
 		AllowInsecureTransport: allowInsecure, FailurePolicy: rabbitmqplatform.FailureReject}
 	if dlx := strings.TrimSpace(os.Getenv("SPINE_DEMO_RABBITMQ_DLX")); dlx != "" {
 		config.DeadLetter = &rabbitmqplatform.DeadLetter{Exchange: dlx, RoutingKey: strings.TrimSpace(os.Getenv("SPINE_DEMO_RABBITMQ_DLX_ROUTING_KEY"))}
@@ -203,3 +203,7 @@ func splitListEnv(name string) []string {
 	}
 	return values
 }
+
+type publishDestinations []string
+
+func (d publishDestinations) PublishDestinations() []string { return d }

@@ -48,7 +48,7 @@ type senderController struct {
 
 func (c *senderController) Emit(ctx context.Context, input *validatedInput) httpx.Response[string] {
 	c.calls.Add(1)
-	publish.Event(ctx, domainEvent{validatedInput: *input, topic: c.topic})
+	publish.DomainEvents(ctx, domainEvent{validatedInput: *input, topic: c.topic})
 	return httpx.Response[string]{Body: "accepted"}
 }
 
@@ -59,7 +59,7 @@ type workerController struct {
 
 func (c *workerController) Handle(ctx context.Context, input validatedInput) {
 	c.calls.Add(1)
-	publish.Event(ctx, domainEvent{validatedInput: input, topic: c.topic})
+	publish.DomainEvents(ctx, domainEvent{validatedInput: input, topic: c.topic})
 }
 
 // 실제 브로커와 공개 계약 사이에서 readiness·결과 확인만 관찰합니다.
@@ -153,7 +153,7 @@ func TestFinalE2EHTTPValidatorBrokerConsumer(t *testing.T) {
 				}
 				defer conn.DeleteTopics(input, output)
 				factory = func(consume, publish bool, group string) event.Factory {
-					f, err := kafkaPlatform.NewFactory(kafkaPlatform.Config{Brokers: []string{broker}, Consume: consume, Publish: publish, GroupID: group, AllowInsecureTransport: true})
+					f, err := kafkaPlatform.NewFactory(kafkaPlatform.Config{Brokers: []string{broker}, Consume: consume, Publish: publish, PublishDestinations: testDestinations{input, output}, GroupID: group, AllowInsecureTransport: true})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -174,7 +174,7 @@ func TestFinalE2EHTTPValidatorBrokerConsumer(t *testing.T) {
 				defer ch.QueueDelete(input, false, false, false)
 				defer ch.QueueDelete(output, false, false, false)
 				factory = func(consume, publish bool, _ string) event.Factory {
-					f, err := rabbitPlatform.NewFactory(rabbitPlatform.Config{URL: url, Exchange: name, Consume: consume, Publish: publish, AllowInsecureTransport: true, FailurePolicy: rabbitPlatform.FailureReject})
+					f, err := rabbitPlatform.NewFactory(rabbitPlatform.Config{URL: url, Exchange: name, Consume: consume, Publish: publish, PublishDestinations: testDestinations{input, output}, AllowInsecureTransport: true, FailurePolicy: rabbitPlatform.FailureReject})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -311,3 +311,7 @@ func (c *senderController) RegisterRoutes(r *api.Registry) {
 		return c.Emit(ctx, (*validatedInput)(a))
 	})
 }
+
+type testDestinations []string
+
+func (d testDestinations) PublishDestinations() []string { return d }
