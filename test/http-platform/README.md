@@ -3,7 +3,7 @@
 같은 Spine 컨트롤러와 DTO를 Echo, net/http에 연결하고 실제 TCP 요청으로 결과를 비교합니다. 관리 서버는 각 플랫폼의 `HTTPAdapter.Serve`로 실행하며 외부 서버의 Prepared 종료도 별도로 검사합니다.
 
 ```sh
-python3 scripts/verify-http-platforms.py \
+go run ./scripts/httpverify platforms \
   --nethttp-root ../spine-nethttp-platform \
   --echo-root ../spine-echo-issue-28 \
   --output-dir /tmp/spine-http-platform-proof

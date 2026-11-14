@@ -25,7 +25,7 @@ fasthttp probe의 `StreamRequestBody: true`와 1바이트 초기 버퍼는 유�
 
 ```sh
 cd test/http-contract
-python3 verify_strict_stream.py --output-dir /tmp/spine-http-eof-proof
+go run ./cmd/strictstream --output-dir /tmp/spine-http-eof-proof
 ```
 
 검증기는 순정 버전의 두 실패를 확인한 뒤, 임시 디렉터리에 의존성과 probe를 복사하고 패치를 적용합니다. 해당 복사본의 `replace`만 바꿔 같은 테스트를 실행하며 모든 `*_test.go`, 원래 모듈 캐시, 코어 계약과 go.mod를 해시로 대조합니다. 로그와 `summary.json`은 지정한 출력 경로에 저장하고 임시 복사본은 정리합니다.
@@ -94,6 +94,6 @@ GOWORK=off go test -race -count=3 \
 
 ## 아직 확인하지 않은 범위
 
-이 모듈은 최소 어댑터 검증만 수행합니다. 실제 Spine v3/Echo 연결, DTO/validator/staging/완료 훅과 multipart 정리는 별도의 `scripts/verify-http-v3.py`로 검사합니다. 독립 net/http 제품과 Echo의 HTTPS 통합은 `scripts/verify-http-platforms.py`로 검사합니다. 전체 서버 옵션의 실제 시간/크기 경계, HTTP/2와 모든 잘못된 HTTP 프레이밍, 공개 설치 조합은 남아 있습니다.
+이 모듈은 최소 어댑터 검증만 수행합니다. 실제 Spine v3/Echo 연결, DTO/validator/staging/완료 훅과 multipart 정리는 별도의 `go run ./scripts/httpverify v3`로 검사합니다. 독립 net/http 제품과 Echo의 HTTPS 통합은 `go run ./scripts/httpverify platforms`로 검사합니다. 전체 서버 옵션의 실제 시간/크기 경계, HTTP/2와 모든 잘못된 HTTP 프레이밍, 공개 설치 조합은 남아 있습니다.
 
 fasthttp 의존성과 Go 1.26 요구는 이 테스트 모듈에만 둡니다. 코어의 Go 1.25.5 설정과 의존성은 변경하지 않습니다. 사용 버전의 Go 요구는 [fasthttp go.mod](https://github.com/valyala/fasthttp/blob/v1.77.0/go.mod)에서 확인할 수 있습니다.

@@ -92,10 +92,10 @@ jobs:
 
       - name: Verify embedded documentation assets and notices
         run: |
-          python3 scripts/update-openapi-ui.py --check
-          python3 -m unittest discover -s scripts/openapi-ui -p 'test_*.py' -v
+          go run ./scripts/openapi-ui --check
+          go test ./scripts/openapi-ui
           node --test scripts/openapi-ui/test_bundle.cjs
-          python3 -m unittest discover -s scripts -p 'test_verifiers.py' -v
+          go test ./scripts/httpverify
 
       - name: Run go vet
         run: |
@@ -106,7 +106,7 @@ jobs:
           bash scripts/check-module-boundaries.sh
 
       - name: Verify source workspace boundaries
-        run: python3 scripts/release/ci_workspace.py check --root .
+        run: go run ./scripts/release/workspace check --root .
 
   unit:
     needs: branch-direction
@@ -377,20 +377,20 @@ jobs:
         working-directory: .
       - run: actionlint -shellcheck= -pyflakes=
         working-directory: .
-      - run: python3 scripts/release/release.py validate-policy
+      - run: go run ./scripts/release/workspace validate-policy
         working-directory: .
       - name: Verify source dependency channel
         working-directory: .
         env:
           CHANNEL_REF: ${{ github.base_ref || github.ref_name }}
         run: |
-          channel=$(python3 -c "import sys; sys.path.insert(0,'scripts/release'); from ci_workspace import channel_for; import os; print(channel_for(os.environ['CHANNEL_REF']))")
-          python3 scripts/release/release.py check-module --channel "$channel"
-      - run: python3 scripts/release/release.py check-environment
+          channel=$(go run ./scripts/release/workspace channel --ref "$CHANNEL_REF")
+          go run ./scripts/release/workspace check-module --channel "$channel"
+      - run: go run ./scripts/release/branches --check-environment
         working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
-      - run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
+      - run: go test ./.github/actions/discord-tag ./scripts/verifiedsource ./scripts/release/...
         working-directory: .
       - run: node --test scripts/release/branch_flow.test.cjs
         working-directory: .
@@ -403,18 +403,18 @@ jobs:
     outputs:
       sha: ${{ steps.source.outputs.sha }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.0'
+          cache: false
       - name: Require every verification job
         env:
           RESULTS: ${{ toJSON(needs) }}
           SOURCE_SHA: ${{ inputs.ref || github.sha }}
         id: source
         working-directory: .
-        run: |
-          python3 - <<'PYCODE'
-          import json, os
-          jobs = json.loads(os.environ['RESULTS'])
-          if any(job['result'] != 'success' for job in jobs.values()):
-              raise SystemExit('All required CI jobs must succeed')
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write('sha=' + os.environ['SOURCE_SHA'] + '\n')
-          PYCODE
+        run: go run ./scripts/verifiedsource

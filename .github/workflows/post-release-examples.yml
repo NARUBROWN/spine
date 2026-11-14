@@ -44,7 +44,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SPINE_TEST_KAFKA_BROKER: 127.0.0.1:19092
           SPINE_TEST_RABBITMQ_URL: amqp://guest:guest@127.0.0.1:5672/
-        run: python3 scripts/release/post_examples.py --version "$RELEASE_QUERY"
+        run: go run ./scripts/release/workspace post-examples --version "$RELEASE_QUERY"
       - uses: actions/upload-artifact@v4
         with:
           name: post-release-examples-${{ inputs.version }}

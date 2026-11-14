@@ -46,7 +46,7 @@ jobs:
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_SOURCE: ${{ inputs.source }}
           RELEASE_OVERRIDE_REASON: ${{ inputs.observation_override_reason }}
-        run: python3 scripts/release/release.py plan
+        run: go run ./scripts/release/workspace plan
       - uses: actions/upload-artifact@v4
         with:
           name: release-plan
@@ -81,11 +81,15 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: release-plan
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.0'
+          cache: false
       - name: Create immutable tag after source verification
         env:
           GH_TOKEN: ${{ github.token }}
           VERIFIED_SHA: ${{ needs.core-ci.outputs.verified_sha }}
-        run: python3 scripts/release/release.py tag
+        run: go run ./scripts/release/workspace tag
       - name: Notify Discord of the new tag
         uses: ./.github/actions/discord-tag
         continue-on-error: true
@@ -120,10 +124,14 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: public-after-tag
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.0'
+          cache: false
       - name: Record core candidate
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/release/release.py record-core
+        run: go run ./scripts/release/record
       - uses: actions/upload-artifact@v4
         with:
           name: core-candidate-${{ needs.plan.outputs.version }}
