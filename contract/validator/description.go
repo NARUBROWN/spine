@@ -14,8 +14,9 @@ type SchemaDescriber interface {
 }
 
 type SchemaDescription struct {
-	Fields     []FieldSchema
-	Unresolved []string
+	Fields              []FieldSchema
+	ConditionalRequired []ConditionalRequired
+	Unresolved          []string
 }
 
 // FieldSchema는 Go 필드 인덱스로 검증 제약을 연결합니다.
@@ -28,4 +29,19 @@ type FieldSchema struct {
 	Schema   json.RawMessage
 	// SkipNested는 이 필드 내부의 DTO 검증 규칙을 적용하지 않음을 나타냅니다.
 	SkipNested bool
+}
+
+// ConditionalRequired는 모든 When 조건을 만족하는 객체에서 필수 필드를 지정합니다.
+// Index와 When의 인덱스는 SchemaDescriber에 전달된 Go 타입을 기준으로 합니다.
+type ConditionalRequired struct {
+	Index  []int
+	When   []FieldCondition
+	Schema json.RawMessage
+}
+
+// FieldCondition은 참조 필드가 존재하고 그 값이 Value와 일치하는 조건입니다.
+// Value는 JSON으로 인코딩한 단일 스칼라입니다.
+type FieldCondition struct {
+	Index []int
+	Value json.RawMessage
 }

@@ -23,4 +23,8 @@ runs:
         DISCORD_WEBHOOK_PREVIEW: ${{ inputs.webhook_preview }}
         DISCORD_WEBHOOK_RC: ${{ inputs.webhook_rc }}
         DISCORD_WEBHOOK_RELEASE: ${{ inputs.webhook_release }}
-      run: python3 "$GITHUB_ACTION_PATH/notify.py"
+      run: |
+        executable=$(mktemp "${RUNNER_TEMP}/spine-discord-tag.XXXXXX")
+        trap 'rm -f "$executable"' EXIT
+        go build -o "$executable" "$GITHUB_ACTION_PATH/notify.go"
+        "$executable"

@@ -76,9 +76,9 @@ Spine 코드의 MIT 라이선스와 각 외부 자산의 라이선스는 각각 
 업데이트 작업에만 Node.js, npm과 Python 3이 필요합니다. 저장소 루트에서 실행하세요.
 
 ```sh
-python3 scripts/update-openapi-ui.py --check-upstream
-python3 scripts/update-openapi-ui.py --update
-python3 scripts/update-openapi-ui.py --check
+go run ./scripts/openapi-ui --check-upstream
+go run ./scripts/openapi-ui --update
+go run ./scripts/openapi-ui --check
 python3 -m unittest discover -s scripts/openapi-ui -p 'test_*.py' -v
 node --test scripts/openapi-ui/test_bundle.cjs
 go run ./scripts/test test ./... -count=1

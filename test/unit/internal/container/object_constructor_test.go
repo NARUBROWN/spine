@@ -31,7 +31,9 @@ func (*variadicConstructor) Constructor(...string) *variadicConstructor { return
 
 type fallibleConstructor struct{}
 
-func (*fallibleConstructor) Constructor() (*fallibleConstructor, error) { return nil, nil }
+func (*fallibleConstructor) Constructor() (*fallibleConstructor, error) {
+	return &fallibleConstructor{}, nil
+}
 
 type nilConstructor struct{}
 
@@ -93,7 +95,7 @@ func TestObjectConstructorIsolationAndSingleton(t *testing.T) {
 }
 
 func TestObjectConstructorContracts(t *testing.T) {
-	for _, value := range []any{nil, missingConstructor{}, &missingConstructor{}, &wrongSelf{}, &variadicConstructor{}, &fallibleConstructor{}, func() *objectDB { return nil }} {
+	for _, value := range []any{nil, missingConstructor{}, &missingConstructor{}, &wrongSelf{}, &variadicConstructor{}, func() *objectDB { return nil }} {
 		if _, err := ObjectConstructor(value); err == nil {
 			t.Fatalf("accepted %T", value)
 		}
@@ -171,5 +173,19 @@ func TestObjectConstructorMultipleDependencies(t *testing.T) {
 	result := value.(*objectMultiple)
 	if result.db != db || result.repo.db != db {
 		t.Fatal("dependencies did not share the managed instance")
+	}
+}
+
+func TestObjectConstructorWithErrorResult(t *testing.T) {
+	factory, err := ObjectConstructor(&fallibleConstructor{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := New()
+	if err := registry.RegisterConstructor(factory); err != nil {
+		t.Fatal(err)
+	}
+	if value, err := registry.Resolve(reflect.TypeFor[*fallibleConstructor]()); err != nil || value == nil {
+		t.Fatalf("value=%v err=%v", value, err)
 	}
 }

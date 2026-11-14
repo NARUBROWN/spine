@@ -48,8 +48,8 @@ func (c *Container) RegisterConstructor(function any) error {
 		return errors.New("constructor must not be nil")
 	}
 
-	if typ.NumOut() != 1 {
-		return errors.New("constructor must return exactly one value")
+	if !ValidConstructorResults(typ) {
+		return errors.New("constructor must return a value or a value and error")
 	}
 	if typ.IsVariadic() {
 		return errors.New("constructor must be non-variadic; use a slice parameter instead")
@@ -150,8 +150,8 @@ func (c *Container) resolve(componentType reflect.Type, stack map[reflect.Type]i
 		paramType := provider.constructor.Type().In(i)
 		paramInstance, err := c.resolve(paramType, stack, path)
 		if err != nil {
-			state.err = err
-			return nil, err
+			state.err = fmt.Errorf("resolve dependency %v for %v: %w", paramType, providerType, err)
+			return nil, state.err
 		}
 		arg, err := valueForType(paramInstance, paramType)
 		if err != nil {
@@ -163,8 +163,8 @@ func (c *Container) resolve(componentType reflect.Type, stack map[reflect.Type]i
 
 	result, err := callConstructor(provider.constructor, args)
 	if err != nil {
-		state.err = err
-		return nil, err
+		state.err = fmt.Errorf("construct %v: %w", providerType, err)
+		return nil, state.err
 	}
 	if cached, existed := c.cacheInstance(providerType, result); existed {
 		state.instance = cached
@@ -173,6 +173,19 @@ func (c *Container) resolve(componentType reflect.Type, stack map[reflect.Type]i
 	state.instance = result
 
 	return result, nil
+}
+
+// ValidConstructorResults는 제공 값과 선택적 error 반환의 형식을 검사합니다.
+func ValidConstructorResults(signature reflect.Type) bool {
+	errorType := reflect.TypeFor[error]()
+	switch signature.NumOut() {
+	case 1:
+		return signature.Out(0) != errorType
+	case 2:
+		return signature.Out(0) != errorType && signature.Out(1) == errorType
+	default:
+		return false
+	}
 }
 
 func callConstructor(constructor reflect.Value, args []reflect.Value) (result any, err error) {
@@ -186,7 +199,11 @@ func callConstructor(constructor reflect.Value, args []reflect.Value) (result an
 		}
 	}()
 
-	value := constructor.Call(args)[0]
+	results := constructor.Call(args)
+	if len(results) == 2 && !results[1].IsNil() {
+		return nil, results[1].Interface().(error)
+	}
+	value := results[0]
 	if isNilValue(value) {
 		return nil, fmt.Errorf("constructor for %v returned nil", constructor.Type().Out(0))
 	}
