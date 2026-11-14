@@ -23,7 +23,7 @@ runs:
       run: |
         args=()
         if [ "$PUBLISHED" = true ]; then args+=(--published); fi
-        go run spine/scripts/release/workspace/main.go refs --root spine --ref "$CHANNEL_REF" "${args[@]}"
+        go -C spine run ./scripts/release/workspace refs --root . --ref "$CHANNEL_REF" "${args[@]}"
     - uses: actions/checkout@v4
       with:
         repository: NARUBROWN/spine-echo-platform
@@ -73,4 +73,4 @@ runs:
       run: |
         args=()
         if [ "$PUBLISHED" = true ]; then args+=(--published); fi
-        go run spine/scripts/release/workspace/main.go prepare --root spine --output "$RUNNER_TEMP/spine-contracts/go.work" "${args[@]}"
+        go -C spine run ./scripts/release/workspace prepare --root . --output "$RUNNER_TEMP/spine-contracts/go.work" "${args[@]}"
