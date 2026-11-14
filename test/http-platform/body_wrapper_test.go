@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/NARUBROWN/spine"
 	playground "github.com/NARUBROWN/spine-validator-playground"
@@ -165,21 +164,20 @@ func (*bodyMediaController) RegisterRoutes(r *api.Registry) {
 	r.POST("/optional", func(body input.Body[optionalChildBody]) httpx.Response[bool] {
 		return httpx.Response[bool]{Body: body.Child != nil}
 	})
-	r.POST("/publish", func(ctx handlerspine.Ctx) httpx.Response[string] {
-		publish.Event(ctx.ExecutionContext().Context(), testDomainEvent{})
-		return httpx.Response[string]{Body: "queued"}
+	r.POST("/publish", func(ctx handlerspine.Ctx) (httpx.Response[string], error) {
+		if err := publish.Event(ctx.ExecutionContext().Context(), "test.created", publish.Fields{}); err != nil {
+			return httpx.Response[string]{}, err
+		}
+		return httpx.Response[string]{Body: "queued"}, nil
 	})
 	r.POST("/publish-written", func(ctx handlerspine.Ctx) error {
-		publish.Event(ctx.ExecutionContext().Context(), testDomainEvent{})
+		if err := publish.Event(ctx.ExecutionContext().Context(), "test.created", publish.Fields{}); err != nil {
+			return err
+		}
 		response, _ := ctx.HTTPResponseContext()
 		return response.WriteString(http.StatusOK, "queued")
 	})
 }
-
-type testDomainEvent struct{}
-
-func (testDomainEvent) Name() string          { return "test.created" }
-func (testDomainEvent) OccurredAt() time.Time { return time.Unix(1, 0) }
 
 type invalidMediaController struct {
 	bind any
@@ -296,12 +294,16 @@ type latePublishInterceptor struct {
 func (latePublishInterceptor) PreHandle(handlerspine.Ctx, core.HandlerMeta) error { return nil }
 func (i latePublishInterceptor) PostHandle(ctx handlerspine.Ctx, _ core.HandlerMeta) {
 	if i.phase == "post" {
-		publish.Event(ctx.ExecutionContext().Context(), testDomainEvent{})
+		if err := publish.Event(ctx.ExecutionContext().Context(), "test.created", publish.Fields{}); err != nil {
+			panic(err)
+		}
 	}
 }
 func (i latePublishInterceptor) BeforeResponse(ctx handlerspine.Ctx, _ core.HandlerMeta, err error) error {
 	if i.phase == "before" && err == nil {
-		publish.Event(ctx.ExecutionContext().Context(), testDomainEvent{})
+		if err := publish.Event(ctx.ExecutionContext().Context(), "test.created", publish.Fields{}); err != nil {
+			return err
+		}
 		if i.fail {
 			return fmt.Errorf("finalization failed")
 		}

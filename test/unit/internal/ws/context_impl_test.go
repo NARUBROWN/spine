@@ -193,7 +193,7 @@ func (viewEvent) OccurredAt() time.Time { return time.Time{} }
 func TestInterceptorViewPublishesThroughGoContext(t *testing.T) {
 	ctx := NewWSExecutionContext(context.Background(), "conn-1", "/ws/echo", pkgws.TextMessage,
 		nil, nil, func(int, []byte) error { return nil })
-	publish.Event(execution.NewContext(ctx).ExecutionContext().Context(), viewEvent{})
+	publish.DomainEvents(execution.NewContext(ctx).ExecutionContext().Context(), viewEvent{})
 	events := ctx.EventBus().Drain()
 	if len(events) != 1 || events[0].Name() != "message.received" {
 		t.Fatalf("이벤트가 내부 버스에 전달되지 않았습니다: %v", events)

@@ -147,7 +147,7 @@ func (c *UserController) CreateOrder(ctx spine.Ctx, p httpinput.Path[OrderPath])
 	if !c.publishEnabled {
 		return httpx.Response[string]{}, &httperr.HTTPError{Status: http.StatusServiceUnavailable, Message: "Event publishing is not configured."}
 	}
-	publish.Event(ctx.ExecutionContext().Context(), OrderCreated{
+	publish.DomainEvents(ctx.ExecutionContext().Context(), OrderCreated{
 		OrderID: p.OrderID,
 		At:      time.Now(),
 	})
@@ -161,7 +161,7 @@ func (c *UserController) CreateStock(ctx spine.Ctx, p httpinput.Path[StockPath])
 	if !c.publishEnabled {
 		return httpx.Response[string]{}, &httperr.HTTPError{Status: http.StatusServiceUnavailable, Message: "Event publishing is not configured."}
 	}
-	publish.Event(ctx.ExecutionContext().Context(), StockCreated{
+	publish.DomainEvents(ctx.ExecutionContext().Context(), StockCreated{
 		OrderID: p.StockID,
 		At:      time.Now(),
 	})

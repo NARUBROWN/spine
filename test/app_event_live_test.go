@@ -30,19 +30,13 @@ import (
 type liveEventInput struct {
 	ID string `json:"id"`
 }
-type liveDomainEvent struct {
-	ID    string `json:"id"`
-	topic string
-}
-
-func (e liveDomainEvent) Name() string        { return e.topic }
-func (liveDomainEvent) OccurredAt() time.Time { return time.Now() }
-
 type liveEventHTTPController struct{ topic string }
 
-func (c *liveEventHTTPController) Emit(ctx context.Context, body input.Body[liveEventInput]) httpx.Response[string] {
-	publish.Event(ctx, liveDomainEvent{ID: body.ID, topic: c.topic})
-	return httpx.Response[string]{Body: "accepted"}
+func (c *liveEventHTTPController) Emit(ctx context.Context, body input.Body[liveEventInput]) (httpx.Response[string], error) {
+	if err := publish.Event(ctx, c.topic, publish.Fields{"id": body.ID}); err != nil {
+		return httpx.Response[string]{}, err
+	}
+	return httpx.Response[string]{Body: "accepted"}, nil
 }
 
 type liveEventWorker struct {
@@ -54,8 +48,7 @@ func (c *liveEventWorker) Handle(ctx context.Context, input liveEventInput) erro
 	if c.attempts.Add(1) == 1 {
 		return errors.New("fail the first delivery")
 	}
-	publish.Event(ctx, liveDomainEvent{ID: input.ID, topic: c.topic})
-	return nil
+	return publish.Event(ctx, c.topic, publish.Fields{"id": input.ID})
 }
 
 // readyEventFactory는 공개 계약만으로 초기 구독 준비 완료를 관찰합니다.
@@ -97,7 +90,7 @@ func TestAppEventLive_HTTPToBrokerWorkerAndResult(t *testing.T) {
 				}
 				defer conn.DeleteTopics(inputTopic, outputTopic)
 				makeFactory = func(consume, publish bool, group string) (eventadapter.Factory, error) {
-					return kafkaplatform.NewFactory(kafkaplatform.Config{Brokers: []string{broker}, Consume: consume, Publish: publish, GroupID: group, AllowInsecureTransport: true})
+					return kafkaplatform.NewFactory(kafkaplatform.Config{Brokers: []string{broker}, Consume: consume, Publish: publish, PublishDestinations: testDestinations{inputTopic, outputTopic}, GroupID: group, AllowInsecureTransport: true})
 				}
 			} else {
 				conn, err := amqp.Dial(address)
@@ -113,7 +106,7 @@ func TestAppEventLive_HTTPToBrokerWorkerAndResult(t *testing.T) {
 				defer ch.QueueDelete(inputTopic, false, false, false)
 				defer ch.QueueDelete(outputTopic, false, false, false)
 				makeFactory = func(consume, publish bool, _ string) (eventadapter.Factory, error) {
-					return rabbitmqplatform.NewFactory(rabbitmqplatform.Config{URL: address, Exchange: name, Consume: consume, Publish: publish, AllowInsecureTransport: true, FailurePolicy: rabbitmqplatform.FailureRequeue})
+					return rabbitmqplatform.NewFactory(rabbitmqplatform.Config{URL: address, Exchange: name, Consume: consume, Publish: publish, PublishDestinations: testDestinations{inputTopic, outputTopic}, AllowInsecureTransport: true, FailurePolicy: rabbitmqplatform.FailureRequeue})
 				}
 			}
 			factory := func(consume, publish bool, group string) eventadapter.Factory {
@@ -217,3 +210,7 @@ func TestAppEventLive_HTTPToBrokerWorkerAndResult(t *testing.T) {
 		})
 	}
 }
+
+type testDestinations []string
+
+func (d testDestinations) PublishDestinations() []string { return d }

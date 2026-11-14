@@ -64,6 +64,12 @@ type Publisher interface {
 	Close(context.Context) error
 }
 
+// DestinationSource는 앱이 발행할 논리 목적지 목록을 제공합니다.
+// 어댑터가 각 이름을 브로커의 실제 주소로 해석합니다.
+type DestinationSource interface {
+	PublishDestinations() []string
+}
+
 // Factory는 기능을 선언하고 독립된 Reader와 Publisher를 생성합니다.
 // Capabilities는 네트워크나 native 훅을 실행하지 않는 불변 선언입니다.
 // factory 메서드는 동시에 호출할 수 있으며 브로커별 typed 옵션과 자격 증명은 구현이 소유합니다.
