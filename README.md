@@ -14,7 +14,7 @@
 
 **Preview** | 공개 코어 태그 [`v0.7.2-preview.3`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.3)
 
-소스의 다음 후보는 `v0.7.5-preview.1`이며, 대상 정식 버전은 `v0.7.5`입니다. API 호환성 변경과 전환 방법은 [마이그레이션 안내](docs/migration/v0.7.5.md)를 참고하세요. 아직 태그를 발행하지 않았습니다.
+소스의 다음 후보는 `v0.7.6-preview.1`이며, 대상 정식 버전은 `v0.7.6`입니다. API 호환성 변경과 전환 방법은 [마이그레이션 안내](docs/migration/v0.7.6.md)를 참고하세요. 아직 태그를 발행하지 않았습니다.
 
 다른 채널 | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 

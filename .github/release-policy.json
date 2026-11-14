@@ -2,7 +2,7 @@
   "schema_version": "spine.release-policy/v2",
   "kind": "core",
   "module": "github.com/NARUBROWN/spine",
-  "next_version": "v0.7.5",
+  "next_version": "v0.7.6",
   "preview_hours": 72,
   "rc_hours": 24,
   "stable_interval_hours": 168,
@@ -15,50 +15,50 @@
   },
   "channels": {
     "preview": {
-      "core_version": "v0.7.5-preview.1",
+      "core_version": "v0.7.6-preview.1",
       "modules": {
         "github.com/NARUBROWN/spine-echo-platform": "v0.2.1-preview.1",
         "github.com/NARUBROWN/spine-nethttp-platform": "v0.1.0-preview.2",
         "github.com/NARUBROWN/spine-gorilla-platform": "v0.2.0-preview.2",
-        "github.com/NARUBROWN/spine-kafka-platform": "v0.2.0-preview.2",
-        "github.com/NARUBROWN/spine-rabbitmq-platform": "v0.2.0-preview.2",
-        "github.com/NARUBROWN/spine-nats-platform": "v0.1.0-preview.1",
-        "github.com/NARUBROWN/spine-validator-playground": "v0.2.0-preview.6"
+        "github.com/NARUBROWN/spine-kafka-platform": "v0.3.0-preview.1",
+        "github.com/NARUBROWN/spine-rabbitmq-platform": "v0.3.0-preview.1",
+        "github.com/NARUBROWN/spine-nats-platform": "v0.2.0-preview.1",
+        "github.com/NARUBROWN/spine-validator-playground": "v0.2.1-preview.1"
       }
     },
     "rc": {
-      "core_version": "v0.7.5-rc.1",
+      "core_version": "v0.7.6-rc.1",
       "modules": {
         "github.com/NARUBROWN/spine-echo-platform": "v0.2.1-preview.1",
         "github.com/NARUBROWN/spine-nethttp-platform": "v0.1.0-preview.2",
         "github.com/NARUBROWN/spine-gorilla-platform": "v0.2.0-preview.2",
-        "github.com/NARUBROWN/spine-kafka-platform": "v0.2.0-preview.2",
-        "github.com/NARUBROWN/spine-rabbitmq-platform": "v0.2.0-preview.2",
-        "github.com/NARUBROWN/spine-nats-platform": "v0.1.0-preview.1",
-        "github.com/NARUBROWN/spine-validator-playground": "v0.2.0-preview.6"
+        "github.com/NARUBROWN/spine-kafka-platform": "v0.3.0-preview.1",
+        "github.com/NARUBROWN/spine-rabbitmq-platform": "v0.3.0-preview.1",
+        "github.com/NARUBROWN/spine-nats-platform": "v0.2.0-preview.1",
+        "github.com/NARUBROWN/spine-validator-playground": "v0.2.1-preview.1"
       }
     },
     "stable": {
-      "core_version": "v0.7.5",
+      "core_version": "v0.7.6",
       "modules": {
         "github.com/NARUBROWN/spine-echo-platform": "v0.2.1-preview.1",
         "github.com/NARUBROWN/spine-nethttp-platform": "v0.1.0-preview.2",
         "github.com/NARUBROWN/spine-gorilla-platform": "v0.2.0-preview.2",
-        "github.com/NARUBROWN/spine-kafka-platform": "v0.2.0-preview.2",
-        "github.com/NARUBROWN/spine-rabbitmq-platform": "v0.2.0-preview.2",
-        "github.com/NARUBROWN/spine-nats-platform": "v0.1.0-preview.1",
-        "github.com/NARUBROWN/spine-validator-playground": "v0.2.0-preview.6"
+        "github.com/NARUBROWN/spine-kafka-platform": "v0.3.0-preview.1",
+        "github.com/NARUBROWN/spine-rabbitmq-platform": "v0.3.0-preview.1",
+        "github.com/NARUBROWN/spine-nats-platform": "v0.2.0-preview.1",
+        "github.com/NARUBROWN/spine-validator-playground": "v0.2.1-preview.1"
       }
     }
   },
   "ci_sources": {
     "github.com/NARUBROWN/spine-echo-platform": "e0ed7fab17bda14f92d74845314f781b754f6071",
-    "github.com/NARUBROWN/spine-validator-playground": "fd13a60df886afb295852270e77ff4588b69a8e6",
+    "github.com/NARUBROWN/spine-validator-playground": "bb04afc324905620fe2759b3b1201a9553be191f",
     "github.com/NARUBROWN/spine-gorilla-platform": "c501e2f47603dde30e2b518cce15685274d25ed7",
-    "github.com/NARUBROWN/spine-kafka-platform": "3016808daef7f0ffc71a619294a599640f5502ed",
-    "github.com/NARUBROWN/spine-rabbitmq-platform": "91bd4b24b8410e18a2058fd048d12bd34b1ce6d4",
+    "github.com/NARUBROWN/spine-kafka-platform": "6625ff1bee22e65f50c479013ed01b766d2f69dd",
+    "github.com/NARUBROWN/spine-rabbitmq-platform": "4ea3a8f17872c27a0b9887a355d1c1a7c1f9503a",
     "github.com/NARUBROWN/spine-nethttp-platform": "3184eae63fd7e400b2ff34ad8c01e845f5d55462",
-    "github.com/NARUBROWN/spine-nats-platform": "e6bc25448cb0c29bd05d7e777796ddd3d972d4ae"
+    "github.com/NARUBROWN/spine-nats-platform": "a52a750da727a04c7c3f372f74f560741caf0e3f"
   },
   "post_release_examples": {
     "chat": {
