@@ -41,7 +41,7 @@ func (a *app) componentConstructors(role string, contract reflect.Type, prototyp
 		path := fmt.Sprintf("%sConstructors[%d]", role, index)
 		if t := reflect.TypeOf(prototype); role == "Custom" && t != nil && t.Kind() == reflect.Func {
 			if err := container.New().RegisterConstructor(prototype); err != nil {
-				a.componentIssues = append(a.componentIssues, boot.ConfigIssue{Path: path, Code: "COMPONENT_CONSTRUCTOR_INVALID", Message: err.Error(), Hint: "Provide a non-nil constructor function returning exactly one value."})
+				a.componentIssues = append(a.componentIssues, boot.ConfigIssue{Path: path, Code: "COMPONENT_CONSTRUCTOR_INVALID", Message: err.Error(), Hint: "Provide a non-nil constructor function returning a value or a value and error."})
 				continue
 			}
 			a.constructors = append(a.constructors, prototype)

@@ -39,6 +39,7 @@ type Config struct {
 	Interceptors            []core.Interceptor
 	ScopedInterceptors      []InterceptorBinding
 	CustomTransports        []core.CustomTransport
+	ShutdownHooks           []any
 	EnableGracefulShutdown  bool
 	ShutdownTimeout         time.Duration
 	EventAdapters           []EventAdapterBinding
@@ -90,7 +91,7 @@ func requiresShutdownSignal(config Config) bool {
 	if config.HTTP != nil {
 		return config.EnableGracefulShutdown
 	}
-	if len(config.CustomTransports) > 0 {
+	if len(config.CustomTransports) > 0 || len(config.ShutdownHooks) > 0 {
 		return true
 	}
 	if config.ConsumerRegistry == nil || len(config.ConsumerRegistry.Registrations()) == 0 {
@@ -115,6 +116,7 @@ func Validate(config Config) error {
 func validate(config Config) ([]configuration.OpenAPIResource, error) {
 	issues := controllerProviderIssues(config)
 	issues = append(issues, componentValidationIssues(config)...)
+	issues = append(issues, shutdownHookIssues(config.ShutdownHooks)...)
 	if config.ConsumerRegistry != nil {
 		resolvers := consumerArgumentResolvers(config.Validator)
 		for i, registration := range config.ConsumerRegistry.Registrations() {

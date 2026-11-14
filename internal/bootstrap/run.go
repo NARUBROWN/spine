@@ -117,7 +117,7 @@ func (a *Application) run(ctx context.Context) error {
 			}
 		}()
 	}
-	if a.server == nil && len(a.consumers) == 0 && len(a.transports) == 0 {
+	if a.server == nil && len(a.consumers) == 0 && len(a.transports) == 0 && len(a.shutdownHooks) == 0 {
 		return nil
 	}
 	select {

@@ -41,6 +41,7 @@ type Application struct {
 	consumers       []consumerRuntime
 	transports      []core.CustomTransport
 	publishers      []publisherCloser
+	shutdownHooks   []func(context.Context) error
 	closeOnce       sync.Once
 	closeDone       chan struct{}
 	closeErr        error
@@ -71,7 +72,7 @@ func (a *Application) Close(ctx context.Context) error {
 		if a.server != nil {
 			a.server.StopAccepting()
 		}
-		go a.closeResources()
+		go a.closeResources(time.Now().Add(a.shutdownTimeout()))
 	})
 	select {
 	case <-a.closeDone:
@@ -86,7 +87,7 @@ func (a *Application) Close(ctx context.Context) error {
 	}
 }
 
-func (a *Application) closeResources() {
+func (a *Application) closeResources(deadline time.Time) {
 	defer close(a.closeDone)
 	step := func(name string, close func() error) {
 		if err := closeResource(name, close); err != nil {
@@ -112,6 +113,13 @@ func (a *Application) closeResources() {
 	for i := len(a.transports) - 1; i >= 0; i-- {
 		transport := a.transports[i]
 		step("custom transport", func() error { return transport.Stop(ctx) })
+	}
+	if len(a.shutdownHooks) > 0 {
+		hookCtx, cancelHooks := context.WithDeadline(context.Background(), deadline)
+		defer cancelHooks()
+		for index, hook := range a.shutdownHooks {
+			step(fmt.Sprintf("shutdown hook[%d]", index), func() error { return hook(hookCtx) })
+		}
 	}
 	for i := len(a.publishers) - 1; i >= 0; i-- {
 		publisher := a.publishers[i]

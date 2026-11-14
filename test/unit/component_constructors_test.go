@@ -69,7 +69,7 @@ func TestRoleConstructorContracts(t *testing.T) {
 		{"nil custom", func(a App) { a.Constructor(constructor.Custom(nil)) }, "COMPONENT_CONSTRUCTOR_INVALID"},
 		{"nil factory", func(a App) { a.Constructor(constructor.Custom((func() *componentDependency)(nil))) }, "COMPONENT_CONSTRUCTOR_INVALID"},
 		{"invalid factory", func(a App) {
-			a.Constructor(constructor.Custom(func() (*componentDependency, error) { panic("must not run") }))
+			a.Constructor(constructor.Custom(func() (*componentDependency, bool) { panic("must not run") }))
 		}, "COMPONENT_CONSTRUCTOR_INVALID"},
 		{"factory outside custom", func(a App) {
 			a.Constructor(constructor.Repository(func() *componentDependency { panic("must not run") }))
