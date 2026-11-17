@@ -14,23 +14,23 @@ import (
 
 // NewContext는 내부 실행을 감싼 공통 공개 컨텍스트를 반환합니다.
 func NewContext(ctx Context, input *Input) contextview.Ctx {
-	return publicContext{source: ctx, input: input}
+	return publicContext{execution: executionView{source: ctx}, input: input}
 }
 
 type publicContext struct {
-	source Context
-	input  *Input
+	execution contextview.ExecutionContextView
+	input     *Input
 }
 
-func (v publicContext) Get(key string) (any, bool) { return v.source.Get(key) }
+func (v publicContext) Get(key string) (any, bool) { return v.execution.Get(key) }
 func (v publicContext) ExecutionContext() contextview.ExecutionContextView {
-	return executionView{source: v.source}
+	return v.execution
 }
 func (v publicContext) HTTPRequestContext() (contextview.HTTPRequestView, bool) {
 	if v.input.HTTPRequest() == nil {
 		return nil, false
 	}
-	return httpRequestView{source: v.source, input: v.input}, true
+	return httpRequestView{execution: v.execution, input: v.input}, true
 }
 func (v publicContext) HTTPResponseContext() (contextview.HTTPResponseView, bool) {
 	available := false
@@ -54,11 +54,11 @@ func (v executionView) Get(key string) (any, bool) { return v.source.Get(key) }
 func (v executionView) Set(key string, value any)  { v.source.Set(key, value) }
 
 type httpRequestView struct {
-	source Context
-	input  *Input
+	execution contextview.ExecutionContextView
+	input     *Input
 }
 
-func (v httpRequestView) Context() context.Context { return v.source.Context() }
+func (v httpRequestView) Context() context.Context { return v.execution.Context() }
 func (v httpRequestView) Method() string {
 	return readInput(v.input, func(s Sources) string {
 		if s.HTTPRequest == nil {
