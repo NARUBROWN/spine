@@ -102,3 +102,8 @@ func (r *Registry) HEAD(path string, handler any, options ...Option) {
 func (r *Registry) OPTIONS(path string, handler any, options ...Option) {
 	r.add(http.MethodOptions, path, handler, options)
 }
+
+// WS registers a WebSocket endpoint whose callback runs once per received message.
+func (r *Registry) WS(path string, handler any, options ...Option) {
+	r.add("WS", path, handler, options)
+}

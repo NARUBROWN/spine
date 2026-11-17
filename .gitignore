@@ -63,3 +63,5 @@ __pycache__/
 !docs/migration/v0.7.1.md
 
 !docs/migration/app-publisher.md
+
+!docs/migration/websocket-dx.md

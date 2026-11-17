@@ -1,4 +1,4 @@
-// Package input은 핸들러 인자의 HTTP 입력 출처를 선언합니다.
+// Package input declares explicit HTTP and WebSocket handler input sources.
 package input
 
 // Path는 경로 값을 T에 바인딩합니다. T는 구조체 또는 기본 스칼라입니다.
@@ -17,3 +17,7 @@ type Header[T any] *T
 // Content-Type에 따라 JSON, XML, URL-encoded form 또는 multipart를 처리합니다.
 // 각 형식의 필드 이름은 json, xml 또는 form 태그로 지정합니다.
 type Body[T any] *T
+
+// Message declares a JSON WebSocket message body. Value is decoded and validated
+// after PreHandle, before the callback. Raw payloads use Message[[]byte].
+type Message[T any] struct{ Value T }
