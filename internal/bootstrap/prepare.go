@@ -18,6 +18,7 @@ import (
 	"github.com/NARUBROWN/spine/internal/endpoint"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	eventPublish "github.com/NARUBROWN/spine/internal/event/publish"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	spineRouter "github.com/NARUBROWN/spine/internal/router"
@@ -363,7 +364,7 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 					}
 					return scope.Writer().WriteJSON(http.StatusOK, append([]byte(nil), openAPIDocument...))
 				}
-				return httpPipeline.Execute(request)
+				return httpPipeline.Execute(execution.NewState(request.Context()), execution.NewInput(execution.Sources{Routing: request, HTTPRequest: request, HTTPResponse: request}))
 			},
 		}
 		var server adapter.HTTPAdapter

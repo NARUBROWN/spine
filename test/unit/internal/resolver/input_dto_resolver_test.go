@@ -27,7 +27,7 @@ func TestInputDTOResolverBindsOnlyTheDeclaredSourceBeforeValidation(t *testing.T
 	ctx.headers = map[string][]string{"x-request-id": {"request-1"}, "X-Roles": {"reader, writer"}, "age": {"999"}}
 	calls := 0
 	r := &InputDTOResolver{Validator: validatorFunc(func(_ context.Context, value any) error { calls++; return nil })}
-	query, err := r.Resolve(ctx, ParameterMeta{Type: reflect.TypeFor[httpinput.Query[filters]]()})
+	query, err := r.Resolve(ctx, ParameterMeta{Type: reflect.TypeFor[httpinput.Query[filters]]()}, httpTestInput(ctx))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestInputDTOResolverBindsOnlyTheDeclaredSourceBeforeValidation(t *testing.T
 	if q.Age != 18 || q.Zero == nil || *q.Zero != 0 {
 		t.Fatalf("쿼리 구조체 직접 접근: %+v", q)
 	}
-	value, err := r.Resolve(ctx, ParameterMeta{Type: reflect.TypeFor[httpinput.Header[headers]]()})
+	value, err := r.Resolve(ctx, ParameterMeta{Type: reflect.TypeFor[httpinput.Header[headers]]()}, httpTestInput(ctx))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestInputDTOResolverBindsOnlyTheDeclaredSourceBeforeValidation(t *testing.T
 		t.Fatalf("헤더 바인딩과 검증: %+v %d", h, calls)
 	}
 	ctx.queries["age"] = []string{"secret-not-an-int"}
-	_, err = r.Resolve(ctx, ParameterMeta{Type: reflect.TypeFor[httpinput.Query[filters]]()})
+	_, err = r.Resolve(ctx, ParameterMeta{Type: reflect.TypeFor[httpinput.Query[filters]]()}, httpTestInput(ctx))
 	var failure *httperr.HTTPError
 	if !errors.As(err, &failure) || failure.Status != 400 || calls != 2 {
 		t.Fatalf("변환 실패는 검증 전 400이어야 합니다: %v %d", err, calls)
@@ -57,7 +57,7 @@ func TestInputDTOResolverPreservesValidationFailure(t *testing.T) {
 	}
 	failure := validation.NewError(validation.FieldError{Field: "/X-ID", Rule: "required"})
 	r := &InputDTOResolver{Validator: validatorFunc(func(context.Context, any) error { return failure })}
-	_, err := r.Resolve(newFakeHttpCtx(), ParameterMeta{Type: reflect.TypeFor[httpinput.Header[headers]]()})
+	_, err := r.Resolve(newFakeHttpCtx(), ParameterMeta{Type: reflect.TypeFor[httpinput.Header[headers]]()}, httpTestInput(newFakeHttpCtx()))
 	if !errors.Is(err, failure) {
 		t.Fatalf("검증 계약의 오류를 보존해야 합니다: %v", err)
 	}
@@ -88,11 +88,11 @@ func TestInputDTOResolverUsesRawQueryBeforeValidation(t *testing.T) {
 		return nil
 	})}
 	meta := ParameterMeta{Type: reflect.TypeFor[httpinput.Query[filters]]()}
-	if _, err := r.Resolve(ctx, meta); err != nil || calls != 1 {
+	if _, err := r.Resolve(ctx, meta, httpTestInput(ctx)); err != nil || calls != 1 {
 		t.Fatalf("원시 쿼리 바인딩 실패: %v %d", err, calls)
 	}
 	ctx.raw = "count=0&count=0"
-	_, err := r.Resolve(ctx, meta)
+	_, err := r.Resolve(ctx, meta, httpTestInput(ctx))
 	var failure *httperr.HTTPError
 	if !errors.As(err, &failure) || failure.Status != 400 || calls != 1 {
 		t.Fatalf("단일 값 중복은 검증 전에 400이어야 합니다: %v %d", err, calls)
@@ -100,7 +100,7 @@ func TestInputDTOResolverUsesRawQueryBeforeValidation(t *testing.T) {
 	ctx.available = false
 	ctx.queries = map[string][]string{"tags": {"a,b"}}
 	r.Validator = nil
-	value, err := r.Resolve(ctx.fakeHttpCtx, meta)
+	value, err := r.Resolve(ctx.fakeHttpCtx, meta, httpTestInput(ctx.fakeHttpCtx))
 	if err != nil || !reflect.DeepEqual(value.(httpinput.Query[filters]).Tags, []string{"a,b"}) {
 		t.Fatalf("원시 쿼리가 없으면 디코딩된 쉼표를 구분자로 추측하면 안 됩니다: %+v %v", value, err)
 	}
@@ -112,7 +112,7 @@ func TestPaginationRejectsRepeatedQueryValues(t *testing.T) {
 	for _, name := range []string{"page", "size"} {
 		ctx := newFakeHttpCtx()
 		ctx.queries[name] = []string{"1", "1"}
-		_, err := r.Resolve(ctx, meta)
+		_, err := r.Resolve(ctx, meta, httpTestInput(ctx))
 		var failure *httperr.HTTPError
 		if !errors.As(err, &failure) || failure.Status != 400 {
 			t.Fatalf("페이지네이션도 단일 값 중복을 거부해야 합니다: %v", err)

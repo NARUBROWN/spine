@@ -15,13 +15,13 @@ func (r *PayloadResolver) Supports(meta resolver.ParameterMeta) bool {
 	return reflect.TypeFor[[]byte]().ConvertibleTo(meta.Type) && meta.Type.Kind() == reflect.Slice
 }
 
-func (r *PayloadResolver) Resolve(ctx execution.Context, meta resolver.ParameterMeta) (any, error) {
-	consumerCtx, ok := ctx.(execution.ConsumerRequestContext)
+func (r *PayloadResolver) Resolve(ctx execution.Context, meta resolver.ParameterMeta, source *execution.Input) (any, error) {
+	message, ok := source.ConsumerMessage()
 	if !ok {
-		return nil, fmt.Errorf("context is not a ConsumerRequestContext")
+		return nil, fmt.Errorf("consumer message input is not available")
 	}
 
-	payload := slices.Clone(consumerCtx.Payload())
+	payload := slices.Clone(message.Payload)
 
 	value := reflect.ValueOf(payload)
 	if !value.Type().ConvertibleTo(meta.Type) {

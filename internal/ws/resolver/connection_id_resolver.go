@@ -15,12 +15,12 @@ func (r *ConnectionIDResolver) Supports(meta resolver.ParameterMeta) bool {
 	return meta.Type == reflect.TypeFor[pkgws.ConnectionID]()
 }
 
-func (r *ConnectionIDResolver) Resolve(ctx execution.Context, meta resolver.ParameterMeta) (any, error) {
-	wsCtx, ok := ctx.(execution.WebSocketContext)
-	if !ok {
-		return nil, fmt.Errorf("context is not a WebSocketContext")
+func (r *ConnectionIDResolver) Resolve(ctx execution.Context, meta resolver.ParameterMeta, source *execution.Input) (any, error) {
+	id := source.ConnectionID()
+	if id == "" {
+		return nil, fmt.Errorf("WebSocket connection ID is not available")
 	}
 	return pkgws.ConnectionID{
-		Value: wsCtx.ConnID(),
+		Value: id,
 	}, nil
 }

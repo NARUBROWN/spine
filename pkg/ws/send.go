@@ -24,5 +24,9 @@ func Send(ctx context.Context, messageType int, data []byte) error {
 	if send == nil {
 		return ErrConnectionNotFound
 	}
-	return send(messageType, data)
+	err := send(messageType, data)
+	if errors.Is(err, sendctx.ErrUnavailable) {
+		return ErrConnectionNotFound
+	}
+	return err
 }

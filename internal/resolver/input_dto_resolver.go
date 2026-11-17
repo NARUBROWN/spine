@@ -20,7 +20,7 @@ func (*InputDTOResolver) Supports(parameter ParameterMeta) bool {
 	return ok && parameter.Type.Kind() == reflect.Pointer
 }
 
-func (r *InputDTOResolver) Resolve(ctx execution.Context, parameter ParameterMeta) (any, error) {
+func (r *InputDTOResolver) Resolve(ctx execution.Context, parameter ParameterMeta, transportInput *execution.Input) (any, error) {
 	if !r.Supports(parameter) {
 		return nil, fmt.Errorf("HTTP DTO inputs require an explicit input wrapper")
 	}
@@ -32,7 +32,8 @@ func (r *InputDTOResolver) Resolve(ctx execution.Context, parameter ParameterMet
 	if err != nil {
 		return nil, err
 	}
-	httpCtx, ok := ctx.(execution.HTTPRequestContext)
+	httpCtx := transportInput.HTTPRequest()
+	ok := httpCtx != nil
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")
 	}

@@ -25,9 +25,9 @@ func TestHTTPContextTypedStateIsIndependentOfUserStore(t *testing.T) {
 	keys := []string{"id"}
 	ctx.SetRoute(params, keys)
 	params["id"], keys[0] = "mutated", "mutated"
-	ctx.Set("spine.response_writer", "user value")
-	ctx.Set("spine.params", "user value")
-	ctx.Set("spine.pathKeys", "user value")
+	execution.NewState(ctx.Context()).Set("spine.response_writer", "user value")
+	execution.NewState(ctx.Context()).Set("spine.params", "user value")
+	execution.NewState(ctx.Context()).Set("spine.pathKeys", "user value")
 	if ctx.ResponseWriter() != writer || ctx.Param("id") != "route" || ctx.PathKeys()[0] != "id" {
 		t.Fatal("사용자 저장소와 입력 map/slice가 내부 실행 상태를 덮어쓰면 안 됩니다")
 	}
@@ -65,13 +65,18 @@ type failingBody struct{ err error }
 
 func (r failingBody) Read([]byte) (int, error) { return 0, r.err }
 
-func TestHTTPContextOwnsSpineStatePerRequest(t *testing.T) {
+func TestHTTPTransportAndExecutionStateHaveSeparateOwnership(t *testing.T) {
 	type key struct{}
 	ctx := context.WithValue(context.Background(), key{}, "carried")
 	first := NewHTTPContext(testScope{ctx: ctx}, 0)
 	second := NewHTTPContext(testScope{ctx: ctx}, 0)
-	first.Set("value", true)
-	if _, exists := second.Get("value"); exists || first.Context().Value(key{}) != "carried" {
+	if _, ok := any(first).(execution.Context); ok {
+		t.Fatal("HTTP transport implements execution state")
+	}
+	firstState := execution.NewState(first.Context())
+	secondState := execution.NewState(second.Context())
+	firstState.Set("value", true)
+	if _, exists := secondState.Get("value"); exists || first.Context().Value(key{}) != "carried" {
 		t.Fatal("요청 context를 보존하고 요청 store를 격리해야 합니다")
 	}
 	first.SetRoute(map[string]string{"id": "spine"}, []string{"id"})

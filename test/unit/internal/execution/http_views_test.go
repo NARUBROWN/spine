@@ -55,7 +55,7 @@ func TestHTTPViewsHaveIndependentCapabilities(t *testing.T) {
 		Value: map[string][]string{"title": {"original"}},
 		File:  map[string][]*multipart.FileHeader{"file": {{Filename: "original.txt", Header: textproto.MIMEHeader{"Content-Type": {"text/plain"}}}}},
 	}}
-	public := NewContext(requestSource)
+	public := NewContext(requestSource, httpTestInput(requestSource))
 	request, ok := public.HTTPRequestContext()
 	if !ok || request.Method() != "GET" || request.Path() != "/" || request.Param("id") != "42" || request.Query("state") != "active" {
 		t.Fatal("응답 계약 없이 HTTP 요청 뷰를 조회하지 못했습니다")
@@ -76,7 +76,7 @@ func TestHTTPViewsHaveIndependentCapabilities(t *testing.T) {
 	}
 
 	responseSource := &responseOnlyContext{writer: &viewWriter{headers: map[string]string{}}}
-	publicResponse := NewContext(responseSource)
+	publicResponse := NewContext(responseSource, httpTestInput(responseSource))
 	response, ok := publicResponse.HTTPResponseContext()
 	if !ok {
 		t.Fatal("요청 계약 없이 HTTP 응답 뷰를 조회하지 못했습니다")
@@ -101,7 +101,7 @@ func TestRetainedHTTPResponseViewFollowsWriterReplacement(t *testing.T) {
 	first := &viewWriter{headers: map[string]string{}}
 	second := &viewWriter{headers: map[string]string{}, committed: true}
 	source := &responseOnlyContext{writer: first}
-	response, ok := NewContext(source).HTTPResponseContext()
+	response, ok := NewContext(source, httpTestInput(source)).HTTPResponseContext()
 	if !ok {
 		t.Fatal("응답 뷰가 없습니다")
 	}

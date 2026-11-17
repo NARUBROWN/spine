@@ -19,13 +19,13 @@ func (r *DTOResolver) Supports(meta resolver.ParameterMeta) bool {
 	return meta.Type.Kind() == reflect.Struct
 }
 
-func (r *DTOResolver) Resolve(ctx execution.Context, meta resolver.ParameterMeta) (any, error) {
-	wsCtx, ok := ctx.(execution.WebSocketContext)
+func (r *DTOResolver) Resolve(ctx execution.Context, meta resolver.ParameterMeta, source *execution.Input) (any, error) {
+	message, ok := source.WebSocketMessage()
 	if !ok {
-		return nil, fmt.Errorf("context is not a WebSocketContext")
+		return nil, fmt.Errorf("WebSocket message input is not available")
 	}
 
-	payload := wsCtx.Payload()
+	payload := message.Payload
 	if payload == nil {
 		return nil, fmt.Errorf("cannot create DTO because payload is empty")
 	}

@@ -14,13 +14,13 @@ func (r *EventNameResolver) Supports(meta resolver.ParameterMeta) bool {
 	return meta.Type.Kind() == reflect.String
 }
 
-func (r *EventNameResolver) Resolve(ctx execution.Context, meta resolver.ParameterMeta) (any, error) {
-	consumerCtx, ok := ctx.(execution.ConsumerRequestContext)
+func (r *EventNameResolver) Resolve(ctx execution.Context, meta resolver.ParameterMeta, source *execution.Input) (any, error) {
+	message, ok := source.ConsumerMessage()
 	if !ok {
-		return nil, fmt.Errorf("context is not a ConsumerRequestContext")
+		return nil, fmt.Errorf("consumer message input is not available")
 	}
 
-	name := consumerCtx.EventName()
+	name := message.Name
 	if name == "" {
 		return nil, fmt.Errorf("EventName not found in RequestContext")
 	}

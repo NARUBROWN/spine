@@ -18,8 +18,9 @@ func (r *PaginationResolver) Supports(parameterMeta ParameterMeta) bool {
 	return parameterMeta.Type == reflect.TypeFor[query.Pagination]()
 }
 
-func (r *PaginationResolver) Resolve(ctx execution.Context, parameterMeta ParameterMeta) (any, error) {
-	httpCtx, ok := ctx.(execution.HTTPRequestContext)
+func (r *PaginationResolver) Resolve(ctx execution.Context, parameterMeta ParameterMeta, source *execution.Input) (any, error) {
+	httpCtx := source.HTTPRequest()
+	ok := httpCtx != nil
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")
 	}

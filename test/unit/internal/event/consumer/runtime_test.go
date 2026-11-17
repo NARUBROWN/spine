@@ -22,7 +22,7 @@ type runtimeTestRouter struct {
 	meta execution.HandlerMeta
 }
 
-func (r *runtimeTestRouter) Route(ctx execution.Context) (execution.HandlerMeta, error) {
+func (r *runtimeTestRouter) Route(ctx execution.RoutingContext) (execution.HandlerMeta, error) {
 	return r.meta, nil
 }
 

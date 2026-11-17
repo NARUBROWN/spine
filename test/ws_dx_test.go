@@ -38,22 +38,28 @@ func (s *dxService) Send(ctx context.Context, id, text string) error {
 type dxController struct {
 	service   *dxService
 	connected chan string
+	frames    chan dxFrame
 }
 
 type dxConfig struct {
 	service *dxService
 	ids     chan string
+	frames  chan dxFrame
 }
 
 func (*dxController) Constructor(s *dxService, config *dxConfig) *dxController {
 	config.service = s
-	return &dxController{service: s, connected: config.ids}
+	return &dxController{service: s, connected: config.ids, frames: config.frames}
 }
 
 func (c *dxController) RegisterRoutes(r *api.Registry) {
 	r.Group("/chat").WS("/ws", func(ctx sc.Ctx, id ws.ConnectionID, message input.Message[dxMessage]) error {
 		if value, _ := ctx.ExecutionContext().Get("ws-audit"); value != true {
 			return fmt.Errorf("DI interceptor did not execute")
+		}
+		if c.frames != nil {
+			view, _ := ctx.WebSocket()
+			c.frames <- dxFrame{ctx: ctx, view: view, query: view.Query("token"), payload: string(view.Payload())}
 		}
 		c.connected <- id.Value
 		return c.service.Send(ctx.ExecutionContext().Context(), id.Value, message.Value.Text)
@@ -214,3 +220,71 @@ func (*dxInterceptor) PreHandle(ctx sc.Ctx, _ core.HandlerMeta) error {
 func (*dxInterceptor) PostHandle(sc.Ctx, core.HandlerMeta)                  {}
 func (*dxInterceptor) BeforeResponse(sc.Ctx, core.HandlerMeta, error) error { return nil }
 func (*dxInterceptor) AfterCompletion(sc.Ctx, core.HandlerMeta, error)      {}
+
+type dxFrame struct {
+	ctx            sc.Ctx
+	view           sc.WebSocketView
+	query, payload string
+}
+
+func TestWSDX_MessageCompletionReleasesViewsWithoutClosingConnection(t *testing.T) {
+	frames := make(chan dxFrame, 2)
+	config := &dxConfig{ids: make(chan string, 2), frames: frames}
+	app := spine.New(echo.Option(), gorilla.Option())
+	app.Constructor(constructor.Custom(func() *dxConfig { return config }), constructor.Service(&dxService{}), constructor.Interceptor(&dxInterceptor{}), constructor.Controller(&dxController{}))
+	prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer prepared.Close(context.Background())
+	handler, err := spine.NetHTTPHandler(prepared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/chat/ws?token=snapshot", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	var first context.Context
+	for _, text := range []string{"first", "second"} {
+		if err := conn.WriteJSON(dxMessage{Text: text}); err != nil {
+			t.Fatal(err)
+		}
+		var frame dxFrame
+		select {
+		case frame = <-frames:
+		case <-time.After(3 * time.Second):
+			t.Fatal("handler did not run")
+		}
+		if frame.query != "snapshot" || !strings.Contains(frame.payload, text) {
+			t.Fatal("wrong received input")
+		}
+		_, payload, err := conn.ReadMessage()
+		if err != nil || string(payload) != text {
+			t.Fatalf("echo=%s err=%v", payload, err)
+		}
+		messageCtx := frame.ctx.ExecutionContext().Context()
+		select {
+		case <-messageCtx.Done():
+		case <-time.After(3 * time.Second):
+			t.Fatal("message context remains active")
+		}
+		if first == messageCtx {
+			t.Fatal("message context reused")
+		}
+		first = messageCtx
+		if frame.view.Payload() != nil || frame.view.ConnID() != "" || frame.view.Query("token") != "" {
+			t.Fatal("retained view holds completed input")
+		}
+		if _, ok := frame.ctx.WebSocket(); ok {
+			t.Fatal("completed session input remains available")
+		}
+		if _, ok := frame.ctx.ExecutionContext().Get("ws-audit"); ok {
+			t.Fatal("completed store remains available")
+		}
+	}
+}

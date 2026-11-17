@@ -3,7 +3,6 @@ package resolver
 import (
 	"context"
 	"errors"
-	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	httpinput "github.com/NARUBROWN/spine/pkg/input"
 	pkgmultipart "github.com/NARUBROWN/spine/pkg/multipart"
@@ -87,7 +86,7 @@ func TestPathIntResolver_Success(t *testing.T) {
 	ctx := newFakeHttpCtx()
 	ctx.params["id"] = "42"
 
-	val, err := r.Resolve(ctx, pm)
+	val, err := r.Resolve(ctx, pm, httpTestInput(ctx))
 	if err != nil {
 		t.Fatalf("PathIntResolver 실패: %v", err)
 	}
@@ -102,7 +101,7 @@ func TestPathIntResolver_InvalidBool(t *testing.T) {
 	ctx := newFakeHttpCtx()
 	ctx.params["flag"] = "maybe"
 
-	_, err := r.Resolve(ctx, pm)
+	_, err := r.Resolve(ctx, pm, httpTestInput(ctx))
 	if err == nil {
 		t.Fatal("잘못된 불리언은 에러여야 합니다")
 	}
@@ -118,7 +117,7 @@ func TestPathIntResolver_InvalidValueReturnsBadRequest(t *testing.T) {
 	ctx := newFakeHttpCtx()
 	ctx.params["id"] = "not-an-int"
 
-	_, err := r.Resolve(ctx, pm)
+	_, err := r.Resolve(ctx, pm, httpTestInput(ctx))
 	var httpErr *httperr.HTTPError
 	if !errors.As(err, &httpErr) || httpErr.Status != 400 {
 		t.Fatalf("잘못된 경로 정수는 400 오류여야 합니다: %T %v", err, err)
@@ -131,7 +130,7 @@ func TestPathBooleanResolver_TrueVariants(t *testing.T) {
 	ctx := newFakeHttpCtx()
 	ctx.params["flag"] = "YeS"
 
-	val, err := r.Resolve(ctx, pm)
+	val, err := r.Resolve(ctx, pm, httpTestInput(ctx))
 	if err != nil {
 		t.Fatalf("불리언 파싱 실패: %v", err)
 	}
@@ -145,7 +144,7 @@ func TestPaginationResolver_Defaults(t *testing.T) {
 	pm := ParameterMeta{Type: reflect.TypeFor[query.Pagination]()}
 	ctx := newFakeHttpCtx()
 
-	val, err := r.Resolve(ctx, pm)
+	val, err := r.Resolve(ctx, pm, httpTestInput(ctx))
 	if err != nil {
 		t.Fatalf("PaginationResolver 실패: %v", err)
 	}
@@ -162,7 +161,7 @@ func TestPaginationResolver_ParseValues(t *testing.T) {
 	ctx.queries["page"] = []string{"3"}
 	ctx.queries["size"] = []string{"50"}
 
-	val, _ := r.Resolve(ctx, pm)
+	val, _ := r.Resolve(ctx, pm, httpTestInput(ctx))
 	p := val.(query.Pagination)
 	if p.Page != 3 || p.Size != 50 {
 		t.Fatalf("쿼리 파싱 결과가 잘못되었습니다: %+v", p)
@@ -188,7 +187,7 @@ func TestDTOResolver_SupportsAndResolve(t *testing.T) {
 		t.Fatal("DTOResolver가 포인터 struct DTO를 지원해야 합니다")
 	}
 
-	val, err := r.Resolve(ctx, pm)
+	val, err := r.Resolve(ctx, pm, httpTestInput(ctx))
 	if err != nil {
 		t.Fatalf("DTOResolver Resolve 실패: %v", err)
 	}
@@ -212,7 +211,7 @@ func TestDTOResolver_BindErrorPropagates(t *testing.T) {
 	ctx := newFakeHttpCtx()
 	ctx.bindErr = errors.New("bind fail")
 
-	_, err := r.Resolve(ctx, pm)
+	_, err := r.Resolve(ctx, pm, httpTestInput(ctx))
 	if err == nil {
 		t.Fatal("Bind 에러가 전파되어야 합니다")
 	}
@@ -228,7 +227,7 @@ func TestFormDTOResolver_SupportsAndResolve(t *testing.T) {
 		t.Fatal("form 태그가 있는 struct는 FormDTOResolver가 지원해야 합니다")
 	}
 
-	val, err := r.Resolve(ctx, pm)
+	val, err := r.Resolve(ctx, pm, httpTestInput(ctx))
 	if err != nil {
 		t.Fatalf("FormDTOResolver Resolve 실패: %v", err)
 	}
@@ -252,7 +251,7 @@ func TestControllerContextResolver_Resolve(t *testing.T) {
 			if !r.Supports(pm) {
 				t.Fatalf("컨텍스트 입력 %s를 지원해야 합니다", typ)
 			}
-			val, err := r.Resolve(ctx, pm)
+			val, err := r.Resolve(ctx, pm, httpTestInput(ctx))
 			if err != nil || val == nil || !reflect.TypeOf(val).AssignableTo(typ) {
 				t.Fatalf("컨텍스트 입력 %s에 %T를 할당할 수 없습니다: %v", typ, val, err)
 			}
@@ -264,7 +263,7 @@ func TestControllerContextResolver_Resolve(t *testing.T) {
 			if got, ok := view.Get("userID"); !ok || got != 7 {
 				t.Fatalf("실행 뷰가 같은 값을 읽지 못했습니다: %v %v", got, ok)
 			}
-			if _, ok := view.(execution.Context); ok {
+			if _, ok := view.(interface{ ReleaseStore() }); ok {
 				t.Fatal("핸들러 실행 뷰에서 변경 가능한 코어 컨텍스트에 접근할 수 있습니다")
 			}
 		})
@@ -292,7 +291,7 @@ func TestControllerContextResolver_DoesNotClaimUnsupportedExtendedInterface(t *t
 
 func TestStdContextResolverPreservesContext(t *testing.T) {
 	ctx := newFakeHttpCtx()
-	got, err := (&StdContextResolver{}).Resolve(ctx, ParameterMeta{Type: reflect.TypeFor[context.Context]()})
+	got, err := (&StdContextResolver{}).Resolve(ctx, ParameterMeta{Type: reflect.TypeFor[context.Context]()}, httpTestInput(ctx))
 	if err != nil || got != ctx.Context() {
 		t.Fatalf("context changed: %v %v", got, err)
 	}
@@ -316,7 +315,7 @@ func TestUploadedFilesResolver_Resolve(t *testing.T) {
 		},
 	}
 
-	val, err := r.Resolve(ctx, pm)
+	val, err := r.Resolve(ctx, pm, httpTestInput(ctx))
 	if err != nil {
 		t.Fatalf("UploadedFilesResolver Resolve 실패: %v", err)
 	}
@@ -336,7 +335,7 @@ func TestUploadedFilesResolver_PropagatesMultipartError(t *testing.T) {
 	ctx := newFakeHttpCtx()
 	ctx.multipartErr = http.ErrMissingFile
 
-	if _, err := r.Resolve(ctx, pm); !errors.Is(err, http.ErrMissingFile) {
+	if _, err := r.Resolve(ctx, pm, httpTestInput(ctx)); !errors.Is(err, http.ErrMissingFile) {
 		t.Fatalf("Multipart 에러가 전파되어야 합니다: %v", err)
 	}
 }

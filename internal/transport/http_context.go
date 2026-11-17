@@ -15,9 +15,8 @@ import (
 	"github.com/NARUBROWN/spine/internal/input"
 )
 
-// HTTPContext는 독립 HTTP scope에 Spine 요청 store를 결합합니다.
+// HTTPContext owns HTTP transport input and staged output, separately from execution.State.
 type HTTPContext struct {
-	execution.Store
 	scope                adapter.HTTPContext
 	writerMu             sync.Mutex
 	writer               adapter.ResponseWriter
@@ -30,7 +29,6 @@ type HTTPContext struct {
 	closed               bool
 }
 
-var _ execution.Context = (*HTTPContext)(nil)
 var _ execution.HTTPRequestContext = (*HTTPContext)(nil)
 
 func NewHTTPContext(scope adapter.HTTPContext, multipartMemoryBytes int64) *HTTPContext {

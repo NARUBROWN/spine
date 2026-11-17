@@ -316,7 +316,7 @@ func TestRuntime_PreHandshakeConcurrencyIsBoundedByConnectionCapacity(t *testing
 	}
 }
 
-func TestWSExecutionContext_PreservesImmutableHandshakeRequestSnapshot(t *testing.T) {
+func TestSession_PreservesImmutableHandshakeRequestSnapshot(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "http://example.test/chat?token=before&role=user", nil)
 	request.Header.Set("Authorization", "Bearer before")
 	request.AddCookie(&http.Cookie{Name: "session", Value: "cookie-before"})
@@ -324,14 +324,16 @@ func TestWSExecutionContext_PreservesImmutableHandshakeRequestSnapshot(t *testin
 	originalRequestURI := request.RequestURI
 	handshake := newWebSocketRequestSnapshot(request)
 
-	messageContext := NewWSExecutionContext(context.Background(), "conn", "/chat", pkgws.TextMessage, []byte("payload"), func(int, []byte) error { return nil }, handshake)
+	input := execution.NewInput(execution.Sources{WebSocketRequest: handshake, ConnectionID: "conn", WebSocket: &execution.WebSocketMessage{Kind: pkgws.TextMessage, Payload: []byte("payload")}})
+	defer input.Close()
+	public := execution.NewContext(execution.NewState(context.Background()), input)
 	request.Header.Set("Authorization", "Bearer after")
 	request.URL.RawQuery = "token=after"
-
-	ctx, ok := messageContext.(execution.WebSocketRequestContext)
+	ctx, ok := public.WebSocket()
 	if !ok {
-		t.Fatalf("message context = %T, want core.WebSocketMessageContext", messageContext)
+		t.Fatal("missing view")
 	}
+
 	if ctx.Header("Authorization") != "Bearer before" || ctx.Query("token") != "before" {
 		t.Fatalf("header/query snapshot changed: header=%q query=%q", ctx.Header("Authorization"), ctx.Query("token"))
 	}
@@ -476,7 +478,7 @@ func TestHandshakeContextStoreIsSharedAndReleased(t *testing.T) {
 			runtime := &Runtime{handshakeInterceptors: []core.WebSocketHandshakeInterceptor{writer, reader}}
 			request := httptest.NewRequest(http.MethodGet, "/chat", nil)
 			request.Header.Set("X-Request-ID", "handshake")
-			err := runtime.preHandshake(newWebSocketRequestSnapshot(request), Registration{})
+			err := runtime.preHandshake(request.Context(), newWebSocketRequestSnapshot(request), Registration{})
 			if (err != nil) != (outcome != "success") || read != (outcome == "success") {
 				t.Fatalf("err=%v read=%v", err, read)
 			}

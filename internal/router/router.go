@@ -41,7 +41,7 @@ type RouteSpec struct {
 }
 
 type Router interface {
-	Route(ctx execution.Context) (execution.HandlerMeta, error)
+	Route(ctx execution.RoutingContext) (execution.HandlerMeta, error)
 }
 
 type routeNode struct {
@@ -105,7 +105,7 @@ func (r *DefaultRouter) Register(method string, path string, meta execution.Hand
 	}
 }
 
-func (r *DefaultRouter) Route(ctx execution.Context) (execution.HandlerMeta, error) {
+func (r *DefaultRouter) Route(ctx execution.RoutingContext) (execution.HandlerMeta, error) {
 	root := r.trees[ctx.Method()]
 	if root == nil {
 		return execution.HandlerMeta{}, ErrRouteNotFound
