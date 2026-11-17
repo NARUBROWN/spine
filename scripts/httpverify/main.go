@@ -117,9 +117,6 @@ func verify(mode, core, echo, nethttp, output string, run runner, progress io.Wr
 	success := true
 	for _, mod := range modules {
 		env := append(os.Environ(), "GOWORK=off")
-		if mode == "platforms" {
-			env = append(env, "GOTOOLCHAIN=go1.25.5")
-		}
 		prefix := []string{}
 		if mod.name == "core" {
 			prefix = []string{"run", "./scripts/test"}

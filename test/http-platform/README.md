@@ -5,11 +5,11 @@
 ```sh
 go run ./scripts/httpverify platforms \
   --nethttp-root ../spine-nethttp-platform \
-  --echo-root ../spine-echo-issue-28 \
+  --echo-root ../spine-echo-platform \
   --output-dir /tmp/spine-http-platform-proof
 ```
 
-명령은 코어 저장소 루트에서 실행합니다. 로컬 후보 조합은 코어 `v0.7.0-preview.3`, Echo `v0.2.0-preview.2`, net/http `v0.1.0-preview.1`이며 아직 발행하지 않았습니다. 스크립트는 임시 modfile의 replace로 세 작업트리를 연결하고 Go 1.25.5에서 race와 vet을 실행합니다. 제품 및 테스트 모듈의 원래 manifest는 변경하지 않습니다.
+명령은 코어 저장소 루트에서 실행합니다. 검증기는 임시 modfile의 replace로 세 작업트리를 연결하고 현재 선택한 Go 도구체인에서 race와 vet을 실행합니다. validator를 포함한 의존성의 최소 Go 버전을 충족해야 합니다. 제품 및 테스트 모듈의 원래 manifest는 변경하지 않습니다.
 
 검사 범위는 다음과 같습니다.
 
