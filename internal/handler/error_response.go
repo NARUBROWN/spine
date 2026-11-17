@@ -7,8 +7,8 @@ import (
 	"net/http"
 
 	httpcontract "github.com/NARUBROWN/spine/contract/http"
-	"github.com/NARUBROWN/spine/internal/event/hook"
 	"github.com/NARUBROWN/spine/internal/httpfailure"
+	"github.com/NARUBROWN/spine/pkg/event/publish"
 )
 
 // WriteErrorResponse는 오류가 발생한 위치와 무관하게 같은 HTTP 응답 규칙을 적용합니다.
@@ -25,8 +25,8 @@ func WriteErrorResponse(writer httpcontract.ResponseWriter, err error) error {
 		} else {
 			status, message = httpErr.Status, httpErr.Message
 		}
-	} else if errors.Is(err, hook.ErrPublisherUnavailable) {
-		status, message = http.StatusServiceUnavailable, hook.ErrPublisherUnavailable.Error()
+	} else if errors.Is(err, publish.ErrUnavailable) {
+		status, message = http.StatusServiceUnavailable, publish.ErrUnavailable.Error()
 	} else if validationBody, ok := ValidationErrorJSON(err); ok {
 		status, body = http.StatusBadRequest, validationBody
 	} else {

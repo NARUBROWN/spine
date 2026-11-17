@@ -3,12 +3,9 @@ package router
 import (
 	"context"
 	"errors"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"reflect"
 	"testing"
-
-	"github.com/NARUBROWN/spine/internal/event/emission"
-	"github.com/NARUBROWN/spine/internal/execution"
-	"github.com/NARUBROWN/spine/pkg/event/publish"
 )
 
 func TestNewHandlerMeta_RejectsNilWithoutPanic(t *testing.T) {
@@ -16,11 +13,6 @@ func TestNewHandlerMeta_RejectsNilWithoutPanic(t *testing.T) {
 		t.Fatal("nil handler는 오류여야 합니다")
 	}
 }
-
-type testEventBus struct{}
-
-func (b *testEventBus) Publish(events ...publish.DomainEvent) {}
-func (b *testEventBus) Drain() []publish.DomainEvent          { return nil }
 
 type testExecutionContext struct {
 	method   string
@@ -45,7 +37,6 @@ func newTestExecutionContext(method string, path string) *testExecutionContext {
 }
 
 func (c *testExecutionContext) Context() context.Context     { return context.Background() }
-func (c *testExecutionContext) EventBus() emission.Bus       { return &testEventBus{} }
 func (c *testExecutionContext) Method() string               { return c.method }
 func (c *testExecutionContext) Path() string                 { return c.path }
 func (c *testExecutionContext) Params() map[string]string    { return c.params }

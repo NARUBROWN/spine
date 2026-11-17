@@ -19,7 +19,6 @@ import (
 	"github.com/NARUBROWN/spine/internal/endpoint"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
 	eventResolver "github.com/NARUBROWN/spine/internal/event/consumer/resolver"
-	"github.com/NARUBROWN/spine/internal/event/hook"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
@@ -456,12 +455,8 @@ func printBanner() {
 	log.Printf("[Bootstrap] Spine version: %s", runtimeSpineVersion())
 }
 
-func buildConsumerPipeline(container *container.Container, dispatchHook *hook.EventDispatchHook, validator validation.Validator) *pipeline.Pipeline {
+func buildConsumerPipeline(container *container.Container, validator validation.Validator) *pipeline.Pipeline {
 	consumerPipeline := pipeline.NewPipeline(nil, invoker.NewInvoker(container))
-
-	if dispatchHook != nil {
-		consumerPipeline.SetEventDispatch(dispatchHook)
-	}
 
 	consumerPipeline.AddArgumentResolver(consumerArgumentResolvers(validator)...)
 	return consumerPipeline
@@ -479,17 +474,12 @@ func consumerArgumentResolvers(validator validation.Validator) []resolver.Argume
 
 func buildWSPipeline(
 	container *container.Container,
-	dispatchHook *hook.EventDispatchHook,
 	interceptors []core.Interceptor,
 	validator validation.Validator,
 ) *pipeline.Pipeline {
 	wsPipeline := pipeline.NewPipeline(nil, invoker.NewInvoker(container))
 	for _, interceptor := range interceptors {
 		wsPipeline.AddInterceptor(interceptor)
-	}
-
-	if dispatchHook != nil {
-		wsPipeline.SetEventDispatch(dispatchHook)
 	}
 
 	wsPipeline.AddArgumentResolver(webSocketArgumentResolvers(validator)...)

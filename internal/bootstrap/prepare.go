@@ -17,13 +17,13 @@ import (
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/endpoint"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
-	"github.com/NARUBROWN/spine/internal/event/hook"
 	eventPublish "github.com/NARUBROWN/spine/internal/event/publish"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	spineRouter "github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/transport"
 	"github.com/NARUBROWN/spine/internal/ws"
+	publicPublish "github.com/NARUBROWN/spine/pkg/event/publish"
 )
 
 // Prepare는 실행 작업이나 리스너를 시작하지 않고 앱 자원을 준비합니다.
@@ -68,7 +68,7 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 		}
 	}
 
-	var eventPublishers []eventPublish.EventPublisher
+	var eventPublishers []eventPublish.Binding
 	for _, binding := range config.EventAdapters {
 		if !binding.Factory.Capabilities().Publish {
 			continue
@@ -88,16 +88,17 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 		if isNilHTTPValue(publisher) {
 			return nil, fmt.Errorf("%w: %s returned a nil publisher", eventadapter.ErrInvalidAdapter, binding.Name)
 		}
-		eventPublishers = append(eventPublishers, managed)
+		eventPublishers = append(eventPublishers, eventPublish.Binding{Name: binding.Name, Publisher: managed})
 	}
 
-	dispatchHook := &hook.EventDispatchHook{}
-	if len(eventPublishers) > 0 {
-		dispatcher, err := eventPublish.NewDefaultEventDispatcher(eventPublishers...)
-		if err != nil {
-			return nil, fmt.Errorf("[Bootstrap] failed to initialize event dispatcher: %w", err)
-		}
-		dispatchHook.Dispatcher = dispatcher
+	publisher, err := eventPublish.NewPublisher(eventPublishers...)
+	if err != nil {
+		return nil, err
+	}
+	application.stopPublishing = publisher.StopAccepting
+	application.publishers = append([]publisherCloser{{name: "application event", close: publisher.Close}}, application.publishers...)
+	if err := container.RegisterConstructor(func() publicPublish.Publisher { return publisher }); err != nil {
+		return nil, err
 	}
 
 	if err := ctx.Err(); err != nil {
@@ -235,8 +236,6 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 		httpInvoker := invoker.NewInvoker(container)
 		httpPipeline := pipeline.NewPipeline(router, httpInvoker)
 
-		httpPipeline.SetEventDispatch(dispatchHook)
-
 		log.Println("[Bootstrap] Registering argument resolvers")
 		httpPipeline.AddArgumentResolver(endpoint.Resolvers(config.Validator)...)
 		httpPipeline.AddReturnValueHandler(endpoint.Returns()...)
@@ -273,7 +272,7 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 			log.Printf("[Bootstrap] Configuring WebSocket routes (%d routes)", len(wsRegistrations))
 
 			// WS 전용 인자 리졸버 등록
-			wsPipeline := buildWSPipeline(container, dispatchHook, resolvedWSInterceptors, config.Validator)
+			wsPipeline := buildWSPipeline(container, resolvedWSInterceptors, config.Validator)
 
 			wsAdapter, err := config.WebSocketAdapterFactory.New(ws.AdapterOptions(config.HTTP.WebSocket))
 			if err != nil {
@@ -369,7 +368,7 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 			}
 			runtime := consumer.NewRuntime(config.ConsumerRegistry,
 				consumer.NewPlatformFactory(binding.Factory, binding.Options),
-				buildConsumerPipeline(container, dispatchHook, config.Validator), binding.Options.ConsumerErrorHistory)
+				buildConsumerPipeline(container, config.Validator), binding.Options.ConsumerErrorHistory)
 			application.consumers = append(application.consumers, consumerRuntime{name: binding.Name, runtime: runtime})
 			if err := runtime.PrepareWithRetry(ctx); err != nil {
 				if ctx.Err() != nil && errors.Is(err, ctx.Err()) {

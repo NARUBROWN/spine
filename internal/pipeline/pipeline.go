@@ -26,7 +26,6 @@ type Pipeline struct {
 	returnHandlers    []handler.ReturnValueHandler
 	invoker           *invoker.Invoker
 	postHooks         []hook.PostExecutionHook
-	eventDispatch     *hook.EventDispatchHook
 }
 
 func NewPipeline(router router.Router, invoker *invoker.Invoker) *Pipeline {
@@ -117,7 +116,7 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 		}
 		if responseStage != nil {
 			responseStage.rollbackSuccessResponse()
-			if interceptorErr != nil || errors.Is(finalErr, hook.ErrPublisherUnavailable) {
+			if interceptorErr != nil {
 				responseStage.prepared = false
 			}
 		}
@@ -228,16 +227,12 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 		return err
 	}
 
-	// 응답이 직렬화·쿠키·status 검증을 통과한 뒤에만 domain-event 후처리를
-	// 실행한다. 실제 transport flush는 BeforeResponse 이후까지 계속 지연된다.
+	// Run general post-execution hooks after response preparation.
+	// The transport flush remains deferred until after BeforeResponse.
 	for _, hook := range p.postHooks {
 		if err := hook.AfterExecution(ctx); err != nil {
 			return err
 		}
-	}
-
-	if err := p.dispatchEvents(ctx); err != nil {
-		return err
 	}
 
 	// 라우트 인터셉터의 사후 처리 실행(역순)
@@ -250,17 +245,13 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 		p.interceptors[i].PostHandle(interceptorCtx, meta.View())
 	}
 
-	if err := p.dispatchEvents(ctx); err != nil {
-		return err
-	}
-
 	finalErr, interceptorErr = runBeforeResponse(interceptorCtx, globalMeta, routeFinalizers, globalFinalizers, nil)
 	beforeResponseCalled = true
 	if finalErr != nil {
 		return finalErr
 	}
 
-	return p.dispatchEvents(ctx)
+	return nil
 }
 
 func findReturnedError(results []any) error {
@@ -492,15 +483,4 @@ func panicAsError(recovered any) error {
 		return fmt.Errorf("panic recovered: %w\n%s", err, debug.Stack())
 	}
 	return fmt.Errorf("panic recovered: %v\n%s", recovered, debug.Stack())
-}
-
-func (p *Pipeline) SetEventDispatch(dispatch *hook.EventDispatchHook) {
-	p.eventDispatch = dispatch
-}
-
-func (p *Pipeline) dispatchEvents(ctx execution.Context) error {
-	if p.eventDispatch == nil {
-		return nil
-	}
-	return p.eventDispatch.AfterExecution(ctx)
 }

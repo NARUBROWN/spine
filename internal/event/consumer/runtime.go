@@ -192,7 +192,7 @@ func (r *Runtime) Start(ctx context.Context) {
 					}
 
 					// 컨슈머 실행 컨텍스트 생성
-					reqCtx := NewRequestContext(ctx, msg, nil)
+					reqCtx := NewRequestContext(ctx, msg)
 
 					// 핸들러 실행
 					if err := r.pipeline.ExecuteRegistered(reqCtx, reg.Meta); err != nil {

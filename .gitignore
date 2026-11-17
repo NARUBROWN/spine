@@ -61,3 +61,5 @@ __pycache__/
 !docs/migration/component-contracts.md
 
 !docs/migration/v0.7.1.md
+
+!docs/migration/app-publisher.md

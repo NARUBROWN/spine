@@ -58,10 +58,10 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 			return transport.NewHTTPContext(storeScope{}, 0)
 		},
 		"event": func() execution.Context {
-			return consumer.NewRequestContext(context.Background(), &consumer.Message{EventName: "probe"}, nil)
+			return consumer.NewRequestContext(context.Background(), &consumer.Message{EventName: "probe"})
 		},
 		"websocket": func() execution.Context {
-			return ws.NewWSExecutionContext(context.Background(), "conn", "/probe", 1, nil, nil, func(int, []byte) error { return nil })
+			return ws.NewWSExecutionContext(context.Background(), "conn", "/probe", 1, nil, func(int, []byte) error { return nil })
 		},
 	}
 	for name, create := range contexts {
