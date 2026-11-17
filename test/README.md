@@ -1,6 +1,6 @@
 # Spine 테스트 실행
 
-Go 테스트는 저장소 루트의 `test/` 아래에 모읍니다. 원본 `.go` 파일 옆에는 `_test.go` 파일을 두지 않습니다.
+제품 Go 테스트는 저장소 루트의 `test/` 아래에 모읍니다. 유지보수 도구의 테스트는 `scripts/`와 `.github/actions/discord-tag/`의 해당 도구 패키지에 둡니다.
 
 ## 디렉터리 구조
 
@@ -26,6 +26,9 @@ go run ./scripts/test test ./... -count=1
 go run ./scripts/test test -race ./... -count=1
 go run ./scripts/test vet ./...
 go run ./scripts/test list -test ./...
+go run ./scripts/verifytools
+go test -race ./.github/actions/discord-tag ./scripts/...
+GOWORK=off go -C test/http-contract test -race ./cmd/strictstream
 ```
 
 특정 패키지나 테스트 이름도 일반 Go 인자로 선택합니다.
@@ -56,4 +59,6 @@ OpenAPI의 최신 로컬 변경 검증에는 코어, Echo 플랫폼과 validator
 
 `test/unit/go.mod`는 통합 테스트 모듈이 보관용 테스트 소스를 별도 패키지로 탐색하지 않게 하는 경계입니다. 이 모듈에서 직접 `go test`나 `go mod tidy`를 실행하지 않습니다. 테스트의 의존성은 원본 모듈이 관리합니다.
 
-루트 `test/` 밖에 `_test.go`를 추가하거나, 원본 패키지 디렉터리가 없는 위치에 테스트를 추가하면 실행기가 실패합니다. 테스트 전용 타입을 제공하는 기존 `internal/*/testdata` 패키지와 통합 테스트의 데이터 파일은 기존 위치를 유지합니다.
+제품 테스트를 루트 `test/` 밖에 추가하거나, 원본 패키지 디렉터리가 없는 위치에 테스트를 추가하면 실행기가 실패합니다. `scripts/`의 도구 테스트는 원본 패키지에서 실행합니다. 테스트 전용 타입을 제공하는 기존 `internal/*/testdata` 패키지와 통합 테스트의 데이터 파일은 기존 위치를 유지합니다.
+
+CI는 코어 패키지를 대상으로 statement 커버리지 80% 이상을 요구하고 `core-coverage` artifact에 원본 프로파일과 HTML 보고서를 저장합니다. 유지보수용 `scripts/` 패키지는 코어 커버리지의 분모에서 제외하며 테스트와 race 검사는 계속 실행합니다. `.github/actions/discord-tag`와 별도 모듈의 `cmd/strictstream` 테스트도 운영체제별 CI와 Linux race 검사에서 실행합니다.

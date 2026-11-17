@@ -1,34 +1,32 @@
-<p align="center">
-  한국어 | <a href="README.en.md">English</a> | <a href="README.ja.md">日本語</a> | <a href="README.zh-Hans.md">简体中文</a> | <a href="README.zh-Hant.md">繁體中文</a>
-</p>
+English | [Korean](README.ko.md) | [Japanese](README.ja.md) | [Simplified Chinese](README.zh-Hans.md) | [Traditional Chinese](README.zh-Hant.md)
 
 # 🦴 Spine
-
 <p align="center">
   <img src="assets/spine-logo.png" alt="Spine" width="420" />
 </p>
 
-**Spine은 요청을 해석하고 실행하는 흐름을 명시적으로 구성하는 Go 백엔드 프레임워크입니다.**
+**Spine is a backend framework that makes request execution explicit.**  
+It does not hide how a request is resolved and executed.
 
-## 현재 채널
+## Current channel
 
-**Preview** | 공개 코어 태그 [`v0.7.2-preview.3`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.3)
+**Preview** | Published core tag [`v0.7.2-preview.3`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.3)
 
-소스의 다음 후보는 `v0.7.6-preview.1`이며, 대상 정식 버전은 `v0.7.6`입니다. API 호환성 변경과 전환 방법은 [마이그레이션 안내](docs/migration/v0.7.6.md)를 참고하세요. 아직 태그를 발행하지 않았습니다.
+The next source candidate is `v0.7.6-preview.1`, targeting `v0.7.6`. See the [migration guide](docs/migration/v0.7.6.md) for breaking changes. This tag has not been published.
 
-다른 채널 | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
+Other channels | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
 
-## 핵심 아이디어
+## Core ideas
 
-- 요청 해석, 핸들러 실행, 반환 처리의 책임을 분리합니다.
-- 컨트롤러의 메서드 시그니처로 요청 입력과 응답 형식을 정의합니다.
-- `input.Path`, `input.Query`, `input.Header`, `input.Body`, `httperr.*`로 경로 매개변수, 쿼리, HTTP 오류의 의미를 표현합니다.
+- Fixed execution order and responsibilities
+- Method signature is the API contract
+- Semantic input types: `input.Path`, `input.Query`, `input.Header`, `input.Body`, `httperr.*`
 
-## 권장 환경
+## Recommended environment
 
-- 권장 Go 버전: **1.27.3**
+- Recommended Go version: **1.27.3**
 
-## Spine CLI로 시작하기
+## Get started with Spine CLI
 
 ```sh
 go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.4-preview.5
@@ -42,55 +40,57 @@ spine dev
 curl http://localhost:8080/health
 ```
 
-현재 앱이 사용하는 코어와 플랫폼은 생성된 `go.mod`에서 확인하세요.
+Check the generated `go.mod` for the core and platform versions used by the app.
 
-미리보기의 `--channel preview`는 이동하는 개발 브랜치를 조회합니다.
+`--channel preview` resolves moving development branches.
 
-## 문서와 예제
+## Links
 
-- [공식 사이트](https://spine.na2ru2.me/ko/)
-- [Spine CLI](https://github.com/NARUBROWN/spine-cli): 프로젝트 생성과 실행 계약 검사
-- [사용자 API 예제](https://github.com/NARUBROWN/spine-user-demo): Bun ORM과 Swagger 통합
-- [Kafka MSA 예제](https://github.com/NARUBROWN/spine-simple-msa-demo): 주문 서버와 재고 워커의 이벤트 처리
-- [WebSocket 채팅 예제](https://github.com/NARUBROWN/spine-simple-chat-demo): 인증과 방별 메시지 전송
+- Official site: https://spine.na2ru2.me/en/
+- Spine CLI (project generation and execution-contract inspection): https://github.com/NARUBROWN/spine-cli
+- Bun ORM + Swagger integration example project: https://github.com/NARUBROWN/spine-user-demo
+- Kafka MSA example project: https://github.com/NARUBROWN/spine-simple-msa-demo
+- Simple WebSocket chat example project: https://github.com/NARUBROWN/spine-simple-chat-demo
 
-Spine `v0.7.2`의 [컨트롤러 경로 등록 예제](docs/migration/controller-routes.md)를 참고하세요.
+---
 
-## 기업 도입 무상 기술 지원
+See the [controller route registration example](docs/migration/controller-routes.md) for Spine `v0.7.2`.
+
+## Free enterprise adoption support
 
 [![Spine enterprise adoption support: free guidance, 24/7 inquiries, and maintainer replies as available](assets/enterprise-adoption/banner.png)](https://github.com/NARUBROWN/spine/issues/new?title=%5BAdoption%20support%5D)
 
-Spring이나 NestJS에서 익숙한 비즈니스 아키텍처와 개발 방식을 Go에서도 이어갈 수 있도록 돕습니다.
-Spine 도입을 검토하거나 사용 중인 기업과 개발팀은 누구나 무상 기술 지원을 신청할 수 있습니다.
-참여 기업 수나 지원 종료 기간에 일률적인 제한을 두지 않습니다.
+Bring the business architecture and development practices you know from Spring or NestJS to Go.
+Any company or development team evaluating or using Spine can request free support directly from the maintainer.
+There is no limit on the number of participating companies and no fixed support end date.
 
-- 서비스에 Spine을 적용할 수 있는지 검토하고, 컨트롤러와 서비스, 저장소의 역할과 의존성 구성을 함께 살펴봅니다.
-- 초기 설정과 관련 코드를 검토하고, 의존성 주입(DI)이나 프레임워크 사용 중 막힌 부분을 확인합니다.
-- 오류를 재현하고, 원인에 따라 우회 방법이나 수정 방안을 검토합니다.
+- Assess whether Spine fits your service and review the responsibilities and dependencies of controllers, services, and repositories.
+- Review initial setup and relevant code to help with dependency injection (DI) and framework usage.
+- Reproduce errors and assess workarounds or fixes based on the cause.
 
-문의는 24/7 접수합니다. 개발자가 대응 가능한 시간에 확인하며, 응답 시간이나 복구 시간을 보장하지는 않습니다.
-글과 코드, 로그를 주고받으며 진행하고, 추가 논의가 필요하면 미팅 일정을 협의합니다.
+Submit inquiries 24/7. The maintainer responds when available, with no guaranteed response or recovery time.
+Support takes place asynchronously through text, code, and logs. Meetings can be arranged when further discussion is needed.
 
-문의는 운영에 미치는 영향과 우회 방법의 유무를 기준으로 분류합니다.
-같은 우선순위에서는 접수 순서와 다른 사용자에게 미치는 영향도 고려합니다.
+Inquiries are prioritized by production impact and available workarounds.
+Within the same priority, arrival order and the impact on other users are also considered.
 
-| 문의 유형 | 판단 기준 |
+| Inquiry type | Criteria |
 |---|---|
-| 긴급 | 운영 서비스의 핵심 기능이 중단됐거나 데이터 정합성 문제가 발생하고 있는 경우 |
-| 적용 차단 | 빌드나 기동, 핵심 기능의 오류로 도입 또는 개발을 진행할 수 없는 경우 |
-| 일반 | 사용법이나 설계에 관한 질문, 관련 코드 검토, 우회 방법이 있는 오류 |
-| 개선 제안 | 새로운 기능이나 사용성, 문서, 예제에 관한 제안 |
+| Urgent | A core production function is unavailable or a data integrity incident is in progress |
+| Adoption blocker | A build, startup, or core function error prevents adoption or development |
+| General | Usage or architecture questions, focused code reviews, or errors with a workaround |
+| Improvement | Suggestions for features, usability, documentation, or examples |
 
-기업 개발팀은 업무 기능 개발과 서비스 운영을 담당하며, 인프라와 외부 서비스 사용료를 부담합니다.
-프로젝트 전체의 개발이나 상시 운영 대행, 기업 전용 기능의 장기 개발이 필요하면 지원 범위를 별도로 협의해야 합니다.
+Your team develops business features, operates the service, and pays for infrastructure and external services.
+Full project development, continuous operations, or ongoing development of features specific to your company require a separate scope discussion.
 
-**[도입 상담 및 기술 지원 문의하기](https://github.com/NARUBROWN/spine/issues/new?title=%5BAdoption%20support%5D)**
+**[Start an adoption or support inquiry](https://github.com/NARUBROWN/spine/issues/new?title=%5BAdoption%20support%5D)**
 
-서비스 개요와 현재 기술 구성, 적용하려는 범위, 궁금한 점을 알려주세요.
-오류 문의에는 Spine과 Go 버전, 기대한 동작과 실제 동작, 최소 재현 방법을 함께 적어주세요.
-GitHub Issues는 공개되므로 비밀정보를 제외한 요약이나 최소 재현 코드를 공유해주세요.
+Describe your service, current stack, intended adoption scope, and questions.
+For errors, include your Spine and Go versions, expected and actual behavior, and minimal reproduction steps.
+GitHub Issues are public. Share a sanitized summary or minimal reproduction without confidential information.
 
-## 지원
+## Support
 
 <p align="center">
   <a href="https://fossforall.org/">
@@ -98,16 +98,18 @@ GitHub Issues는 공개되므로 비밀정보를 제외한 요약이나 최소 �
   </a>
 </p>
 
-**Spine은 [FOSS for All Microgrants 2026](https://fossforall.org/docs/microgrants/2026/#spine)의 수혜 프로젝트로 선정되었습니다.**
+**Spine has been selected as a recipient of [FOSS for All Microgrants 2026](https://fossforall.org/docs/microgrants/2026/#spine).**
 
-[FOSS for All(포스포올)](https://fossforall.org/)은 자유 소프트웨어와 오픈소스 생태계의 지속 가능한 발전을 지원합니다.
-Spine을 지원해 주신 FOSS for All과 기부자 여러분께 감사드립니다.
+[FOSS for All](https://fossforall.org/) supports the development and operation of projects and communities
+to help sustain the free and open source ecosystem.
+Thank you to FOSS for All and its donors for supporting Spine.
 
-<sub>로고 출처: <a href="https://fossforall.org/android-chrome-512x512.png">FOSS for All 공식 사이트</a>.
-FOSS for All 로고의 저작권은 FOSS for All에 있습니다(© FOSS for All).
-이 로고는 Spine의 MIT 라이선스 적용 대상에 포함되지 않습니다.
-<a href="assets/foss-for-all/README.md">로고 출처 및 권리 표기</a>.</sub>
+<sub>Logo source: <a href="https://fossforall.org/android-chrome-512x512.png">the official FOSS for All website</a>.
+The FOSS for All logo is copyright © FOSS for All and is not covered by Spine's MIT license.
+<a href="assets/foss-for-all/README.md">Logo source and attribution</a>.</sub>
 
-## 라이선스
+---
+
+## License
 
 MIT

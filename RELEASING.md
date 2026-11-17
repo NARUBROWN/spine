@@ -128,11 +128,12 @@ Preview와 RC는 GitHub 사전 릴리스를 만들지 않습니다. artifact는 
 ## 로컬 검증
 
 ```sh
-python3 -m unittest discover -s scripts/release -p 'test_*.py'
+go run ./scripts/verifytools
+go test -race ./.github/actions/discord-tag ./scripts/release/... ./scripts/verifiedsource
 node --test scripts/release/branch_flow.test.cjs
 go run ./scripts/release/workspace validate-policy
 go run ./scripts/release/workspace check-module --channel preview
-actionlint -shellcheck= -pyflakes=
+actionlint -shellcheck=
 ```
 
 미발행 태그가 있는 소스 검증은 임시 workspace를 사용합니다. 독립 공개 설치 검증은 태그를 실제 발행한 뒤 workflow에서 수행해야 합니다. 로컬 검증을 GitHub CI나 태그 발행 성공으로 보고하지 않습니다.

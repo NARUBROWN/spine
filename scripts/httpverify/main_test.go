@@ -17,6 +17,7 @@ func TestVerifyRequiresPassingTests(t *testing.T) {
 	for _, mode := range []string{"v3", "platforms"} {
 		for _, passing := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/pass=%t", mode, passing), func(t *testing.T) {
+				t.Setenv("GOTOOLCHAIN", "auto")
 				core := t.TempDir()
 				echo, nethttp := filepath.Join(core, "echo"), filepath.Join(core, "nethttp")
 				for _, root := range []string{core, echo, nethttp, filepath.Join(core, "test"), filepath.Join(core, "test", "openapi"), filepath.Join(core, "test", "http-platform")} {
@@ -29,7 +30,12 @@ func TestVerifyRequiresPassingTests(t *testing.T) {
 				}
 				output := filepath.Join(core, "output")
 				overlay := make(map[string]bool)
-				runner := func(_ string, _ []string, w io.Writer, args ...string) (int, error) {
+				runner := func(_ string, env []string, w io.Writer, args ...string) (int, error) {
+					for _, value := range env {
+						if strings.HasPrefix(value, "GOTOOLCHAIN=") && value != "GOTOOLCHAIN=auto" {
+							t.Fatalf("verifier overrode the caller's toolchain: %s", value)
+						}
+					}
 					if len(args) > 3 && args[0] == "run" && args[1] == "./scripts/test" {
 						overlay[args[2]] = true
 					}
