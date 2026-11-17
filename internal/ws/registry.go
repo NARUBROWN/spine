@@ -40,7 +40,15 @@ func (r *Registry) Register(path string, handler any) error {
 	if err != nil {
 		return err
 	}
+	return r.RegisterMeta(path, meta)
+}
 
+// RegisterMeta registers an already resolved callback or method expression.
+func (r *Registry) RegisterMeta(path string, meta execution.HandlerMeta) error {
+	parsed, err := url.ParseRequestURI(path)
+	if err != nil || !strings.HasPrefix(path, "/") || parsed.Path != path || parsed.RawQuery != "" || strings.ContainsAny(path, ":*{}") || strings.Contains(path, "//") {
+		return fmt.Errorf("ws: path must be an absolute static path: %q", path)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, registration := range r.registrations {

@@ -1,8 +1,11 @@
 package bootstrap
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	publicSpine "github.com/NARUBROWN/spine/pkg/spine"
+	publicWS "github.com/NARUBROWN/spine/pkg/ws"
 	"log"
 	"reflect"
 	"slices"
@@ -490,6 +493,7 @@ func webSocketArgumentResolvers(validator validation.Validator) []resolver.Argum
 	return []resolver.ArgumentResolver{
 		&resolver.StdContextResolver{},
 		&resolver.ControllerContextResolver{RequireExecutionContext: true},
+		&wsResolver.MessageResolver{Validator: validator},
 		&wsResolver.ConnectionIDResolver{},
 		&wsResolver.PayloadResolver{},
 		&wsResolver.DTOResolver{Validator: validator},
@@ -515,7 +519,20 @@ func messageHandlerIssues(meta execution.HandlerMeta, resolvers []resolver.Argum
 			})
 		}
 	}
+
 	for _, parameter := range resolver.HandlerParameters(meta, nil) {
+		if transport == "WEBSOCKET" && meta.Callback.IsValid() {
+			payload, wrapped := wsResolver.MessagePayload(parameter.Type)
+			valid := parameter.Type == reflect.TypeFor[context.Context]() || parameter.Type == reflect.TypeFor[publicSpine.Ctx]() || parameter.Type == reflect.TypeFor[publicWS.ConnectionID]()
+			if wrapped {
+				valid = payload.Kind() == reflect.Struct || payload == reflect.TypeFor[[]byte]()
+			}
+			if !valid {
+				issues = append(issues, configuration.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "WEBSOCKET_PARAMETER_UNSUPPORTED", Message: "WebSocket callbacks require spine.Ctx, context.Context, ws.ConnectionID or input.Message[struct or []byte]."})
+				continue
+			}
+		}
+
 		if !slices.ContainsFunc(resolvers, func(candidate resolver.ArgumentResolver) bool {
 			return candidate.Supports(parameter)
 		}) {

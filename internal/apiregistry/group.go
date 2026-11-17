@@ -86,3 +86,6 @@ func (g *Group) HEAD(p string, h any, options ...Option) { g.add(http.MethodHead
 func (g *Group) OPTIONS(p string, h any, options ...Option) {
 	g.add(http.MethodOptions, p, h, options)
 }
+
+// WS registers a WebSocket callback under this group's prefix and interceptors.
+func (g *Group) WS(path string, handler any, options ...Option) { g.add("WS", path, handler, options) }

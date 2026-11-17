@@ -24,6 +24,7 @@ import (
 	"github.com/NARUBROWN/spine/internal/transport"
 	"github.com/NARUBROWN/spine/internal/ws"
 	publicPublish "github.com/NARUBROWN/spine/pkg/event/publish"
+	publicWS "github.com/NARUBROWN/spine/pkg/ws"
 )
 
 // Prepare는 실행 작업이나 리스너를 시작하지 않고 앱 자원을 준비합니다.
@@ -68,6 +69,10 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 		}
 	}
 
+	application.wsSender = ws.NewSender()
+	if err := container.RegisterConstructor(func() publicWS.Sender { return application.wsSender }); err != nil {
+		return nil, err
+	}
 	var eventPublishers []eventPublish.Binding
 	for _, binding := range config.EventAdapters {
 		if !binding.Factory.Capabilities().Publish {
@@ -130,6 +135,23 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 
 	if err := collectControllers(ctx, &config, container); err != nil {
 		return nil, err
+	}
+
+	if config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0 {
+		if config.HTTP == nil {
+			return nil, fmt.Errorf("WebSocket routes require HTTP")
+		}
+		if err := adapter.ValidateFactory(config.HTTPAdapterFactory, adapter.Requirements{NetHTTPUpgrade: true}); err != nil {
+			return nil, err
+		}
+		if err := wsadapter.ValidateFactory(config.WebSocketAdapterFactory); err != nil {
+			return nil, err
+		}
+		for _, reg := range config.WebSocketRegistry.Registrations() {
+			if err := configuration.ValidationError(messageHandlerIssues(reg.Meta, webSocketArgumentResolvers(config.Validator), "WebSocket "+reg.Path, "WEBSOCKET")...); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if config.HTTP != nil {
 		if err := validateCollectedRoutes(config, resources); err != nil {
@@ -288,7 +310,26 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 				webSocketHandshakeInterceptors(resolvedWSInterceptors)...,
 			)
 
+			application.wsRuntime.UseSender(application.wsSender)
+
 			for _, reg := range wsRegistrations {
+				resolved := make([]core.Interceptor, len(reg.Meta.Interceptors))
+				for index, interceptor := range reg.Meta.Interceptors {
+					typ := reflect.TypeOf(interceptor)
+					if typ == nil {
+						return nil, fmt.Errorf("WebSocket %s interceptor[%d] is nil", reg.Path, index)
+					}
+					if typ.Kind() == reflect.Pointer && reflect.ValueOf(interceptor).IsNil() {
+						value, err := container.Resolve(typ)
+						if err != nil {
+							return nil, fmt.Errorf("WebSocket %s interceptor: %w", reg.Path, err)
+						}
+						resolved[index] = value.(core.Interceptor)
+					} else {
+						resolved[index] = interceptor
+					}
+				}
+				reg.Meta.Interceptors = resolved
 				log.Printf("[Bootstrap] Registered WebSocket route: %s", reg.Path)
 				upgrades = append(upgrades, adapter.NetHTTPUpgradeRoute{
 					Path: reg.Path,

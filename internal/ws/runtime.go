@@ -45,6 +45,7 @@ type normalizedWebSocketOptions struct {
 
 type Runtime struct {
 	pipeline *pipeline.Pipeline
+	sender   *Sender
 	adapter  wsadapter.Adapter
 	options  normalizedWebSocketOptions
 	stopOnce sync.Once
@@ -65,8 +66,9 @@ type Runtime struct {
 }
 
 type trackedConn struct {
-	conn wsadapter.Connection
-	mu   sync.Mutex
+	conn     wsadapter.Connection
+	gateOnce sync.Once
+	gate     chan struct{}
 }
 
 func writeDeadline(timeout time.Duration) time.Time {
@@ -77,20 +79,22 @@ func writeDeadline(timeout time.Duration) time.Time {
 }
 
 func (c *trackedConn) writeMessage(messageType int, data []byte, timeout time.Duration) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.conn.WriteMessage(messageType, data, writeDeadline(timeout))
+	return c.writeMessageContext(context.Background(), messageType, data, timeout)
 }
 
 func (c *trackedConn) ping(timeout time.Duration) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	if err := c.lock(context.Background()); err != nil {
+		return err
+	}
+	defer c.unlock()
 	return c.conn.Ping(writeDeadline(timeout))
 }
 
 func (c *trackedConn) writeClose(code int, reason string, timeout time.Duration) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	if err := c.lock(context.Background()); err != nil {
+		return err
+	}
+	defer c.unlock()
 	return c.conn.WriteClose(code, reason, writeDeadline(timeout))
 }
 
@@ -111,6 +115,7 @@ func NewRuntime(pipeline *pipeline.Pipeline, adapter wsadapter.Adapter, opts con
 		ctx:                   ctx,
 		cancel:                cancel,
 		conns:                 make(map[string]*trackedConn),
+		sender:                NewSender(),
 		handshakeInterceptors: append([]core.WebSocketHandshakeInterceptor(nil), handshakeInterceptors...),
 	}
 }
@@ -363,6 +368,7 @@ func (r *Runtime) Stop() {
 		r.lifecycleMu.Lock()
 		r.stopping = true
 		r.cancel()
+		r.sender.Close()
 		r.lifecycleMu.Unlock()
 
 		r.connMu.Lock()
@@ -437,6 +443,7 @@ func (r *Runtime) activateReservedConnection(connID string, conn *trackedConn) b
 		return false
 	default:
 		r.conns[connID] = conn
+		r.sender.add(connID, conn)
 		return true
 	}
 }
@@ -454,6 +461,7 @@ func (r *Runtime) untrackConn(connID string) {
 	defer r.connMu.Unlock()
 	if _, ok := r.conns[connID]; ok {
 		delete(r.conns, connID)
+		r.sender.remove(connID)
 		if r.connectionSlots > 0 {
 			r.connectionSlots--
 		}
@@ -538,4 +546,41 @@ func normalizedForwardedScheme(value string) string {
 		return scheme
 	}
 	return ""
+}
+
+func (c *trackedConn) lock(ctx context.Context) error {
+	c.gateOnce.Do(func() { c.gate = make(chan struct{}, 1) })
+	select {
+	case c.gate <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+func (c *trackedConn) unlock() { <-c.gate }
+func (c *trackedConn) writeMessageContext(ctx context.Context, kind int, data []byte, timeout time.Duration) error {
+	if err := c.lock(ctx); err != nil {
+		return err
+	}
+	defer c.unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	deadline := writeDeadline(timeout)
+	if end, ok := ctx.Deadline(); ok && (deadline.IsZero() || end.Before(deadline)) {
+		deadline = end
+	}
+	err := c.conn.WriteMessage(kind, data, deadline)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return err
+}
+
+// UseSender connects the application sender before any connections are accepted.
+func (r *Runtime) UseSender(sender *Sender) {
+	sender.mu.Lock()
+	sender.timeout = r.options.WriteTimeout
+	sender.mu.Unlock()
+	r.sender = sender
 }

@@ -38,6 +38,7 @@ type Application struct {
 	server          adapter.HTTPAdapter
 	listener        *managedHTTPListener
 	wsRuntime       *ws.Runtime
+	wsSender        *ws.Sender
 	consumers       []consumerRuntime
 	transports      []core.CustomTransport
 	publishers      []publisherCloser
@@ -95,6 +96,9 @@ func (a *Application) closeResources(deadline time.Time) {
 			a.closeErr = errors.Join(a.closeErr, err)
 			log.Printf("[Bootstrap] %v", err)
 		}
+	}
+	if a.wsSender != nil {
+		a.wsSender.Close()
 	}
 	if a.wsRuntime != nil {
 		step("WebSocket runtime", func() error { a.wsRuntime.Stop(); return nil })
