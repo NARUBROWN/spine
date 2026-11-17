@@ -49,17 +49,25 @@ func (p *Pipeline) AddReturnValueHandler(handlers ...handler.ReturnValueHandler)
 
 // Execute는 하나의 요청 실행 전체를 소유합니다.
 func (p *Pipeline) Execute(ctx execution.Context, input *execution.Input) error {
-	return p.execute(ctx, func() (execution.HandlerMeta, error) { return p.router.Route(input.Routing()) }, input)
+	return p.execute(ctx, func() (execution.HandlerMeta, error) { return p.router.Route(input.Routing()) }, input, nil)
 }
 
 // ExecuteRegistered는 이미 전송 계층에서 선택한 핸들러를 실행합니다.
 func (p *Pipeline) ExecuteRegistered(ctx execution.Context, meta execution.HandlerMeta, input *execution.Input) error {
 	return p.execute(ctx, func() (execution.HandlerMeta, error) {
 		return meta, nil
-	}, input)
+	}, input, nil)
 }
 
-func (p *Pipeline) execute(ctx execution.Context, resolve func() (execution.HandlerMeta, error), input *execution.Input) (finalErr error) {
+// ArgumentBinder lets a transport bind its inputs after PreHandle, without
+// exposing those inputs through the common execution context.
+type ArgumentBinder func([]resolver.ParameterMeta) ([]any, error)
+
+func (p *Pipeline) ExecuteBound(ctx execution.Context, meta execution.HandlerMeta, bind ArgumentBinder) error {
+	return p.execute(ctx, func() (execution.HandlerMeta, error) { return meta, nil }, execution.NewInput(execution.Sources{}), bind)
+}
+
+func (p *Pipeline) execute(ctx execution.Context, resolve func() (execution.HandlerMeta, error), input *execution.Input, bind ArgumentBinder) (finalErr error) {
 	// Detach transport data after completion hooks and before runtime settlement.
 	defer input.Close()
 	// Release per-execution values after completion.
@@ -206,7 +214,12 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func() (execution.Hand
 	paramMetas := resolver.HandlerParameters(meta, meta.PathKeys)
 
 	// 인자 리졸버 체인 실행
-	args, err := p.resolveArguments(ctx, input, paramMetas)
+	var args []any
+	if bind != nil {
+		args, err = bind(paramMetas)
+	} else {
+		args, err = p.resolveArguments(ctx, input, paramMetas)
+	}
 	if err != nil {
 		return err
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
+	"github.com/NARUBROWN/spine/internal/resolver"
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/transport"
 	"github.com/NARUBROWN/spine/pkg/spine"
@@ -60,7 +61,7 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 			return execution.NewInput(execution.Sources{Consumer: &execution.ConsumerMessage{Name: "probe", Payload: make([]byte, 1024)}})
 		},
 		"websocket": func() *execution.Input {
-			return execution.NewInput(execution.Sources{WebSocketRequest: storeHandshake{}, ConnectionID: "conn", WebSocket: &execution.WebSocketMessage{Kind: 1, Payload: make([]byte, 1024)}})
+			return execution.NewInput(execution.Sources{})
 		},
 	}
 
@@ -74,18 +75,12 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 					if _, ok := public.HTTPRequestContext(); ok != (name == "http") {
 						t.Fatal("전송 종류와 HTTP 뷰 지원 여부가 다릅니다")
 					}
-					if _, ok := public.WebSocket(); ok != (name == "websocket") {
-						t.Fatal("전송 종류와 WebSocket 뷰 지원 여부가 다릅니다")
-					}
 					views := []any{public, public.ExecutionContext()}
 					if request, ok := public.HTTPRequestContext(); ok {
 						views = append(views, request)
 					}
 					if response, ok := public.HTTPResponseContext(); ok {
 						views = append(views, response)
-					}
-					if socket, ok := public.WebSocket(); ok {
-						views = append(views, socket)
 					}
 					for _, view := range views {
 						for _, method := range []string{"ReleaseStore", "SetRoute", "EventBus", "SetResponseWriter", "Bind"} {
@@ -109,15 +104,17 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 					meta := execution.HandlerMeta{Callback: reflect.ValueOf(callback)}
 					run := pipeline.NewPipeline(routes, invoker.NewInvoker(container.New()))
 					run.AddInterceptor(observer)
-					err := run.ExecuteRegistered(ctx, meta, input)
+					var err error
+					if name == "websocket" {
+						err = run.ExecuteBound(ctx, meta, func([]resolver.ParameterMeta) ([]any, error) { return nil, nil })
+					} else {
+						err = run.ExecuteRegistered(ctx, meta, input)
+					}
 					if (err != nil) != (outcome != "success") || !observer.completed {
 						t.Fatalf("err=%v completed=%v", err, observer.completed)
 					}
 					if _, ok := public.HTTPRequestContext(); ok {
 						t.Fatal("HTTP input retained")
-					}
-					if _, ok := public.WebSocket(); ok {
-						t.Fatal("WS input retained")
 					}
 					if _, ok := input.ConsumerMessage(); ok {
 						t.Fatal("consumer input retained")
@@ -136,9 +133,3 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 		})
 	}
 }
-
-type storeHandshake struct {
-	execution.WebSocketRequestContext
-}
-
-func (storeHandshake) Path() string { return "/probe" }

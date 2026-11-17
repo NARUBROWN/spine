@@ -88,11 +88,11 @@ func (c *publisherController) RegisterRoutes(r *api.Registry) {
 		return httpx.Response[any]{Body: "sent"}, nil
 	})
 }
-func (c *publisherController) Message(ctx handlerspine.Ctx, _ []byte) error {
-	if err := c.publisher.Event(ctx.ExecutionContext().Context(), "orders", publish.Fields{"source": "ws"}); err != nil {
+func (c *publisherController) Message(ctx context.Context, _ []byte) error {
+	if err := c.publisher.Event(ctx, "orders", publish.Fields{"source": "ws"}); err != nil {
 		return err
 	}
-	return pkgws.Send(ctx.ExecutionContext().Context(), pkgws.TextMessage, []byte("sent"))
+	return pkgws.Send(ctx, pkgws.TextMessage, []byte("sent"))
 }
 func TestAppPublisherSharesDIInstanceAcrossHTTPWebSocketAndPolling(t *testing.T) {
 	native := &appNativePublisher{}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	publicSpine "github.com/NARUBROWN/spine/pkg/spine"
 	publicWS "github.com/NARUBROWN/spine/pkg/ws"
 	"log"
 	"reflect"
@@ -324,14 +323,18 @@ func resolveGlobalInterceptors(ctr *container.Container, config Config) ([]core.
 	return resolvedHTTP, resolvedWS, nil
 }
 
-func webSocketHandshakeInterceptors(interceptors []core.Interceptor) []core.WebSocketHandshakeInterceptor {
+func webSocketHandshakeInterceptors(interceptors []core.Interceptor) ([]core.WebSocketHandshakeInterceptor, error) {
 	handshakeInterceptors := make([]core.WebSocketHandshakeInterceptor, 0, len(interceptors))
 	for _, interceptor := range interceptors {
 		if handshakeInterceptor, ok := interceptor.(core.WebSocketHandshakeInterceptor); ok {
 			handshakeInterceptors = append(handshakeInterceptors, handshakeInterceptor)
+		} else if typ := reflect.TypeOf(interceptor); typ != nil {
+			if _, exists := typ.MethodByName("PreHandshake"); exists {
+				return nil, fmt.Errorf("WEBSOCKET_HANDSHAKE_SIGNATURE_UNSUPPORTED: %s must implement PreHandshake(context.Context, ws.Handshake, core.HandlerMeta) error", typ)
+			}
 		}
 	}
-	return handshakeInterceptors
+	return handshakeInterceptors, nil
 }
 
 // globalInterceptorIdentity는 Go에서 실제 인스턴스의 정체성을 보존할 수 있을 때만
@@ -478,29 +481,24 @@ func consumerArgumentResolvers(validator validation.Validator) []resolver.Argume
 func buildWSPipeline(
 	container *container.Container,
 	interceptors []core.Interceptor,
-	validator validation.Validator,
 ) *pipeline.Pipeline {
 	wsPipeline := pipeline.NewPipeline(nil, invoker.NewInvoker(container))
 	for _, interceptor := range interceptors {
 		wsPipeline.AddInterceptor(interceptor)
 	}
 
-	wsPipeline.AddArgumentResolver(webSocketArgumentResolvers(validator)...)
 	return wsPipeline
 }
 
-func webSocketArgumentResolvers(validator validation.Validator) []resolver.ArgumentResolver {
-	return []resolver.ArgumentResolver{
-		&resolver.StdContextResolver{},
-		&resolver.ControllerContextResolver{RequireExecutionContext: true},
-		&wsResolver.MessageResolver{Validator: validator},
-		&wsResolver.ConnectionIDResolver{},
-		&wsResolver.PayloadResolver{},
-		&wsResolver.DTOResolver{Validator: validator},
-	}
+func webSocketArgumentResolvers(v validation.Validator) []wsResolver.ArgumentResolver {
+	return wsResolver.Resolvers(v)
 }
 
-func messageHandlerIssues(meta execution.HandlerMeta, resolvers []resolver.ArgumentResolver, prefix, transport string) []configuration.ConfigIssue {
+type parameterSupporter interface {
+	Supports(resolver.ParameterMeta) bool
+}
+
+func messageHandlerIssues[R parameterSupporter](meta execution.HandlerMeta, resolvers []R, prefix, transport string) []configuration.ConfigIssue {
 	var issues []configuration.ConfigIssue
 	signature := meta.FunctionType()
 	if signature.IsVariadic() {
@@ -523,17 +521,17 @@ func messageHandlerIssues(meta execution.HandlerMeta, resolvers []resolver.Argum
 	for _, parameter := range resolver.HandlerParameters(meta, nil) {
 		if transport == "WEBSOCKET" && meta.Callback.IsValid() {
 			payload, wrapped := wsResolver.MessagePayload(parameter.Type)
-			valid := parameter.Type == reflect.TypeFor[context.Context]() || parameter.Type == reflect.TypeFor[publicSpine.Ctx]() || parameter.Type == reflect.TypeFor[publicWS.ConnectionID]()
+			valid := parameter.Type == reflect.TypeFor[context.Context]() || parameter.Type == reflect.TypeFor[publicWS.ConnectionID]()
 			if wrapped {
 				valid = payload.Kind() == reflect.Struct || payload == reflect.TypeFor[[]byte]()
 			}
 			if !valid {
-				issues = append(issues, configuration.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "WEBSOCKET_PARAMETER_UNSUPPORTED", Message: "WebSocket callbacks require spine.Ctx, context.Context, ws.ConnectionID or input.Message[struct or []byte]."})
+				issues = append(issues, configuration.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "WEBSOCKET_PARAMETER_UNSUPPORTED", Message: "WebSocket callbacks require context.Context, ws.ConnectionID or input.Message[struct or []byte]."})
 				continue
 			}
 		}
 
-		if !slices.ContainsFunc(resolvers, func(candidate resolver.ArgumentResolver) bool {
+		if !slices.ContainsFunc(resolvers, func(candidate R) bool {
 			return candidate.Supports(parameter)
 		}) {
 			issues = append(issues, configuration.ConfigIssue{

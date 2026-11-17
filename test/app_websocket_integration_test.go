@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,7 +13,6 @@ import (
 	gorillaplatform "github.com/NARUBROWN/spine-gorilla-platform"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httpx"
-	handlerspine "github.com/NARUBROWN/spine/pkg/spine"
 	pkgws "github.com/NARUBROWN/spine/pkg/ws"
 	"github.com/gorilla/websocket"
 )
@@ -33,13 +33,13 @@ func (c *wsIntegrationController) Hello() httpx.Response[string] {
 	return httpx.Response[string]{Body: "ok"}
 }
 
-func (c *wsIntegrationController) Echo(ctx handlerspine.Ctx, connID pkgws.ConnectionID, payload []byte, dto wsEchoRequest) error {
+func (c *wsIntegrationController) Echo(ctx context.Context, connID pkgws.ConnectionID, payload []byte, dto wsEchoRequest) error {
 	response, _ := json.Marshal(wsEchoResponse{
 		ConnID:  connID.Value,
 		Payload: string(payload),
 		Message: dto.Message,
 	})
-	return pkgws.Send(ctx.ExecutionContext().Context(), pkgws.TextMessage, response)
+	return pkgws.Send(ctx, pkgws.TextMessage, response)
 }
 
 func setupWebSocketApp(options ...platform.EchoOption) spine.App {

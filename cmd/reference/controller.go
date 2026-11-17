@@ -3,6 +3,7 @@ package main
 import httpinput "github.com/NARUBROWN/spine/pkg/input"
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"mime/multipart"
@@ -205,6 +206,6 @@ type ChatMessage struct {
 	Message string `json:"message"`
 }
 
-func (c *ChatController) OnMessage(ctx spine.Ctx, connID ws.ConnectionID, msg ChatMessage) error {
-	return ws.Send(ctx.ExecutionContext().Context(), ws.TextMessage, []byte(msg.Message))
+func (c *ChatController) OnMessage(ctx context.Context, connID ws.ConnectionID, msg ChatMessage) error {
+	return ws.Send(ctx, ws.TextMessage, []byte(msg.Message))
 }

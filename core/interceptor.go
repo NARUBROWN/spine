@@ -1,6 +1,10 @@
 package core
 
-import "github.com/NARUBROWN/spine/pkg/spine"
+import (
+	"context"
+	"github.com/NARUBROWN/spine/pkg/spine"
+	"github.com/NARUBROWN/spine/pkg/ws"
+)
 
 /*
 Interceptor는 실행 흐름의 횡단 관심사를 처리하는 계약이다.
@@ -41,5 +45,5 @@ WebSocketHandshakeInterceptor는 선택적 WebSocket handshake 사전 처리 계
 PreHandle은 메시지마다 기존 시점에 계속 호출되므로 호출 횟수와 트랜잭션 의미가 바뀌지 않습니다.
 */
 type WebSocketHandshakeInterceptor interface {
-	PreHandshake(ctx spine.Ctx, meta HandlerMeta) error
+	PreHandshake(ctx context.Context, request ws.Handshake, meta HandlerMeta) error
 }
