@@ -309,16 +309,19 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 			if err != nil {
 				return nil, fmt.Errorf("WebSocket: %w", err)
 			}
-			handshakeInterceptors, err := webSocketHandshakeInterceptors(resolvedWSInterceptors)
-			if err != nil {
+			if err := rejectLegacyHandshakeHook(resolvedWSInterceptors); err != nil {
 				return nil, err
+			}
+			upgradeInterceptors, err := resolveInterceptors(container, config.WebSocketUpgradeInterceptors, true)
+			if err != nil {
+				return nil, fmt.Errorf("WebSocket upgrade: %w", err)
 			}
 			application.wsRuntime = ws.NewRuntime(
 				invoker.NewInvoker(container),
 				wsAdapter,
 				config.HTTP.WebSocket,
 				resolvedWSInterceptors,
-				handshakeInterceptors...,
+				upgradeInterceptors...,
 			)
 
 			application.wsRuntime.UseSender(application.wsSender)
@@ -329,10 +332,15 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 				if err != nil {
 					return nil, fmt.Errorf("WebSocket %s: %w", reg.Path, err)
 				}
-				if _, err := webSocketHandshakeInterceptors(resolved); err != nil {
+				if err := rejectLegacyHandshakeHook(resolved); err != nil {
 					return nil, fmt.Errorf("WebSocket %s: %w", reg.Path, err)
 				}
+				upgradesForRoute, err := resolveInterceptors(container, reg.UpgradeInterceptors, false)
+				if err != nil {
+					return nil, fmt.Errorf("WebSocket %s upgrade: %w", reg.Path, err)
+				}
 				reg.Interceptors = resolved
+				reg.UpgradeInterceptors = upgradesForRoute
 				log.Printf("[Bootstrap] Registered WebSocket route: %s", reg.Path)
 				upgrades = append(upgrades, adapter.NetHTTPUpgradeRoute{
 					Path: reg.Path,

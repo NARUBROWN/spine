@@ -47,6 +47,14 @@ func WebSocketInterceptors(values ...core.WebSocketInterceptor) Option {
 	})
 }
 
+// WebSocketUpgradeInterceptors는 WebSocket 라우트의 업그레이드 검사 훅을 지정합니다.
+func WebSocketUpgradeInterceptors(values ...core.WebSocketUpgradeInterceptor) Option {
+	copied := append([]core.WebSocketUpgradeInterceptor(nil), values...)
+	return router.NewOption(func(s *router.RouteSpec) {
+		s.WebSocketUpgradeInterceptors = append(s.WebSocketUpgradeInterceptors, copied...)
+	})
+}
+
 type Group struct {
 	registry *Registry
 	prefix   string

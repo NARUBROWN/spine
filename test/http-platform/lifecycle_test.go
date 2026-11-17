@@ -163,26 +163,18 @@ func (*websocketController) Restricted(ctx context.Context) error {
 
 type websocketRouteAuthorization struct{}
 
-func (websocketRouteAuthorization) PreHandshake(_ context.Context, _ ws.Handshake, meta core.HandlerMeta) error {
+func (websocketRouteAuthorization) BeforeUpgrade(_ context.Context, _ ws.Handshake, meta core.HandlerMeta) error {
 	if meta.MethodName == "Restricted" {
 		return &httperr.HTTPError{Status: http.StatusForbidden, Message: "Forbidden"}
 	}
 	return nil
 }
-func (websocketRouteAuthorization) PreMessage(ws.MessageContext, core.HandlerMeta) error { return nil }
-func (websocketRouteAuthorization) PostMessage(ws.MessageContext, core.HandlerMeta)      {}
-func (websocketRouteAuthorization) BeforeMessageCompletion(ws.MessageContext, core.HandlerMeta, error) error {
-	return nil
-}
-func (websocketRouteAuthorization) AfterMessageCompletion(ws.MessageContext, core.HandlerMeta, error) {
-}
-
 func TestWebSocketExecutesTheHandlerAuthorizedAtUpgrade(t *testing.T) {
 	for _, engine := range []string{"echo", "nethttp"} {
 		t.Run(engine, func(t *testing.T) {
 			app := spine.New(spine.WithHTTPAdapter(platformFactory(engine, nativeHooks{})), gorillaPlatform.Option())
 			app.Constructor(func() *websocketController { return &websocketController{} })
-			app.WebSocketInterceptor(websocketRouteAuthorization{})
+			app.WebSocketUpgradeInterceptor(websocketRouteAuthorization{})
 			if err := app.WebSocket().Register("/ws", (*websocketController).Message); err != nil {
 				t.Fatal(err)
 			}

@@ -1,9 +1,7 @@
 package core
 
 import (
-	"context"
 	"github.com/NARUBROWN/spine/pkg/spine"
-	"github.com/NARUBROWN/spine/pkg/ws"
 )
 
 /*
@@ -37,13 +35,4 @@ type Interceptor interface {
 		err는 파이프라인 실행 중 발생한 최종 오류
 	*/
 	AfterCompletion(ctx spine.Ctx, meta HandlerMeta, err error)
-}
-
-/*
-WebSocketHandshakeInterceptor는 선택적 WebSocket handshake 사전 처리 계약입니다.
-구현한 인터셉터만 연결 슬롯 예약과 HTTP upgrade 전에 호출됩니다. WebSocketInterceptor의
-PreMessage는 업그레이드 이후 수신 프레임마다 호출됩니다.
-*/
-type WebSocketHandshakeInterceptor interface {
-	PreHandshake(ctx context.Context, request ws.Handshake, meta HandlerMeta) error
 }

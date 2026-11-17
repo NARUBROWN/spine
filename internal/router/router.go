@@ -30,15 +30,16 @@ var (
 )
 
 type RouteSpec struct {
-	Method                string
-	Path                  string
-	Handler               any
-	ControllerType        reflect.Type
-	Interceptors          []core.Interceptor
-	WebSocketInterceptors []core.WebSocketInterceptor
-	Tags                  []string
-	Summary               string
-	Description           string
+	Method                       string
+	Path                         string
+	Handler                      any
+	ControllerType               reflect.Type
+	Interceptors                 []core.Interceptor
+	WebSocketInterceptors        []core.WebSocketInterceptor
+	WebSocketUpgradeInterceptors []core.WebSocketUpgradeInterceptor
+	Tags                         []string
+	Summary                      string
+	Description                  string
 }
 
 type Router interface {

@@ -47,7 +47,7 @@ func TestRuntimePoliciesRunBeforeSelectedAdapter(t *testing.T) {
 			case "origin":
 				request.Header.Set("Origin", "https://foreign.test")
 			case "authentication":
-				runtime.handshakeInterceptors = []core.WebSocketHandshakeInterceptor{&rejectingHandshakeInterceptor{}}
+				runtime.upgradeInterceptors = []core.WebSocketUpgradeInterceptor{&rejectingHandshakeInterceptor{}}
 				want = http.StatusUnauthorized
 			case "capacity":
 				runtime.reserveConnectionSlot()

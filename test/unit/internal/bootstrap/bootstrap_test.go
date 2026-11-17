@@ -626,33 +626,26 @@ func TestResolveGlobalInterceptorsMergesTypedNilPlaceholderByType(t *testing.T) 
 	}
 }
 
-func TestWebSocketHandshakeInterceptorsSelectsOnlyOptionalCapability(t *testing.T) {
-	handshake := &bootstrapHandshakeInterceptor{}
-	regular := &bootstrapWSInterceptor{}
-	selected, err := webSocketHandshakeInterceptors([]core.WebSocketInterceptor{regular, handshake})
+func TestResolveGlobalUpgradeInterceptorWithoutMessageHooks(t *testing.T) {
+	ctr := container.New()
+	resolved := &bootstrapUpgradeInterceptor{}
+	if err := ctr.RegisterConstructor(func() *bootstrapUpgradeInterceptor { return resolved }); err != nil {
+		t.Fatal(err)
+	}
+	var placeholder *bootstrapUpgradeInterceptor
+	upgrades, err := resolveInterceptors(ctr, []core.WebSocketUpgradeInterceptor{placeholder, placeholder}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(selected) != 1 || selected[0] != handshake {
-		t.Fatalf("selected handshake interceptors = %v, want only %T", selected, handshake)
+	if len(upgrades) != 1 || upgrades[0] != resolved {
+		t.Fatalf("resolved upgrade interceptors = %v, want %T", upgrades, resolved)
 	}
 }
 
 type bootstrapTestInterceptor struct{ calls atomic.Int32 }
+type bootstrapUpgradeInterceptor struct{}
 
-type bootstrapWSInterceptor struct{}
-
-func (*bootstrapWSInterceptor) PreMessage(pkgws.MessageContext, core.HandlerMeta) error { return nil }
-func (*bootstrapWSInterceptor) PostMessage(pkgws.MessageContext, core.HandlerMeta)      {}
-func (*bootstrapWSInterceptor) BeforeMessageCompletion(pkgws.MessageContext, core.HandlerMeta, error) error {
-	return nil
-}
-func (*bootstrapWSInterceptor) AfterMessageCompletion(pkgws.MessageContext, core.HandlerMeta, error) {
-}
-
-type bootstrapHandshakeInterceptor struct{ bootstrapWSInterceptor }
-
-func (*bootstrapHandshakeInterceptor) PreHandshake(context.Context, pkgws.Handshake, core.HandlerMeta) error {
+func (*bootstrapUpgradeInterceptor) BeforeUpgrade(context.Context, pkgws.Handshake, core.HandlerMeta) error {
 	return nil
 }
 

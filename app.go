@@ -40,6 +40,8 @@ type App interface {
 	InterceptorFor(scope boot.InterceptorScope, interceptors ...core.Interceptor)
 	// WebSocketInterceptor는 WebSocket 전역 프레임 인터셉터를 등록합니다.
 	WebSocketInterceptor(interceptors ...core.WebSocketInterceptor)
+	// WebSocketUpgradeInterceptor는 WebSocket 전역 연결 검사 훅을 등록합니다.
+	WebSocketUpgradeInterceptor(interceptors ...core.WebSocketUpgradeInterceptor)
 	// 독립 실행되는 사용자 정의 전송 방식 등록
 	RegisterTransport(t core.CustomTransport)
 	// Validate는 네트워크 연결을 열지 않고 애플리케이션 설정을 검사합니다.
@@ -68,23 +70,24 @@ func (r registrar) Register(name string, handler any) error {
 }
 
 type app struct {
-	constructors            []any
-	controllerConstructors  []any
-	componentIssues         []boot.ConfigIssue
-	componentCounts         map[string]int
-	typedComponents         bool
-	routes                  []router.RouteSpec
-	interceptors            []bootstrap.InterceptorBinding
-	websocketInterceptors   []core.WebSocketInterceptor
-	customTransports        []core.CustomTransport
-	consumerRegistry        *consumer.Registry
-	websocketRegistry       *ws.Registry
-	httpAdapterFactory      adapter.Factory
-	websocketAdapterFactory wsadapter.Factory
-	eventAdapters           []bootstrap.EventAdapterBinding
-	validator               validation.Validator
-	validatorConfigured     bool
-	shutdownHooks           []any
+	constructors                 []any
+	controllerConstructors       []any
+	componentIssues              []boot.ConfigIssue
+	componentCounts              map[string]int
+	typedComponents              bool
+	routes                       []router.RouteSpec
+	interceptors                 []bootstrap.InterceptorBinding
+	websocketInterceptors        []core.WebSocketInterceptor
+	websocketUpgradeInterceptors []core.WebSocketUpgradeInterceptor
+	customTransports             []core.CustomTransport
+	consumerRegistry             *consumer.Registry
+	websocketRegistry            *ws.Registry
+	httpAdapterFactory           adapter.Factory
+	websocketAdapterFactory      wsadapter.Factory
+	eventAdapters                []bootstrap.EventAdapterBinding
+	validator                    validation.Validator
+	validatorConfigured          bool
+	shutdownHooks                []any
 }
 
 // Option은 애플리케이션의 통합 구현을 명시적으로 선택하는 생성 옵션입니다.
@@ -226,32 +229,37 @@ func (a *app) WebSocketInterceptor(interceptors ...core.WebSocketInterceptor) {
 	a.websocketInterceptors = append(a.websocketInterceptors, interceptors...)
 }
 
+func (a *app) WebSocketUpgradeInterceptor(interceptors ...core.WebSocketUpgradeInterceptor) {
+	a.websocketUpgradeInterceptors = append(a.websocketUpgradeInterceptors, interceptors...)
+}
+
 func (a *app) RegisterTransport(t core.CustomTransport) {
 	a.customTransports = append(a.customTransports, t)
 }
 
 func (a *app) bootstrapConfig(opts boot.Options) bootstrap.Config {
 	return bootstrap.Config{
-		Address:                 opts.Address,
-		Constructors:            a.constructors,
-		ControllerConstructors:  a.controllerConstructors,
-		ComponentIssues:         a.componentIssues,
-		TypedComponents:         a.typedComponents,
-		Routes:                  a.routes,
-		ScopedInterceptors:      a.interceptors,
-		WebSocketInterceptors:   a.websocketInterceptors,
-		CustomTransports:        a.customTransports,
-		ShutdownHooks:           a.shutdownHooks,
-		EnableGracefulShutdown:  opts.EnableGracefulShutdown,
-		ShutdownTimeout:         opts.ShutdownTimeout,
-		EventAdapters:           a.eventAdapters,
-		ConsumerRegistry:        a.consumerRegistry,
-		WebSocketRegistry:       a.websocketRegistry,
-		HTTP:                    opts.HTTP,
-		HTTPAdapterFactory:      a.httpAdapterFactory,
-		WebSocketAdapterFactory: a.websocketAdapterFactory,
-		Validator:               a.validator,
-		ValidatorConfigured:     a.validatorConfigured,
+		Address:                      opts.Address,
+		Constructors:                 a.constructors,
+		ControllerConstructors:       a.controllerConstructors,
+		ComponentIssues:              a.componentIssues,
+		TypedComponents:              a.typedComponents,
+		Routes:                       a.routes,
+		ScopedInterceptors:           a.interceptors,
+		WebSocketInterceptors:        a.websocketInterceptors,
+		WebSocketUpgradeInterceptors: a.websocketUpgradeInterceptors,
+		CustomTransports:             a.customTransports,
+		ShutdownHooks:                a.shutdownHooks,
+		EnableGracefulShutdown:       opts.EnableGracefulShutdown,
+		ShutdownTimeout:              opts.ShutdownTimeout,
+		EventAdapters:                a.eventAdapters,
+		ConsumerRegistry:             a.consumerRegistry,
+		WebSocketRegistry:            a.websocketRegistry,
+		HTTP:                         opts.HTTP,
+		HTTPAdapterFactory:           a.httpAdapterFactory,
+		WebSocketAdapterFactory:      a.websocketAdapterFactory,
+		Validator:                    a.validator,
+		ValidatorConfigured:          a.validatorConfigured,
 	}
 }
 

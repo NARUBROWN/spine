@@ -14,8 +14,8 @@ Spine uses secure transport and bounded runtime defaults. Call `App.Validate` in
 | Consumer transport failure | rebuild reader with exponential backoff and jitter | configure `spine.WithEventConsumerRetry` |
 | WebSocket origin | scheme and host must match | exact `AllowedOrigins` |
 | WebSocket capacity | 1024 active and pending connections | positive limit or `UnlimitedWebSocketConnections` |
-| WebSocket authentication | implementations of `WebSocketHandshakeInterceptor` run before slot/upgrade | implement handshake auth on every protected WS route |
-| Global interceptors | HTTP and WebSocket | `InterceptorFor` with a narrower scope |
+| WebSocket authentication | `BeforeUpgrade` runs after slot reservation and before upgrade | register `api.WebSocketUpgradeInterceptors` on protected routes |
+| Global interceptors | registration by transport and execution phase | use `InterceptorFor` for HTTP and `WebSocketUpgradeInterceptor` or `WebSocketInterceptor` for WebSocket |
 | Credentialed CORS | explicit origins required | none; wildcard credentials are invalid |
 | Cookie serialization | reject invalid fields before writing a response | `EncodeCookieValue` for arbitrary values |
 

@@ -29,7 +29,7 @@ type requestAwareInterceptor struct {
 	messageRemote string
 }
 
-func (i *requestAwareInterceptor) PreHandshake(ctx context.Context, request pkgws.Handshake, _ core.HandlerMeta) error {
+func (i *requestAwareInterceptor) BeforeUpgrade(ctx context.Context, request pkgws.Handshake, _ core.HandlerMeta) error {
 	i.handshakeAuth = request.Header("Authorization")
 	i.messageQuery = request.Query("token")
 	i.messageCookie, _ = request.Cookie("session")
@@ -116,7 +116,7 @@ func TestRuntime_StopCancelsActiveHandlerAndRejectsNewConnections(t *testing.T) 
 		ReadTimeout:  time.Second,
 		WriteTimeout: time.Second,
 		PingInterval: time.Second,
-	})
+	}, nil)
 	defer close(controller.release)
 
 	server := newRuntimeTestServer(runtime, registration)
@@ -162,7 +162,7 @@ func TestRuntime_StopWaitsForActiveHandlerToReturn(t *testing.T) {
 		ReadTimeout:  time.Second,
 		WriteTimeout: time.Second,
 		PingInterval: time.Second,
-	})
+	}, nil)
 
 	server := newRuntimeTestServer(runtime, registration)
 	defer server.Close()
@@ -212,7 +212,7 @@ func TestRuntime_ConcurrentSendsRemainSafeWhilePingRuns(t *testing.T) {
 		ReadTimeout:  time.Second,
 		WriteTimeout: time.Second,
 		PingInterval: time.Millisecond,
-	})
+	}, nil)
 	defer runtime.Stop()
 
 	server := newRuntimeTestServer(runtime, registration)
@@ -262,7 +262,7 @@ func TestRuntime_RejectsCapacityBeforeWebSocketUpgrade(t *testing.T) {
 	runtime, registration := newTestRuntime(t, controller, (*cancellationController).Wait, boot.WebSocketOptions{
 		MaxConnections:     1,
 		CapacityRetryAfter: 3 * time.Second,
-	})
+	}, nil)
 	defer runtime.Stop()
 	defer close(controller.release)
 
@@ -295,7 +295,7 @@ func TestRuntime_ExplicitHandshakeMetadataAndCommonMessageInterceptors(t *testin
 		handshakeSeen: make(chan struct{}),
 		messageSeen:   make(chan struct{}),
 	}
-	runtime, registration := newTestRuntime(t, controller, (*cancellationController).Wait, boot.WebSocketOptions{}, interceptor)
+	runtime, registration := newTestRuntime(t, controller, (*cancellationController).Wait, boot.WebSocketOptions{}, []core.WebSocketInterceptor{interceptor}, interceptor)
 	defer runtime.Stop()
 
 	server := newRuntimeTestServer(runtime, registration)
@@ -328,7 +328,7 @@ func TestRuntime_ExplicitHandshakeMetadataAndCommonMessageInterceptors(t *testin
 	}
 }
 
-func newTestRuntime(t *testing.T, controller any, handler any, options boot.WebSocketOptions, handshake ...core.WebSocketHandshakeInterceptor) (*wsruntime.Runtime, wsruntime.Registration) {
+func newTestRuntime(t *testing.T, controller any, handler any, options boot.WebSocketOptions, messageInterceptors []core.WebSocketInterceptor, upgrades ...core.WebSocketUpgradeInterceptor) (*wsruntime.Runtime, wsruntime.Registration) {
 	t.Helper()
 
 	registry := wsruntime.NewRegistry()
@@ -349,17 +349,11 @@ func newTestRuntime(t *testing.T, controller any, handler any, options boot.WebS
 		t.Fatalf("지원하지 않는 테스트 컨트롤러: %T", controller)
 	}
 
-	var messageInterceptors []core.WebSocketInterceptor
-	for _, interceptor := range handshake {
-		if common, ok := interceptor.(core.WebSocketInterceptor); ok {
-			messageInterceptors = append(messageInterceptors, common)
-		}
-	}
 	adapter, err := gorillaplatform.NewFactory().New(wsruntime.AdapterOptions(options))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return wsruntime.NewRuntime(invoker.NewInvoker(c), adapter, options, messageInterceptors, handshake...), registration
+	return wsruntime.NewRuntime(invoker.NewInvoker(c), adapter, options, messageInterceptors, upgrades...), registration
 }
 
 func newRuntimeTestServer(runtime *wsruntime.Runtime, registration wsruntime.Registration) *httptest.Server {

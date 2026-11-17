@@ -94,19 +94,34 @@ data, but background work needs its owner's context. The legacy `ws.Send(ctx,...
 compatibility capability is revoked at message completion; injected `ws.Sender`
 can send with a background owner's context while the target connection is active.
 
-Handshake interceptors now receive the standard context and an explicit immutable
-snapshot, with no common execution store or message payload:
+## Register upgrade interceptors
+
+Implement `core.WebSocketUpgradeInterceptor` to inspect a connection request
+before the HTTP upgrade. Register it on a route or group with
+`api.WebSocketUpgradeInterceptors(auth)`, or register it globally with
+`app.WebSocketUpgradeInterceptor(auth)`.
 
 ```go
-func (*Auth) PreHandshake(ctx context.Context, request ws.Handshake, meta core.HandlerMeta) error {
+func (*Auth) BeforeUpgrade(ctx context.Context, request ws.Handshake, meta core.HandlerMeta) error {
     return authenticate(ctx, request.Header("Authorization"))
 }
+
+r.WS("/ws", c.onMessage,
+    api.WebSocketUpgradeInterceptors(c.auth),
+    api.WebSocketInterceptors(c.messageRateLimit),
+)
 ```
 
-Existing handshake implementations must migrate to this signature. Prepare rejects
-interceptors with an incompatible PreHandshake method instead of skipping them. Connection
-start and disconnect callbacks are not introduced. Consumer delivery settlement
-remains runtime-owned and runs after the pipeline completes.
+Either option can be registered on its own. For each connection attempt, the
+runtime reserves a slot and calls the global upgrade hooks before the route
+hooks. If a hook returns an error, the runtime sends an HTTP rejection. The
+runtime cancels the hooks' context as soon as the check finishes. On success,
+the adapter upgrades the connection using a separate context. The message
+hooks run for frames received after the upgrade.
+
+Rename existing `PreHandshake` methods to `BeforeUpgrade` and register them
+explicitly. Prepare rejects legacy `PreHandshake` methods on message
+interceptors so an authentication hook cannot be skipped during migration.
 
 A runnable echo and HTTP-push example is in
 [cmd/reference/websocket](../../cmd/reference/websocket/main.go). From

@@ -64,10 +64,11 @@ func (registry *Registry) add(method, path string, handler any, options []router
 	if method == "WS" && len(spec.Interceptors) != 0 {
 		r.errors = append(r.errors, fmt.Errorf("WebSocket %s: use api.WebSocketInterceptors", path))
 	}
-	if method != "WS" && len(spec.WebSocketInterceptors) != 0 {
+	if method != "WS" && (len(spec.WebSocketInterceptors) != 0 || len(spec.WebSocketUpgradeInterceptors) != 0) {
 		r.errors = append(r.errors, fmt.Errorf("%s %s: use api.Interceptors", method, path))
 	}
 	spec.WebSocketInterceptors = append(spec.WebSocketInterceptors[:0:0], spec.WebSocketInterceptors...)
+	spec.WebSocketUpgradeInterceptors = append(spec.WebSocketUpgradeInterceptors[:0:0], spec.WebSocketUpgradeInterceptors...)
 	spec.Interceptors = append(spec.Interceptors[:0:0], spec.Interceptors...)
 	spec.Tags = append([]string(nil), spec.Tags...)
 	r.routes = append(r.routes, spec)
@@ -85,6 +86,7 @@ func (r *Collector) Freeze(registry *Registry) ([]router.RouteSpec, error) {
 	for i := range routes {
 		routes[i].Interceptors = append(routes[i].Interceptors[:0:0], routes[i].Interceptors...)
 		routes[i].WebSocketInterceptors = append(routes[i].WebSocketInterceptors[:0:0], routes[i].WebSocketInterceptors...)
+		routes[i].WebSocketUpgradeInterceptors = append(routes[i].WebSocketUpgradeInterceptors[:0:0], routes[i].WebSocketUpgradeInterceptors...)
 		routes[i].Tags = append([]string(nil), routes[i].Tags...)
 	}
 	return routes, errors.Join(r.errors...)

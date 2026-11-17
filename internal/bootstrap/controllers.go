@@ -75,7 +75,7 @@ func collectControllers(ctx context.Context, config *Config, container *containe
 			if err != nil {
 				return err
 			}
-			if err := config.WebSocketRegistry.RegisterMeta(path, meta, route.WebSocketInterceptors...); err != nil {
+			if err := config.WebSocketRegistry.RegisterMeta(path, meta, route.WebSocketInterceptors, route.WebSocketUpgradeInterceptors); err != nil {
 				return err
 			}
 		}

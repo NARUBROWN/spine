@@ -83,7 +83,7 @@ func TestRuntimeStopClosesConnectionsConcurrently(t *testing.T) {
 	}
 }
 
-func (i *rejectingHandshakeInterceptor) PreHandshake(ctx context.Context, request pkgws.Handshake, _ core.HandlerMeta) error {
+func (i *rejectingHandshakeInterceptor) BeforeUpgrade(ctx context.Context, request pkgws.Handshake, _ core.HandlerMeta) error {
 	i.calls.Add(1)
 	i.lastHeader = request.Header("Authorization")
 	i.lastQuery = request.Query("token")
@@ -107,7 +107,7 @@ type cancellationHandshakeInterceptor struct {
 	release  chan struct{}
 }
 
-func (i *cancellationHandshakeInterceptor) PreHandshake(ctx context.Context, request pkgws.Handshake, _ core.HandlerMeta) error {
+func (i *cancellationHandshakeInterceptor) BeforeUpgrade(ctx context.Context, request pkgws.Handshake, _ core.HandlerMeta) error {
 	close(i.started)
 	<-ctx.Done()
 	close(i.canceled)
@@ -115,7 +115,7 @@ func (i *cancellationHandshakeInterceptor) PreHandshake(ctx context.Context, req
 	return ctx.Err()
 }
 
-func (i *capacityHandshakeInterceptor) PreHandshake(context.Context, pkgws.Handshake, core.HandlerMeta) error {
+func (i *capacityHandshakeInterceptor) BeforeUpgrade(context.Context, pkgws.Handshake, core.HandlerMeta) error {
 	call := i.calls.Add(1)
 	active := i.active.Add(1)
 	defer i.active.Add(-1)
@@ -147,7 +147,7 @@ func (c *cancellationController) Wait(ctx context.Context) {
 	}
 }
 
-func TestRuntime_StopCancelsAndWaitsForActivePreHandshake(t *testing.T) {
+func TestRuntime_StopCancelsAndWaitsForActiveBeforeUpgrade(t *testing.T) {
 	interceptor := &cancellationHandshakeInterceptor{
 		started:  make(chan struct{}),
 		canceled: make(chan struct{}),
@@ -156,7 +156,7 @@ func TestRuntime_StopCancelsAndWaitsForActivePreHandshake(t *testing.T) {
 	runtime, registration := newTestRuntime(t, &cancellationController{}, (*cancellationController).Wait, boot.WebSocketOptions{
 		MaxConnections: 1,
 	})
-	runtime.handshakeInterceptors = []core.WebSocketHandshakeInterceptor{interceptor}
+	runtime.upgradeInterceptors = []core.WebSocketUpgradeInterceptor{interceptor}
 
 	handled := make(chan struct{})
 	go func() {
@@ -234,7 +234,7 @@ func TestRuntime_RejectedHandshakeReleasesCapacityAndPreservesRequest(t *testing
 	runtime, registration := newTestRuntime(t, &cancellationController{}, (*cancellationController).Wait, boot.WebSocketOptions{
 		MaxConnections: 1,
 	})
-	runtime.handshakeInterceptors = []core.WebSocketHandshakeInterceptor{interceptor}
+	runtime.upgradeInterceptors = []core.WebSocketUpgradeInterceptor{interceptor}
 	defer runtime.Stop()
 
 	for range 32 {
@@ -262,7 +262,7 @@ func TestRuntime_RejectedHandshakeReleasesCapacityAndPreservesRequest(t *testing
 	}
 }
 
-func TestRuntime_PreHandshakeConcurrencyIsBoundedByConnectionCapacity(t *testing.T) {
+func TestRuntime_BeforeUpgradeConcurrencyIsBoundedByConnectionCapacity(t *testing.T) {
 	interceptor := &capacityHandshakeInterceptor{
 		firstSeen:    make(chan struct{}),
 		releaseFirst: make(chan struct{}),
@@ -270,7 +270,7 @@ func TestRuntime_PreHandshakeConcurrencyIsBoundedByConnectionCapacity(t *testing
 	runtime, registration := newTestRuntime(t, &cancellationController{}, (*cancellationController).Wait, boot.WebSocketOptions{
 		MaxConnections: 1,
 	})
-	runtime.handshakeInterceptors = []core.WebSocketHandshakeInterceptor{interceptor}
+	runtime.upgradeInterceptors = []core.WebSocketUpgradeInterceptor{interceptor}
 	defer runtime.Stop()
 
 	firstResult := make(chan int, 1)
@@ -424,17 +424,19 @@ type handshakeProbe struct {
 	run func(context.Context, pkgws.Handshake) error
 }
 
-func (p *handshakeProbe) PreHandshake(ctx context.Context, request pkgws.Handshake, _ core.HandlerMeta) error {
+func (p *handshakeProbe) BeforeUpgrade(ctx context.Context, request pkgws.Handshake, _ core.HandlerMeta) error {
 	return p.run(ctx, request)
 }
-func TestHandshakeReceivesExplicitContextAndSnapshot(t *testing.T) {
+func TestBeforeUpgradeReceivesScopedContextAndSnapshot(t *testing.T) {
 	for _, outcome := range []string{"success", "error", "panic"} {
 		t.Run(outcome, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			read := false
+			var hookCtx context.Context
 			writer := &handshakeProbe{run: func(got context.Context, request pkgws.Handshake) error {
-				if got != ctx || request.Path() != "/chat" || request.Header("X-Request-ID") != "handshake" {
+				hookCtx = got
+				if got == ctx || got.Err() != nil || request.Path() != "/chat" || request.Header("X-Request-ID") != "handshake" {
 					t.Fatal("incorrect handshake inputs")
 				}
 				request.Headers()["X-Request-ID"] = []string{"changed"}
@@ -448,17 +450,79 @@ func TestHandshakeReceivesExplicitContextAndSnapshot(t *testing.T) {
 			}}
 			reader := &handshakeProbe{run: func(got context.Context, request pkgws.Handshake) error {
 				read = true
-				if got != ctx || request.Header("X-Request-ID") != "handshake" {
+				if got != hookCtx || got.Err() != nil || request.Header("X-Request-ID") != "handshake" {
 					t.Fatal("shared snapshot was mutated")
 				}
 				return nil
 			}}
-			runtime := &Runtime{handshakeInterceptors: []core.WebSocketHandshakeInterceptor{writer, reader}}
+			runtime := &Runtime{upgradeInterceptors: []core.WebSocketUpgradeInterceptor{writer, reader}}
 			request := httptest.NewRequest(http.MethodGet, "/chat", nil)
 			request.Header.Set("X-Request-ID", "handshake")
-			err := runtime.preHandshake(ctx, newWebSocketRequestSnapshot(request), Registration{})
+			err := runtime.beforeUpgrade(ctx, newWebSocketRequestSnapshot(request), Registration{})
 			if (err != nil) != (outcome != "success") || read != (outcome == "success") {
 				t.Fatalf("err=%v read=%v", err, read)
+			}
+			if hookCtx.Err() != context.Canceled || ctx.Err() != nil {
+				t.Fatal("업그레이드 검사 컨텍스트만 취소되어야 합니다")
+			}
+		})
+	}
+}
+
+type upgradeProbeAdapter struct {
+	run func(*http.Request)
+}
+
+func (a upgradeProbeAdapter) Upgrade(_ http.ResponseWriter, req *http.Request) (wsadapter.Connection, error) {
+	a.run(req)
+	return nil, errors.New("검사용 업그레이드 종료")
+}
+
+func TestUpgradeHooksFinishBeforeAdapterStarts(t *testing.T) {
+	for _, deny := range []bool{false, true} {
+		name := "허용"
+		if deny {
+			name = "거부"
+		}
+		t.Run(name, func(t *testing.T) {
+			var hookCtx, adapterCtx context.Context
+			globalCalls, routeCalls := 0, 0
+			global := &handshakeProbe{run: func(ctx context.Context, _ pkgws.Handshake) error {
+				globalCalls++
+				hookCtx = ctx
+				return nil
+			}}
+			route := &handshakeProbe{run: func(ctx context.Context, _ pkgws.Handshake) error {
+				routeCalls++
+				if globalCalls != 1 || ctx != hookCtx || ctx.Err() != nil {
+					t.Fatal("경로 훅은 전역 훅 뒤에 같은 컨텍스트로 실행돼야 합니다")
+				}
+				if deny {
+					return errors.New("연결 거부")
+				}
+				return nil
+			}}
+			adapter := upgradeProbeAdapter{run: func(req *http.Request) {
+				adapterCtx = req.Context()
+				if routeCalls != 1 || hookCtx.Err() != context.Canceled || adapterCtx.Err() != nil {
+					t.Fatal("검사 컨텍스트가 종료된 뒤 어댑터가 활성 컨텍스트로 실행돼야 합니다")
+				}
+			}}
+			runtime := NewRuntime(invoker.NewInvoker(container.New()), adapter, boot.WebSocketOptions{}, nil, global)
+			defer runtime.Stop()
+			response := httptest.NewRecorder()
+			runtime.HandleConn(response, httptest.NewRequest(http.MethodGet, "/chat", nil), Registration{
+				Path: "/chat", UpgradeInterceptors: []core.WebSocketUpgradeInterceptor{route},
+			})
+			if globalCalls != 1 || routeCalls != 1 || hookCtx.Err() != context.Canceled {
+				t.Fatal("연결 검사 훅의 수명이 요청에 맞지 않습니다")
+			}
+			if deny {
+				if adapterCtx != nil || response.Code != http.StatusUnauthorized {
+					t.Fatal("거부된 연결에서 어댑터를 호출했습니다")
+				}
+			} else if adapterCtx == nil || adapterCtx.Err() != context.Canceled {
+				t.Fatal("어댑터 컨텍스트가 완료 시점에 취소되지 않았습니다")
 			}
 		})
 	}

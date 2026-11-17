@@ -43,10 +43,11 @@ type dxController struct {
 }
 
 type dxConfig struct {
-	service *dxService
-	ids     chan string
-	frames  chan dxFrame
-	calls   atomic.Int32
+	service      *dxService
+	ids          chan string
+	frames       chan dxFrame
+	calls        atomic.Int32
+	upgradeCalls atomic.Int32
 }
 
 func (*dxController) Constructor(s *dxService, config *dxConfig) *dxController {
@@ -55,7 +56,7 @@ func (*dxController) Constructor(s *dxService, config *dxConfig) *dxController {
 }
 
 func (c *dxController) RegisterRoutes(r *api.Registry) {
-	r.Group("/chat", api.WebSocketInterceptors((*dxInterceptor)(nil))).WS("/ws", func(ctx ws.MessageContext, id ws.ConnectionID, message input.Message[dxMessage]) error {
+	r.Group("/chat", api.WebSocketInterceptors((*dxInterceptor)(nil)), api.WebSocketUpgradeInterceptors((*dxUpgradeProbe)(nil))).WS("/ws", func(ctx ws.MessageContext, id ws.ConnectionID, message input.Message[dxMessage]) error {
 		if value, ok := ctx.Get("ws-audit"); !ok || value != true {
 			return errors.New("WebSocket handler did not see the interceptor value")
 		}
@@ -76,7 +77,7 @@ func TestWSDX_CallbackMessageAndDISenderOverNetwork(t *testing.T) {
 	ids := make(chan string, 4)
 	app := spine.New(echo.Option(), gorilla.Option())
 	config := &dxConfig{ids: ids}
-	app.Constructor(constructor.Custom(func() *dxConfig { return config }), constructor.Service(&dxService{}), constructor.Interceptor(&dxInterceptor{}), constructor.Controller(&dxController{}))
+	app.Constructor(constructor.Custom(func() *dxConfig { return config }), constructor.Service(&dxService{}), constructor.Interceptor(&dxInterceptor{}), constructor.Interceptor(&dxUpgradeProbe{}), constructor.Controller(&dxController{}))
 	prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{GlobalPrefix: "/api"}})
 	if err != nil {
 		t.Fatal(err)
@@ -94,6 +95,9 @@ func TestWSDX_CallbackMessageAndDISenderOverNetwork(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
+	if got := config.upgradeCalls.Load(); got != 1 {
+		t.Fatalf("upgrade hook calls = %d, want 1", got)
+	}
 	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	if err := conn.WriteJSON(dxMessage{Text: "echo"}); err != nil {
 		t.Fatal(err)
@@ -239,6 +243,17 @@ func (*dxInterceptor) BeforeMessageCompletion(ws.MessageContext, core.HandlerMet
 }
 func (*dxInterceptor) AfterMessageCompletion(ws.MessageContext, core.HandlerMeta, error) {}
 
+type dxUpgradeProbe struct{ config *dxConfig }
+
+func (*dxUpgradeProbe) Constructor(config *dxConfig) *dxUpgradeProbe {
+	return &dxUpgradeProbe{config: config}
+}
+
+func (i *dxUpgradeProbe) BeforeUpgrade(context.Context, ws.Handshake, core.HandlerMeta) error {
+	i.config.upgradeCalls.Add(1)
+	return nil
+}
+
 type dxFrame struct {
 	ctx     context.Context
 	payload string
@@ -248,7 +263,7 @@ func TestWSDX_StandardContextsCancelPerMessageWithoutClosingConnection(t *testin
 	frames := make(chan dxFrame, 2)
 	config := &dxConfig{ids: make(chan string, 2), frames: frames}
 	app := spine.New(echo.Option(), gorilla.Option())
-	app.Constructor(constructor.Custom(func() *dxConfig { return config }), constructor.Service(&dxService{}), constructor.Interceptor(&dxInterceptor{}), constructor.Controller(&dxController{}))
+	app.Constructor(constructor.Custom(func() *dxConfig { return config }), constructor.Service(&dxService{}), constructor.Interceptor(&dxInterceptor{}), constructor.Interceptor(&dxUpgradeProbe{}), constructor.Controller(&dxController{}))
 	prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{}})
 	if err != nil {
 		t.Fatal(err)

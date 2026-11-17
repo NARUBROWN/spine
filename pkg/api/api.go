@@ -26,3 +26,6 @@ var Interceptors = apiregistry.Interceptors
 
 // WebSocketInterceptors는 WebSocket 라우트의 메시지 훅을 연결합니다.
 var WebSocketInterceptors = apiregistry.WebSocketInterceptors
+
+// WebSocketUpgradeInterceptors는 WebSocket 라우트의 업그레이드 검사 훅을 연결합니다.
+var WebSocketUpgradeInterceptors = apiregistry.WebSocketUpgradeInterceptors

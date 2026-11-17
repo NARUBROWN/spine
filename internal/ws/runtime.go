@@ -65,8 +65,8 @@ type Runtime struct {
 	// connectionSlots는 활성 연결과 진행 중인 핸드셰이크를 모두 포함합니다.
 	// 동시에 여러 핸드셰이크가 진행되어도 최대 연결 수를 넘지 않도록
 	// 연결을 업그레이드하기 전에 슬롯을 미리 확보합니다.
-	connectionSlots       int
-	handshakeInterceptors []core.WebSocketHandshakeInterceptor
+	connectionSlots     int
+	upgradeInterceptors []core.WebSocketUpgradeInterceptor
 }
 
 type trackedConn struct {
@@ -102,7 +102,7 @@ func (c *trackedConn) writeClose(code int, reason string, timeout time.Duration)
 	return c.conn.WriteClose(code, reason, writeDeadline(timeout))
 }
 
-func NewRuntime(handlerInvoker *invoker.Invoker, adapter wsadapter.Adapter, opts configuration.WebSocketOptions, interceptors []core.WebSocketInterceptor, handshakeInterceptors ...core.WebSocketHandshakeInterceptor) *Runtime {
+func NewRuntime(handlerInvoker *invoker.Invoker, adapter wsadapter.Adapter, opts configuration.WebSocketOptions, interceptors []core.WebSocketInterceptor, upgradeInterceptors ...core.WebSocketUpgradeInterceptor) *Runtime {
 	if wsadapter.ValidateAdapter(adapter) != nil {
 		panic("ws: adapter cannot be nil")
 	}
@@ -113,16 +113,16 @@ func NewRuntime(handlerInvoker *invoker.Invoker, adapter wsadapter.Adapter, opts
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Runtime{
-		invoker:               handlerInvoker,
-		interceptors:          append([]core.WebSocketInterceptor(nil), interceptors...),
-		argumentResolvers:     wsresolver.Resolvers(nil),
-		adapter:               adapter,
-		options:               normalizeWebSocketOptions(opts),
-		ctx:                   ctx,
-		cancel:                cancel,
-		conns:                 make(map[string]*trackedConn),
-		sender:                NewSender(),
-		handshakeInterceptors: append([]core.WebSocketHandshakeInterceptor(nil), handshakeInterceptors...),
+		invoker:             handlerInvoker,
+		interceptors:        append([]core.WebSocketInterceptor(nil), interceptors...),
+		argumentResolvers:   wsresolver.Resolvers(nil),
+		adapter:             adapter,
+		options:             normalizeWebSocketOptions(opts),
+		ctx:                 ctx,
+		cancel:              cancel,
+		conns:               make(map[string]*trackedConn),
+		sender:              NewSender(),
+		upgradeInterceptors: append([]core.WebSocketUpgradeInterceptor(nil), upgradeInterceptors...),
 	}
 }
 
@@ -213,37 +213,14 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 		}
 	}()
 
-	handshakeCtx, cancelHandshake := context.WithCancel(req.Context())
-	stopHandshakeCancellation := context.AfterFunc(r.ctx, cancelHandshake)
+	upgradeCtx, cancelUpgrade := context.WithCancel(req.Context())
+	stopUpgradeCancellation := context.AfterFunc(r.ctx, cancelUpgrade)
 	defer func() {
-		stopHandshakeCancellation()
-		cancelHandshake()
+		stopUpgradeCancellation()
+		cancelUpgrade()
 	}()
-	handshakeContext := newWebSocketRequestSnapshot(req.WithContext(handshakeCtx))
-	if err := r.preHandshake(handshakeCtx, handshakeContext, reg); err != nil {
-		writeHandshakeRejection(w, err)
-		log.Printf("[WS] Handshake rejected (path=%s): %v", reg.Path, err)
-		return
-	}
-
-	if handshakeCtx.Err() != nil || r.ctx.Err() != nil {
-		http.Error(w, "websocket runtime is shutting down", http.StatusServiceUnavailable)
-		return
-	}
-	if !isAllowedWebSocketOriginWithTrustedProxies(req, r.options.AllowedOrigins, r.options.TrustedProxies) {
-		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
-		return
-	}
-	conn, err := r.adapter.Upgrade(w, req.WithContext(handshakeCtx))
-	if err != nil {
-		if wsadapter.ValidateConnection(conn) == nil {
-			_ = conn.Close()
-		}
-		log.Printf("[WS] Upgrade failed (%s): %v", reg.Path, err)
-		return
-	}
-	if err := wsadapter.ValidateConnection(conn); err != nil {
-		log.Printf("[WS] Upgrade failed (%s): %v", reg.Path, err)
+	conn := r.upgradeConnection(w, req.WithContext(upgradeCtx), reg)
+	if conn == nil {
 		return
 	}
 
@@ -291,7 +268,7 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 		}
 	}()
 
-	session := session{ctx: connCtx, id: connID, request: handshakeContext}
+	session := session{ctx: connCtx, id: connID}
 	// 연결당 루프
 	for {
 		msgType, payload, err := conn.ReadMessage()
@@ -316,34 +293,60 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 	}
 }
 
-func (r *Runtime) preHandshake(ctx context.Context, request publicws.Handshake, reg Registration) error {
-	for _, interceptor := range r.handshakeInterceptors {
-		if interceptor == nil {
-			continue
+func (r *Runtime) upgradeConnection(w http.ResponseWriter, req *http.Request, reg Registration) wsadapter.Connection {
+	if err := r.beforeUpgrade(req.Context(), newWebSocketRequestSnapshot(req), reg); err != nil {
+		writeHandshakeRejection(w, err)
+		log.Printf("[WS] Handshake rejected (path=%s): %v", reg.Path, err)
+		return nil
+	}
+
+	if req.Context().Err() != nil || r.ctx.Err() != nil {
+		http.Error(w, "websocket runtime is shutting down", http.StatusServiceUnavailable)
+		return nil
+	}
+	if !isAllowedWebSocketOriginWithTrustedProxies(req, r.options.AllowedOrigins, r.options.TrustedProxies) {
+		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		return nil
+	}
+	conn, err := r.adapter.Upgrade(w, req)
+	if err != nil {
+		if wsadapter.ValidateConnection(conn) == nil {
+			_ = conn.Close()
 		}
-		if err := callPreHandshake(interceptor, ctx, request, reg.Meta); err != nil {
+		log.Printf("[WS] Upgrade failed (%s): %v", reg.Path, err)
+		return nil
+	}
+	if err := wsadapter.ValidateConnection(conn); err != nil {
+		log.Printf("[WS] Upgrade failed (%s): %v", reg.Path, err)
+		return nil
+	}
+	return conn
+}
+
+func (r *Runtime) beforeUpgrade(parent context.Context, request publicws.Handshake, reg Registration) error {
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+
+	for _, interceptor := range r.upgradeInterceptors {
+		if err := callBeforeUpgrade(interceptor, ctx, request, reg.Meta); err != nil {
 			return err
 		}
 	}
-	for _, interceptor := range reg.Interceptors {
-		handshakeInterceptor, ok := interceptor.(core.WebSocketHandshakeInterceptor)
-		if !ok {
-			continue
-		}
-		if err := callPreHandshake(handshakeInterceptor, ctx, request, reg.Meta); err != nil {
+	for _, interceptor := range reg.UpgradeInterceptors {
+		if err := callBeforeUpgrade(interceptor, ctx, request, reg.Meta); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func callPreHandshake(interceptor core.WebSocketHandshakeInterceptor, ctx context.Context, request publicws.Handshake, meta execution.HandlerMeta) (err error) {
+func callBeforeUpgrade(interceptor core.WebSocketUpgradeInterceptor, ctx context.Context, request publicws.Handshake, meta execution.HandlerMeta) (err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			err = fmt.Errorf("websocket handshake interceptor panic: %v", recovered)
+			err = fmt.Errorf("websocket upgrade interceptor panic: %v", recovered)
 		}
 	}()
-	return interceptor.PreHandshake(ctx, request, meta.View())
+	return interceptor.BeforeUpgrade(ctx, request, meta.View())
 }
 
 func writeHandshakeRejection(w http.ResponseWriter, err error) {

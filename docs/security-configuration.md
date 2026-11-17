@@ -14,8 +14,8 @@ Spine은 제한된 런타임 기본값을 사용하며 Kafka·RabbitMQ의 전송
 | 컨슈머 전송 실패 | 지수 백오프와 지터를 적용해 리더 재생성 | `spine.WithEventConsumerRetry` 설정 |
 | WebSocket 출처 | 프로토콜과 호스트가 일치해야 함 | 정확한 `AllowedOrigins` 지정 |
 | WebSocket 연결 용량 | 활성 및 대기 연결 1024개 | 양의 제한값 또는 `UnlimitedWebSocketConnections` |
-| WebSocket 인증 | `WebSocketHandshakeInterceptor` 구현 시 slot/upgrade 전에 실행 | 인증이 필요한 모든 WS route에 handshake 인증 구현 |
-| 전역 인터셉터 | HTTP와 WebSocket에 적용 | 더 좁은 범위를 지정하는 `InterceptorFor` |
+| WebSocket 인증 | 연결 슬롯 예약 후 `BeforeUpgrade` 실행 | 보호할 경로에 `api.WebSocketUpgradeInterceptors` 등록 |
+| 전역 인터셉터 | 전송과 실행 단계별로 등록 | HTTP는 `InterceptorFor`, WebSocket은 `WebSocketUpgradeInterceptor` 또는 `WebSocketInterceptor` |
 | 자격 증명 포함 CORS | 명시적 출처 필수 | 없음. 와일드카드와 자격 증명의 조합은 유효하지 않음 |
 | 쿠키 직렬화 | 응답을 기록하기 전에 유효하지 않은 필드 거부 | 임의 값을 위한 `EncodeCookieValue` |
 

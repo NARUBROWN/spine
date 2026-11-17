@@ -8,9 +8,8 @@ import (
 
 // session is owned by the connection runtime, never by execution.State.
 type session struct {
-	ctx     context.Context
-	id      string
-	request *webSocketRequestSnapshot
+	ctx context.Context
+	id  string
 }
 
 type webSocketRequestSnapshot struct {

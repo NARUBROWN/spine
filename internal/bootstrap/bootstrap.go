@@ -31,28 +31,29 @@ import (
 )
 
 type Config struct {
-	Address                 string
-	Constructors            []any
-	ControllerConstructors  []any
-	ComponentIssues         []configuration.ConfigIssue
-	TypedComponents         bool
-	Routes                  []spineRouter.RouteSpec
-	Interceptors            []core.Interceptor
-	ScopedInterceptors      []InterceptorBinding
-	WebSocketInterceptors   []core.WebSocketInterceptor
-	CustomTransports        []core.CustomTransport
-	ShutdownHooks           []any
-	EnableGracefulShutdown  bool
-	ShutdownTimeout         time.Duration
-	EventAdapters           []EventAdapterBinding
-	ConsumerRegistry        *consumer.Registry
-	HTTP                    *configuration.HTTPOptions
-	HTTPAdapterFactory      adapter.Factory
-	WebSocketAdapterFactory wsadapter.Factory
-	WebSocketRegistry       *ws.Registry
-	Validator               validation.Validator
-	ValidatorConfigured     bool
-	RoutesCollected         bool
+	Address                      string
+	Constructors                 []any
+	ControllerConstructors       []any
+	ComponentIssues              []configuration.ConfigIssue
+	TypedComponents              bool
+	Routes                       []spineRouter.RouteSpec
+	Interceptors                 []core.Interceptor
+	ScopedInterceptors           []InterceptorBinding
+	WebSocketInterceptors        []core.WebSocketInterceptor
+	WebSocketUpgradeInterceptors []core.WebSocketUpgradeInterceptor
+	CustomTransports             []core.CustomTransport
+	ShutdownHooks                []any
+	EnableGracefulShutdown       bool
+	ShutdownTimeout              time.Duration
+	EventAdapters                []EventAdapterBinding
+	ConsumerRegistry             *consumer.Registry
+	HTTP                         *configuration.HTTPOptions
+	HTTPAdapterFactory           adapter.Factory
+	WebSocketAdapterFactory      wsadapter.Factory
+	WebSocketRegistry            *ws.Registry
+	Validator                    validation.Validator
+	ValidatorConfigured          bool
+	RoutesCollected              bool
 }
 
 // EventAdapterBinding은 구현과 공통 실행 정책을 연결하는 준비 설정입니다.
@@ -183,7 +184,7 @@ func validate(config Config) ([]configuration.OpenAPIResource, error) {
 			issues = append(issues, endpoint.HandlerDTOParameterIssues(meta, fmt.Sprintf("Routes[%d]", i), route.Path)...)
 			issues = append(issues, endpoint.ResponseTypeIssues(meta, fmt.Sprintf("Routes[%d]", i))...)
 		}
-		if len(route.WebSocketInterceptors) != 0 {
+		if len(route.WebSocketInterceptors) != 0 || len(route.WebSocketUpgradeInterceptors) != 0 {
 			issues = append(issues, configuration.ConfigIssue{Path: fmt.Sprintf("Routes[%d]", i), Code: "INTERCEPTOR_TRANSPORT_INVALID", Message: "HTTP routes use api.Interceptors."})
 		}
 		if _, err := spineRouter.Meta(route); err != nil {
@@ -290,6 +291,11 @@ func webSocketInterceptorIssues(config Config) []configuration.ConfigIssue {
 			issues = append(issues, configuration.ConfigIssue{Path: fmt.Sprintf("WebSocketInterceptors[%d]", i), Code: "INTERCEPTOR_NIL", Message: "WebSocket interceptor is nil."})
 		}
 	}
+	for i, interceptor := range config.WebSocketUpgradeInterceptors {
+		if interceptor == nil {
+			issues = append(issues, configuration.ConfigIssue{Path: fmt.Sprintf("WebSocketUpgradeInterceptors[%d]", i), Code: "INTERCEPTOR_NIL", Message: "WebSocket upgrade interceptor is nil."})
+		}
+	}
 	return issues
 }
 
@@ -333,18 +339,16 @@ func resolveInterceptors[T any](ctr *container.Container, interceptors []T, dedu
 	return resolved, nil
 }
 
-func webSocketHandshakeInterceptors(interceptors []core.WebSocketInterceptor) ([]core.WebSocketHandshakeInterceptor, error) {
-	handshakeInterceptors := make([]core.WebSocketHandshakeInterceptor, 0, len(interceptors))
+// rejectLegacyHandshakeHook prevents a previously active auth hook from being skipped.
+func rejectLegacyHandshakeHook(interceptors []core.WebSocketInterceptor) error {
 	for _, interceptor := range interceptors {
-		if handshakeInterceptor, ok := interceptor.(core.WebSocketHandshakeInterceptor); ok {
-			handshakeInterceptors = append(handshakeInterceptors, handshakeInterceptor)
-		} else if typ := reflect.TypeOf(interceptor); typ != nil {
+		if typ := reflect.TypeOf(interceptor); typ != nil {
 			if _, exists := typ.MethodByName("PreHandshake"); exists {
-				return nil, fmt.Errorf("WEBSOCKET_HANDSHAKE_SIGNATURE_UNSUPPORTED: %s must implement PreHandshake(context.Context, ws.Handshake, core.HandlerMeta) error", typ)
+				return fmt.Errorf("WEBSOCKET_HANDSHAKE_SIGNATURE_UNSUPPORTED: %s must migrate PreHandshake to BeforeUpgrade and register it with api.WebSocketUpgradeInterceptors or app.WebSocketUpgradeInterceptor", typ)
 			}
 		}
 	}
-	return handshakeInterceptors, nil
+	return nil
 }
 
 // globalInterceptorIdentity는 Go에서 실제 인스턴스의 정체성을 보존할 수 있을 때만
