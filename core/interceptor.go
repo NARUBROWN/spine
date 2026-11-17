@@ -41,8 +41,8 @@ type Interceptor interface {
 
 /*
 WebSocketHandshakeInterceptor는 선택적 WebSocket handshake 사전 처리 계약입니다.
-구현한 인터셉터만 연결 슬롯 예약과 HTTP upgrade 전에 호출됩니다. 기존 Interceptor의
-PreHandle은 메시지마다 기존 시점에 계속 호출되므로 호출 횟수와 트랜잭션 의미가 바뀌지 않습니다.
+구현한 인터셉터만 연결 슬롯 예약과 HTTP upgrade 전에 호출됩니다. WebSocketInterceptor의
+PreMessage는 업그레이드 이후 수신 프레임마다 호출됩니다.
 */
 type WebSocketHandshakeInterceptor interface {
 	PreHandshake(ctx context.Context, request ws.Handshake, meta HandlerMeta) error

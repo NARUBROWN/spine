@@ -53,10 +53,11 @@ func (a *app) componentConstructors(role string, contract reflect.Type, prototyp
 			continue
 		}
 		owner := reflect.TypeOf(prototype)
-		if contract != nil && !owner.Implements(contract) {
+		if contract != nil && !owner.Implements(contract) &&
+			!(role == "Interceptor" && owner.Implements(reflect.TypeFor[core.WebSocketInterceptor]())) {
 			hint := "Implement RegisterRoutes(*api.Registry) in addition to the Constructor method."
 			if role == "Interceptor" {
-				hint = "Implement PreHandle, PostHandle, BeforeResponse and AfterCompletion in addition to the Constructor method."
+				hint = "Implement core.Interceptor or core.WebSocketInterceptor in addition to the Constructor method."
 			}
 			a.componentIssues = append(a.componentIssues, boot.ConfigIssue{Path: path, Code: "COMPONENT_CONTRACT_INVALID", Message: fmt.Sprintf("%v must implement %v", owner, contract), Hint: hint})
 			continue

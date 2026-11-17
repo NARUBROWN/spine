@@ -32,10 +32,14 @@ type App interface {
 	// Deprecated: 새 HTTP 경로는 api.Controller의 RegisterRoutes 메서드에 등록하세요.
 	// 기존 등록은 전환 기간에 계속 사용할 수 있습니다.
 	Route(method string, path string, handler any, opts ...api.Option)
-	// 인터셉터 선언
+	// Interceptor는 HTTP 전역 인터셉터를 등록합니다. WebSocket 경로도 있으면
+	// InterceptorFor(boot.InterceptorHTTP, ...)로 범위를 명시하세요.
 	Interceptor(interceptors ...core.Interceptor)
-	// InterceptorFor는 선택한 기본 전송 방식에 전역 인터셉터를 등록합니다.
+	// InterceptorFor는 HTTP 전역 인터셉터의 범위를 명시합니다.
+	// WebSocket 전역 등록에는 WebSocketInterceptor를 사용하세요.
 	InterceptorFor(scope boot.InterceptorScope, interceptors ...core.Interceptor)
+	// WebSocketInterceptor는 WebSocket 전역 프레임 인터셉터를 등록합니다.
+	WebSocketInterceptor(interceptors ...core.WebSocketInterceptor)
 	// 독립 실행되는 사용자 정의 전송 방식 등록
 	RegisterTransport(t core.CustomTransport)
 	// Validate는 네트워크 연결을 열지 않고 애플리케이션 설정을 검사합니다.
@@ -71,6 +75,7 @@ type app struct {
 	typedComponents         bool
 	routes                  []router.RouteSpec
 	interceptors            []bootstrap.InterceptorBinding
+	websocketInterceptors   []core.WebSocketInterceptor
 	customTransports        []core.CustomTransport
 	consumerRegistry        *consumer.Registry
 	websocketRegistry       *ws.Registry
@@ -217,6 +222,10 @@ func (a *app) InterceptorFor(scope boot.InterceptorScope, interceptors ...core.I
 	}
 }
 
+func (a *app) WebSocketInterceptor(interceptors ...core.WebSocketInterceptor) {
+	a.websocketInterceptors = append(a.websocketInterceptors, interceptors...)
+}
+
 func (a *app) RegisterTransport(t core.CustomTransport) {
 	a.customTransports = append(a.customTransports, t)
 }
@@ -230,6 +239,7 @@ func (a *app) bootstrapConfig(opts boot.Options) bootstrap.Config {
 		TypedComponents:         a.typedComponents,
 		Routes:                  a.routes,
 		ScopedInterceptors:      a.interceptors,
+		WebSocketInterceptors:   a.websocketInterceptors,
 		CustomTransports:        a.customTransports,
 		ShutdownHooks:           a.shutdownHooks,
 		EnableGracefulShutdown:  opts.EnableGracefulShutdown,

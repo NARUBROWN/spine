@@ -19,7 +19,6 @@ import (
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/input"
-	handlerspine "github.com/NARUBROWN/spine/pkg/spine"
 	ws "github.com/NARUBROWN/spine/pkg/ws"
 	"github.com/gorilla/websocket"
 )
@@ -170,19 +169,20 @@ func (websocketRouteAuthorization) PreHandshake(_ context.Context, _ ws.Handshak
 	}
 	return nil
 }
-func (websocketRouteAuthorization) PreHandle(handlerspine.Ctx, core.HandlerMeta) error { return nil }
-func (websocketRouteAuthorization) PostHandle(handlerspine.Ctx, core.HandlerMeta)      {}
-func (websocketRouteAuthorization) BeforeResponse(handlerspine.Ctx, core.HandlerMeta, error) error {
+func (websocketRouteAuthorization) PreMessage(ws.MessageContext, core.HandlerMeta) error { return nil }
+func (websocketRouteAuthorization) PostMessage(ws.MessageContext, core.HandlerMeta)      {}
+func (websocketRouteAuthorization) BeforeMessageCompletion(ws.MessageContext, core.HandlerMeta, error) error {
 	return nil
 }
-func (websocketRouteAuthorization) AfterCompletion(handlerspine.Ctx, core.HandlerMeta, error) {}
+func (websocketRouteAuthorization) AfterMessageCompletion(ws.MessageContext, core.HandlerMeta, error) {
+}
 
 func TestWebSocketExecutesTheHandlerAuthorizedAtUpgrade(t *testing.T) {
 	for _, engine := range []string{"echo", "nethttp"} {
 		t.Run(engine, func(t *testing.T) {
 			app := spine.New(spine.WithHTTPAdapter(platformFactory(engine, nativeHooks{})), gorillaPlatform.Option())
 			app.Constructor(func() *websocketController { return &websocketController{} })
-			app.InterceptorFor(boot.InterceptorWebSocket, websocketRouteAuthorization{})
+			app.WebSocketInterceptor(websocketRouteAuthorization{})
 			if err := app.WebSocket().Register("/ws", (*websocketController).Message); err != nil {
 				t.Fatal(err)
 			}

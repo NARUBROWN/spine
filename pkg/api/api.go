@@ -23,3 +23,6 @@ var Tags = apiregistry.Tags
 var Summary = apiregistry.Summary
 var Description = apiregistry.Description
 var Interceptors = apiregistry.Interceptors
+
+// WebSocketInterceptors는 WebSocket 라우트의 메시지 훅을 연결합니다.
+var WebSocketInterceptors = apiregistry.WebSocketInterceptors

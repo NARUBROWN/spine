@@ -15,10 +15,12 @@ func snapshotConfig(config Config) Config {
 	config.Routes = slices.Clone(config.Routes)
 	for i := range config.Routes {
 		config.Routes[i].Interceptors = slices.Clone(config.Routes[i].Interceptors)
+		config.Routes[i].WebSocketInterceptors = slices.Clone(config.Routes[i].WebSocketInterceptors)
 		config.Routes[i].Tags = slices.Clone(config.Routes[i].Tags)
 	}
 	config.Interceptors = slices.Clone(config.Interceptors)
 	config.ScopedInterceptors = slices.Clone(config.ScopedInterceptors)
+	config.WebSocketInterceptors = slices.Clone(config.WebSocketInterceptors)
 	config.CustomTransports = slices.Clone(config.CustomTransports)
 	config.ShutdownHooks = slices.Clone(config.ShutdownHooks)
 	if config.ConsumerRegistry != nil {

@@ -39,6 +39,14 @@ func Interceptors(values ...core.Interceptor) Option {
 	return router.NewOption(func(s *router.RouteSpec) { s.Interceptors = append(s.Interceptors, copied...) })
 }
 
+// WebSocketInterceptors는 WebSocket 라우트의 메시지 인터셉터를 지정합니다.
+func WebSocketInterceptors(values ...core.WebSocketInterceptor) Option {
+	copied := append([]core.WebSocketInterceptor(nil), values...)
+	return router.NewOption(func(s *router.RouteSpec) {
+		s.WebSocketInterceptors = append(s.WebSocketInterceptors, copied...)
+	})
+}
+
 type Group struct {
 	registry *Registry
 	prefix   string

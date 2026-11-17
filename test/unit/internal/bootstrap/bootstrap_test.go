@@ -593,46 +593,18 @@ func TestSpineVersionMatchesV076(t *testing.T) {
 	}
 }
 
-func TestResolveGlobalInterceptorsKeepsDistinctStatefulInstancesByScope(t *testing.T) {
-	httpOnly := &bootstrapTestInterceptor{}
-	wsOnly := &bootstrapTestInterceptor{}
-	httpInterceptors, wsInterceptors, err := resolveGlobalInterceptors(container.New(), Config{
-		ScopedInterceptors: []InterceptorBinding{
-			{Interceptor: httpOnly, Scope: boot.InterceptorHTTP},
-			{Interceptor: wsOnly, Scope: boot.InterceptorWebSocket},
-		},
+func TestResolveGlobalInterceptorsKeepsDistinctHTTPInstances(t *testing.T) {
+	first := &bootstrapTestInterceptor{}
+	second := &bootstrapTestInterceptor{}
+	resolved, err := resolveGlobalInterceptors(container.New(), Config{
+		Interceptors:       []core.Interceptor{first, second},
+		ScopedInterceptors: []InterceptorBinding{{Interceptor: first, Scope: boot.InterceptorHTTP}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(httpInterceptors) != 1 || len(wsInterceptors) != 1 {
-		t.Fatalf("resolved interceptor counts: HTTP=%d WS=%d", len(httpInterceptors), len(wsInterceptors))
-	}
-	if err := httpInterceptors[0].PreHandle(nil, core.HandlerMeta{}); err != nil {
-		t.Fatal(err)
-	}
-	if err := wsInterceptors[0].PreHandle(nil, core.HandlerMeta{}); err != nil {
-		t.Fatal(err)
-	}
-	if httpOnly.calls.Load() != 1 || wsOnly.calls.Load() != 1 {
-		t.Fatalf("scoped instances were not executed independently: HTTP=%d WS=%d", httpOnly.calls.Load(), wsOnly.calls.Load())
-	}
-}
-
-func TestResolveGlobalInterceptorsMergesOnlyTheSameInstance(t *testing.T) {
-	shared := &bootstrapTestInterceptor{}
-	httpInterceptors, wsInterceptors, err := resolveGlobalInterceptors(container.New(), Config{
-		ScopedInterceptors: []InterceptorBinding{
-			{Interceptor: shared, Scope: boot.InterceptorHTTP},
-			{Interceptor: shared, Scope: boot.InterceptorHTTP},
-			{Interceptor: shared, Scope: boot.InterceptorWebSocket},
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(httpInterceptors) != 1 || len(wsInterceptors) != 1 {
-		t.Fatalf("same instance must be registered once per selected scope: HTTP=%d WS=%d", len(httpInterceptors), len(wsInterceptors))
+	if len(resolved) != 2 || resolved[0] != first || resolved[1] != second {
+		t.Fatalf("resolved HTTP interceptors = %v", resolved)
 	}
 }
 
@@ -643,24 +615,21 @@ func TestResolveGlobalInterceptorsMergesTypedNilPlaceholderByType(t *testing.T) 
 		t.Fatal(err)
 	}
 	var placeholder *bootstrapTestInterceptor
-	httpInterceptors, wsInterceptors, err := resolveGlobalInterceptors(ctr, Config{
-		ScopedInterceptors: []InterceptorBinding{
-			{Interceptor: placeholder, Scope: boot.InterceptorHTTP},
-			{Interceptor: placeholder, Scope: boot.InterceptorWebSocket},
-		},
+	interceptors, err := resolveGlobalInterceptors(ctr, Config{
+		Interceptors: []core.Interceptor{placeholder, placeholder},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(httpInterceptors) != 1 || len(wsInterceptors) != 1 || httpInterceptors[0] != resolved || wsInterceptors[0] != resolved {
-		t.Fatalf("typed nil placeholder must resolve once for both scopes: HTTP=%v WS=%v", httpInterceptors, wsInterceptors)
+	if len(interceptors) != 1 || interceptors[0] != resolved {
+		t.Fatalf("typed nil placeholder must resolve once: HTTP=%v", interceptors)
 	}
 }
 
 func TestWebSocketHandshakeInterceptorsSelectsOnlyOptionalCapability(t *testing.T) {
 	handshake := &bootstrapHandshakeInterceptor{}
-	regular := &bootstrapTestInterceptor{}
-	selected, err := webSocketHandshakeInterceptors([]core.Interceptor{regular, handshake})
+	regular := &bootstrapWSInterceptor{}
+	selected, err := webSocketHandshakeInterceptors([]core.WebSocketInterceptor{regular, handshake})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -671,7 +640,17 @@ func TestWebSocketHandshakeInterceptorsSelectsOnlyOptionalCapability(t *testing.
 
 type bootstrapTestInterceptor struct{ calls atomic.Int32 }
 
-type bootstrapHandshakeInterceptor struct{ bootstrapTestInterceptor }
+type bootstrapWSInterceptor struct{}
+
+func (*bootstrapWSInterceptor) PreMessage(pkgws.MessageContext, core.HandlerMeta) error { return nil }
+func (*bootstrapWSInterceptor) PostMessage(pkgws.MessageContext, core.HandlerMeta)      {}
+func (*bootstrapWSInterceptor) BeforeMessageCompletion(pkgws.MessageContext, core.HandlerMeta, error) error {
+	return nil
+}
+func (*bootstrapWSInterceptor) AfterMessageCompletion(pkgws.MessageContext, core.HandlerMeta, error) {
+}
+
+type bootstrapHandshakeInterceptor struct{ bootstrapWSInterceptor }
 
 func (*bootstrapHandshakeInterceptor) PreHandshake(context.Context, pkgws.Handshake, core.HandlerMeta) error {
 	return nil

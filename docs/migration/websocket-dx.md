@@ -2,12 +2,12 @@
 
 Controllers can register `r.WS(path, callback, options...)` in `RegisterRoutes`.
 `r.Group` supports the same operation. Group prefixes, the HTTP global prefix,
-and `api.Interceptors` apply. Paths remain static. HTTP GET routes and OpenAPI
+and `api.WebSocketInterceptors` apply. Paths remain static. HTTP GET routes and OpenAPI
 resources cannot overlap a WebSocket endpoint. WebSocket callbacks are excluded
 from the HTTP OpenAPI document.
 
 The callback runs once per incoming message, after upgrade. It accepts
-`context.Context`, `ws.ConnectionID` and explicit
+`context.Context` or `ws.MessageContext`, `ws.ConnectionID` and explicit
 `input.Message[T]` parameters, and returns only errors. Use `Message[DTO]` for
 JSON objects and `Message[[]byte]` for raw text or binary bytes. Read the decoded
 value through `.Value`. Plain DTO parameters in new callbacks are rejected.
@@ -58,16 +58,34 @@ its own context and must be canceled and awaited by its owner. Existing
 `ws.Send(ctx, ...)` remains a connection-local migration API; a missing sender
 now returns ErrConnectionNotFound instead of reporting success.
 
-WebSocket handlers receive the standard `context.Context`; `spine.Ctx` is rejected
-in both callbacks and legacy WS method expressions. The common execution context,
-its Input/Sources, and the public `spine.Ctx` contain no WS data or WS views.
-`spine.Ctx.WebSocket()`, `WebSocketView` and `WebSocketRequestView` are removed.
+## Register WebSocket interceptors
 
-The WS runtime owns connection sessions, immutable handshake snapshots and
-received frames. For each frame, it runs global `PreHandle` hooks followed by
-route `PreHandle` hooks. After they succeed, the runtime binds the message
-arguments and invokes the handler. It runs completion hooks before canceling
-the frame context. Interceptors use the frame's execution view and value store.
+Implement `core.WebSocketInterceptor` for frame hooks. Pass the instance to
+`api.WebSocketInterceptors(auth)` on a WebSocket route or group, or register it globally
+with `app.WebSocketInterceptor(auth)`. The hook methods are `PreMessage`,
+`PostMessage`, `BeforeMessageCompletion` and `AfterMessageCompletion`.
+
+```go
+r.WS("/ws", func(ctx ws.MessageContext, msg input.Message[ChatMessage]) error {
+    principal, _ := ctx.Get("principal")
+    return c.service.Handle(ctx, principal, msg.Value)
+}, api.WebSocketInterceptors(c.auth))
+```
+
+The runtime gives the hooks and the handler the same `ws.MessageContext` for
+a frame. A hook can call `ctx.Set("principal", principal)` in `PreMessage`.
+The handler can read it with `Get` when it declares `ws.MessageContext`.
+Handlers that only need cancellation can continue to declare `context.Context`.
+
+The runtime runs global `PreMessage` hooks before route hooks, then decodes and
+validates the arguments. It runs completion hooks before clearing the frame
+store and canceling the frame context. `spine.Ctx` remains available to HTTP
+and event handlers. The WebSocket methods on `spine.Ctx` were removed.
+
+To migrate a shared global interceptor in an app with WebSocket routes, register
+its HTTP hooks with `app.InterceptorFor(boot.InterceptorHTTP, ...)` and register
+its frame hooks with `app.WebSocketInterceptor(...)`. Prepare rejects the old
+shared scope on such apps. Use `api.Interceptors(...)` on HTTP routes.
 
 A connection context lives until disconnect. Each received frame gets a child
 context canceled after completion hooks. Decoded DTOs and raw byte inputs are

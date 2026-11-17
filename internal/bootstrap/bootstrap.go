@@ -39,6 +39,7 @@ type Config struct {
 	Routes                  []spineRouter.RouteSpec
 	Interceptors            []core.Interceptor
 	ScopedInterceptors      []InterceptorBinding
+	WebSocketInterceptors   []core.WebSocketInterceptor
 	CustomTransports        []core.CustomTransport
 	ShutdownHooks           []any
 	EnableGracefulShutdown  bool
@@ -67,11 +68,6 @@ type EventAdapterBinding struct {
 type InterceptorBinding struct {
 	Interceptor core.Interceptor
 	Scope       configuration.InterceptorScope
-}
-
-type scopedInterceptor struct {
-	interceptor core.Interceptor
-	scope       configuration.InterceptorScope
 }
 
 type interceptorIdentity struct {
@@ -187,6 +183,9 @@ func validate(config Config) ([]configuration.OpenAPIResource, error) {
 			issues = append(issues, endpoint.HandlerDTOParameterIssues(meta, fmt.Sprintf("Routes[%d]", i), route.Path)...)
 			issues = append(issues, endpoint.ResponseTypeIssues(meta, fmt.Sprintf("Routes[%d]", i))...)
 		}
+		if len(route.WebSocketInterceptors) != 0 {
+			issues = append(issues, configuration.ConfigIssue{Path: fmt.Sprintf("Routes[%d]", i), Code: "INTERCEPTOR_TRANSPORT_INVALID", Message: "HTTP routes use api.Interceptors."})
+		}
 		if _, err := spineRouter.Meta(route); err != nil {
 			issues = append(issues, configuration.ConfigIssue{
 				Path:    fmt.Sprintf("Routes[%d].Handler", i),
@@ -208,9 +207,10 @@ func validate(config Config) ([]configuration.OpenAPIResource, error) {
 			issues = append(issues, configuration.ConfigIssue{Path: path, Code: "INTERCEPTOR_NIL", Message: "Global interceptor is nil.", Hint: "Remove the nil entry or provide an interceptor instance."})
 		}
 		if binding.Scope == 0 || binding.Scope&^configuration.InterceptorAll != 0 {
-			issues = append(issues, configuration.ConfigIssue{Path: path + ".Scope", Code: "INTERCEPTOR_SCOPE_INVALID", Message: "Interceptor transport scope is invalid.", Hint: "Use boot.InterceptorHTTP, boot.InterceptorWebSocket, or boot.InterceptorAll."})
+			issues = append(issues, configuration.ConfigIssue{Path: path + ".Scope", Code: "INTERCEPTOR_SCOPE_INVALID", Message: "Interceptor transport scope is invalid.", Hint: "Use boot.InterceptorHTTP for HTTP and app.WebSocketInterceptor for WebSocket."})
 		}
 	}
+	issues = append(issues, webSocketInterceptorIssues(config)...)
 	if err := configuration.ValidationError(issues...); err != nil {
 		return nil, err
 	}
@@ -270,60 +270,70 @@ func isNilHTTPValue(value any) bool {
 	}
 }
 
-func resolveGlobalInterceptors(ctr *container.Container, config Config) ([]core.Interceptor, []core.Interceptor, error) {
-	bindings := make([]InterceptorBinding, 0, len(config.Interceptors)+len(config.ScopedInterceptors))
-	for _, interceptor := range config.Interceptors {
-		bindings = append(bindings, InterceptorBinding{Interceptor: interceptor, Scope: configuration.InterceptorAll})
-	}
-	bindings = append(bindings, config.ScopedInterceptors...)
-
-	ordered := make([]scopedInterceptor, 0, len(bindings))
-	seen := make(map[interceptorIdentity]int)
-	for i, binding := range bindings {
-		t := reflect.TypeOf(binding.Interceptor)
-		if t == nil {
-			return nil, nil, fmt.Errorf("[Bootstrap] interceptor[%d] is nil", i)
-		}
-		if binding.Scope == 0 || binding.Scope&^configuration.InterceptorAll != 0 {
-			return nil, nil, fmt.Errorf("[Bootstrap] interceptor[%d] has invalid transport scope %d", i, binding.Scope)
-		}
-		if identity, identifiable := globalInterceptorIdentity(binding.Interceptor); identifiable {
-			if index, ok := seen[identity]; ok {
-				ordered[index].scope |= binding.Scope
-				continue
-			}
-			seen[identity] = len(ordered)
-		}
-		ordered = append(ordered, scopedInterceptor{interceptor: binding.Interceptor, scope: binding.Scope})
-	}
-
-	resolvedHTTP := make([]core.Interceptor, 0, len(ordered))
-	resolvedWS := make([]core.Interceptor, 0, len(ordered))
-	for _, binding := range ordered {
-		interceptor := binding.interceptor
-		v := reflect.ValueOf(interceptor)
-		t := reflect.TypeOf(interceptor)
-		if t.Kind() == reflect.Pointer && v.IsNil() {
-			log.Printf("[Bootstrap] Created interceptor %s from the container", t.Elem().Name())
-			inst, err := ctr.Resolve(t)
-			if err != nil {
-				return nil, nil, fmt.Errorf("[Bootstrap] failed to create interceptor: %w", err)
-			}
-			interceptor = inst.(core.Interceptor)
-		} else {
-			log.Printf("[Bootstrap] Using interceptor instance: %T", interceptor)
-		}
-		if binding.scope&configuration.InterceptorHTTP != 0 {
-			resolvedHTTP = append(resolvedHTTP, interceptor)
-		}
-		if binding.scope&configuration.InterceptorWebSocket != 0 {
-			resolvedWS = append(resolvedWS, interceptor)
+func webSocketInterceptorIssues(config Config) []configuration.ConfigIssue {
+	var issues []configuration.ConfigIssue
+	hasRoutes := config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) != 0
+	for i, binding := range config.ScopedInterceptors {
+		if binding.Scope == configuration.InterceptorWebSocket || (hasRoutes && binding.Scope == configuration.InterceptorAll) {
+			issues = append(issues, configuration.ConfigIssue{
+				Path:    fmt.Sprintf("Interceptors[%d].Scope", i),
+				Code:    "WEBSOCKET_INTERCEPTOR_REGISTRATION_REQUIRED",
+				Message: "WebSocket hooks require app.WebSocketInterceptor. Use app.InterceptorFor(boot.InterceptorHTTP, ...) for HTTP hooks in a mixed app.",
+			})
 		}
 	}
-	return resolvedHTTP, resolvedWS, nil
+	if hasRoutes && len(config.Interceptors) != 0 {
+		issues = append(issues, configuration.ConfigIssue{Path: "Interceptors", Code: "WEBSOCKET_INTERCEPTOR_REGISTRATION_REQUIRED", Message: "WebSocket hooks require app.WebSocketInterceptor."})
+	}
+	for i, interceptor := range config.WebSocketInterceptors {
+		if interceptor == nil {
+			issues = append(issues, configuration.ConfigIssue{Path: fmt.Sprintf("WebSocketInterceptors[%d]", i), Code: "INTERCEPTOR_NIL", Message: "WebSocket interceptor is nil."})
+		}
+	}
+	return issues
 }
 
-func webSocketHandshakeInterceptors(interceptors []core.Interceptor) ([]core.WebSocketHandshakeInterceptor, error) {
+func resolveGlobalInterceptors(ctr *container.Container, config Config) ([]core.Interceptor, error) {
+	bindings := make([]core.Interceptor, 0, len(config.Interceptors)+len(config.ScopedInterceptors))
+	bindings = append(bindings, config.Interceptors...)
+	for _, binding := range config.ScopedInterceptors {
+		if binding.Scope&configuration.InterceptorHTTP != 0 {
+			bindings = append(bindings, binding.Interceptor)
+		}
+	}
+	return resolveInterceptors(ctr, bindings, true)
+}
+
+// resolveInterceptors resolves typed-nil registrations without changing the registered order.
+func resolveInterceptors[T any](ctr *container.Container, interceptors []T, deduplicate bool) ([]T, error) {
+	resolved := make([]T, 0, len(interceptors))
+	seen := make(map[interceptorIdentity]bool)
+	for i, interceptor := range interceptors {
+		t := reflect.TypeOf(interceptor)
+		if t == nil {
+			return nil, fmt.Errorf("interceptor[%d] is nil", i)
+		}
+		if deduplicate {
+			if identity, identifiable := globalInterceptorIdentity(interceptor); identifiable {
+				if seen[identity] {
+					continue
+				}
+				seen[identity] = true
+			}
+		}
+		if t.Kind() == reflect.Pointer && reflect.ValueOf(interceptor).IsNil() {
+			instance, err := ctr.Resolve(t)
+			if err != nil {
+				return nil, fmt.Errorf("resolve interceptor[%d]: %w", i, err)
+			}
+			interceptor = instance.(T)
+		}
+		resolved = append(resolved, interceptor)
+	}
+	return resolved, nil
+}
+
+func webSocketHandshakeInterceptors(interceptors []core.WebSocketInterceptor) ([]core.WebSocketHandshakeInterceptor, error) {
 	handshakeInterceptors := make([]core.WebSocketHandshakeInterceptor, 0, len(interceptors))
 	for _, interceptor := range interceptors {
 		if handshakeInterceptor, ok := interceptor.(core.WebSocketHandshakeInterceptor); ok {
@@ -340,7 +350,7 @@ func webSocketHandshakeInterceptors(interceptors []core.Interceptor) ([]core.Web
 // globalInterceptorIdentity는 Go에서 실제 인스턴스의 정체성을 보존할 수 있을 때만
 // 식별 정보를 반환합니다. 값이 같은 비포인터 인터셉터도 별도 등록일 수 있으므로
 // 의도적으로 중복 제거하지 않습니다.
-func globalInterceptorIdentity(interceptor core.Interceptor) (interceptorIdentity, bool) {
+func globalInterceptorIdentity(interceptor any) (interceptorIdentity, bool) {
 	t := reflect.TypeOf(interceptor)
 	if t == nil || t.Kind() != reflect.Pointer {
 		return interceptorIdentity{}, false
@@ -509,12 +519,12 @@ func messageHandlerIssues[R parameterSupporter](meta execution.HandlerMeta, reso
 	for _, parameter := range resolver.HandlerParameters(meta, nil) {
 		if transport == "WEBSOCKET" && meta.Callback.IsValid() {
 			payload, wrapped := wsResolver.MessagePayload(parameter.Type)
-			valid := parameter.Type == reflect.TypeFor[context.Context]() || parameter.Type == reflect.TypeFor[publicWS.ConnectionID]()
+			valid := parameter.Type == reflect.TypeFor[context.Context]() || parameter.Type == reflect.TypeFor[publicWS.MessageContext]() || parameter.Type == reflect.TypeFor[publicWS.ConnectionID]()
 			if wrapped {
 				valid = payload.Kind() == reflect.Struct || payload == reflect.TypeFor[[]byte]()
 			}
 			if !valid {
-				issues = append(issues, configuration.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "WEBSOCKET_PARAMETER_UNSUPPORTED", Message: "WebSocket callbacks require context.Context, ws.ConnectionID or input.Message[struct or []byte]."})
+				issues = append(issues, configuration.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "WEBSOCKET_PARAMETER_UNSUPPORTED", Message: "WebSocket callbacks require context.Context, ws.MessageContext, ws.ConnectionID or input.Message[struct or []byte]."})
 				continue
 			}
 		}

@@ -15,31 +15,34 @@ import (
 	"github.com/NARUBROWN/spine/internal/pipelinecontrol"
 	wsresolver "github.com/NARUBROWN/spine/internal/ws/resolver"
 	"github.com/NARUBROWN/spine/pkg/input"
-	"github.com/NARUBROWN/spine/pkg/spine"
 	publicws "github.com/NARUBROWN/spine/pkg/ws"
 )
 
-type retainedExecutionObserver struct{ retained spine.Ctx }
+type retainedExecutionObserver struct{ retained publicws.MessageContext }
 
-func (o *retainedExecutionObserver) PreHandle(ctx spine.Ctx, _ core.HandlerMeta) error {
+func (o *retainedExecutionObserver) PreMessage(ctx publicws.MessageContext, _ core.HandlerMeta) error {
 	o.retained = ctx
-	ctx.ExecutionContext().Set("owned", true)
+	ctx.Set("owned", true)
 	return nil
 }
-func (*retainedExecutionObserver) PostHandle(spine.Ctx, core.HandlerMeta) {}
-func (*retainedExecutionObserver) BeforeResponse(spine.Ctx, core.HandlerMeta, error) error {
+func (*retainedExecutionObserver) PostMessage(publicws.MessageContext, core.HandlerMeta) {}
+func (*retainedExecutionObserver) BeforeMessageCompletion(publicws.MessageContext, core.HandlerMeta, error) error {
 	return nil
 }
-func (*retainedExecutionObserver) AfterCompletion(spine.Ctx, core.HandlerMeta, error) {}
+func (*retainedExecutionObserver) AfterMessageCompletion(publicws.MessageContext, core.HandlerMeta, error) {
+}
 
 func TestMessageRuntimeReleasesOwnedScopeForEveryOutcome(t *testing.T) {
 	for _, outcome := range []string{"success", "error", "panic", "invalid-input"} {
 		t.Run(outcome, func(t *testing.T) {
 			observer := &retainedExecutionObserver{}
-			runtime := &Runtime{invoker: invoker.NewInvoker(container.New()), interceptors: []core.Interceptor{observer}, argumentResolvers: wsresolver.Resolvers(nil)}
+			runtime := &Runtime{invoker: invoker.NewInvoker(container.New()), interceptors: []core.WebSocketInterceptor{observer}, argumentResolvers: wsresolver.Resolvers(nil)}
 			connectionCtx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			callback := func(ctx context.Context, message input.Message[struct{ Text string }]) error {
+				if ctx != observer.retained {
+					t.Error("핸들러가 인터셉터와 같은 프레임 컨텍스트를 받지 못했습니다")
+				}
 				switch outcome {
 				case "error":
 					return errors.New("failed")
@@ -56,13 +59,13 @@ func TestMessageRuntimeReleasesOwnedScopeForEveryOutcome(t *testing.T) {
 			if (err != nil) != (outcome != "success") {
 				t.Fatal(err)
 			}
-			if observer.retained.ExecutionContext().Context().Err() != context.Canceled {
+			if observer.retained.Err() != context.Canceled {
 				t.Fatal("message context remains active")
 			}
-			if _, ok := observer.retained.ExecutionContext().Get("owned"); ok {
+			if _, ok := observer.retained.Get("owned"); ok {
 				t.Fatal("message store retained")
 			}
-			if err := publicws.Send(observer.retained.ExecutionContext().Context(), 1, nil); !errors.Is(err, publicws.ErrConnectionNotFound) {
+			if err := publicws.Send(observer.retained, 1, nil); !errors.Is(err, publicws.ErrConnectionNotFound) {
 				t.Fatal("compatibility sender retained", err)
 			}
 			if connectionCtx.Err() != nil {
@@ -101,25 +104,25 @@ type frameInterceptor struct {
 	receivedErr     error
 }
 
-func (i *frameInterceptor) PreHandle(ctx spine.Ctx, _ core.HandlerMeta) error {
+func (i *frameInterceptor) PreMessage(ctx publicws.MessageContext, _ core.HandlerMeta) error {
 	*i.log = append(*i.log, i.name+" pre")
-	ctx.ExecutionContext().Set(i.name, true)
+	ctx.Set(i.name, true)
 	return i.preErr
 }
 
-func (i *frameInterceptor) PostHandle(spine.Ctx, core.HandlerMeta) {
+func (i *frameInterceptor) PostMessage(publicws.MessageContext, core.HandlerMeta) {
 	*i.log = append(*i.log, i.name+" post")
 }
 
-func (i *frameInterceptor) BeforeResponse(spine.Ctx, core.HandlerMeta, error) error {
+func (i *frameInterceptor) BeforeMessageCompletion(publicws.MessageContext, core.HandlerMeta, error) error {
 	*i.log = append(*i.log, i.name+" before")
 	return i.beforeErr
 }
 
-func (i *frameInterceptor) AfterCompletion(ctx spine.Ctx, _ core.HandlerMeta, err error) {
+func (i *frameInterceptor) AfterMessageCompletion(ctx publicws.MessageContext, _ core.HandlerMeta, err error) {
 	*i.log = append(*i.log, i.name+" complete")
 	i.receivedErr = err
-	if ctx.ExecutionContext().Context().Err() != nil {
+	if ctx.Err() != nil {
 		panic("완료 훅 실행 중 프레임 컨텍스트가 취소됐습니다")
 	}
 	if i.completionPanic != nil {
@@ -177,7 +180,7 @@ func TestRuntimeExecutesFrameInterceptorsInOrder(t *testing.T) {
 			route := &frameInterceptor{name: "route", log: &log, preErr: tt.routePreErr, beforeErr: tt.routeBeforeErr, completionPanic: tt.routeCompletionPanic}
 			runtime := &Runtime{
 				invoker:           invoker.NewInvoker(container.New()),
-				interceptors:      []core.Interceptor{global},
+				interceptors:      []core.WebSocketInterceptor{global},
 				argumentResolvers: wsresolver.Resolvers(nil),
 			}
 			meta := execution.HandlerMeta{
@@ -191,9 +194,8 @@ func TestRuntimeExecutesFrameInterceptorsInOrder(t *testing.T) {
 					}
 					return tt.handlerErr
 				}),
-				Interceptors: []core.Interceptor{route},
 			}
-			err := runtime.executeMessage(session{ctx: t.Context()}, 1, []byte(tt.payload), nil, meta)
+			err := runtime.executeMessage(session{ctx: t.Context()}, 1, []byte(tt.payload), nil, meta, route)
 			if !slices.Equal(log, tt.want) {
 				t.Fatalf("호출 순서 = %v, 기대 순서 = %v", log, tt.want)
 			}

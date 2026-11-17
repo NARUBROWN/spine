@@ -21,7 +21,7 @@ type ExecutionContextView = interface {
 }
 
 // Ctx는 HTTP 및 이벤트 핸들러와 공통 실행 인터셉터의 진입점입니다.
-// WebSocket 핸들러는 표준 context.Context를 받습니다.
+// WebSocket 핸들러는 context.Context 또는 ws.MessageContext를 받습니다.
 // 전송별 조회는 현재 실행에서 제공하는 뷰와 지원 여부를 반환합니다.
 // Get은 폐기 예정이며 ExecutionContext().Get으로 전환하세요.
 type Ctx interface {

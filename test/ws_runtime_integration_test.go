@@ -16,7 +16,6 @@ import (
 	"github.com/NARUBROWN/spine/internal/invoker"
 	wsruntime "github.com/NARUBROWN/spine/internal/ws"
 	"github.com/NARUBROWN/spine/pkg/boot"
-	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 	pkgws "github.com/NARUBROWN/spine/pkg/ws"
 	"github.com/gorilla/websocket"
 )
@@ -38,17 +37,18 @@ func (i *requestAwareInterceptor) PreHandshake(ctx context.Context, request pkgw
 	close(i.handshakeSeen)
 	return nil
 }
-func (i *requestAwareInterceptor) PreHandle(ctx contextapi.Ctx, _ core.HandlerMeta) error {
-	ctx.ExecutionContext().Set("message-interceptor", true)
+func (i *requestAwareInterceptor) PreMessage(ctx pkgws.MessageContext, _ core.HandlerMeta) error {
+	ctx.Set("message-interceptor", true)
 	close(i.messageSeen)
 	return nil
 }
 
-func (*requestAwareInterceptor) PostHandle(contextapi.Ctx, core.HandlerMeta) {}
-func (*requestAwareInterceptor) BeforeResponse(contextapi.Ctx, core.HandlerMeta, error) error {
+func (*requestAwareInterceptor) PostMessage(pkgws.MessageContext, core.HandlerMeta) {}
+func (*requestAwareInterceptor) BeforeMessageCompletion(pkgws.MessageContext, core.HandlerMeta, error) error {
 	return nil
 }
-func (*requestAwareInterceptor) AfterCompletion(contextapi.Ctx, core.HandlerMeta, error) {}
+func (*requestAwareInterceptor) AfterMessageCompletion(pkgws.MessageContext, core.HandlerMeta, error) {
+}
 
 type cancellationController struct {
 	started  chan struct{}
@@ -349,9 +349,9 @@ func newTestRuntime(t *testing.T, controller any, handler any, options boot.WebS
 		t.Fatalf("지원하지 않는 테스트 컨트롤러: %T", controller)
 	}
 
-	var messageInterceptors []core.Interceptor
+	var messageInterceptors []core.WebSocketInterceptor
 	for _, interceptor := range handshake {
-		if common, ok := interceptor.(core.Interceptor); ok {
+		if common, ok := interceptor.(core.WebSocketInterceptor); ok {
 			messageInterceptors = append(messageInterceptors, common)
 		}
 	}

@@ -138,6 +138,10 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 		return nil, err
 	}
 
+	if err := configuration.ValidationError(webSocketInterceptorIssues(config)...); err != nil {
+		return nil, err
+	}
+
 	if config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0 {
 		if config.HTTP == nil {
 			return nil, fmt.Errorf("WebSocket routes require HTTP")
@@ -265,7 +269,7 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 
 		log.Println("[Bootstrap] Registering interceptors")
 
-		resolvedHTTPInterceptors, resolvedWSInterceptors, err := resolveGlobalInterceptors(container, config)
+		resolvedHTTPInterceptors, err := resolveGlobalInterceptors(container, config)
 		if err != nil {
 			return nil, err
 		}
@@ -301,6 +305,10 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 			if err := wsadapter.ValidateAdapter(wsAdapter); err != nil {
 				return nil, err
 			}
+			resolvedWSInterceptors, err := resolveInterceptors(container, config.WebSocketInterceptors, true)
+			if err != nil {
+				return nil, fmt.Errorf("WebSocket: %w", err)
+			}
 			handshakeInterceptors, err := webSocketHandshakeInterceptors(resolvedWSInterceptors)
 			if err != nil {
 				return nil, err
@@ -317,26 +325,14 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 			application.wsRuntime.UseValidator(config.Validator)
 
 			for _, reg := range wsRegistrations {
-				resolved := make([]core.Interceptor, len(reg.Meta.Interceptors))
-				for index, interceptor := range reg.Meta.Interceptors {
-					typ := reflect.TypeOf(interceptor)
-					if typ == nil {
-						return nil, fmt.Errorf("WebSocket %s interceptor[%d] is nil", reg.Path, index)
-					}
-					if typ.Kind() == reflect.Pointer && reflect.ValueOf(interceptor).IsNil() {
-						value, err := container.Resolve(typ)
-						if err != nil {
-							return nil, fmt.Errorf("WebSocket %s interceptor: %w", reg.Path, err)
-						}
-						resolved[index] = value.(core.Interceptor)
-					} else {
-						resolved[index] = interceptor
-					}
+				resolved, err := resolveInterceptors(container, reg.Interceptors, false)
+				if err != nil {
+					return nil, fmt.Errorf("WebSocket %s: %w", reg.Path, err)
 				}
 				if _, err := webSocketHandshakeInterceptors(resolved); err != nil {
 					return nil, fmt.Errorf("WebSocket %s: %w", reg.Path, err)
 				}
-				reg.Meta.Interceptors = resolved
+				reg.Interceptors = resolved
 				log.Printf("[Bootstrap] Registered WebSocket route: %s", reg.Path)
 				upgrades = append(upgrades, adapter.NetHTTPUpgradeRoute{
 					Path: reg.Path,

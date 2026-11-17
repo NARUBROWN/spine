@@ -55,13 +55,16 @@ func (*dxController) Constructor(s *dxService, config *dxConfig) *dxController {
 }
 
 func (c *dxController) RegisterRoutes(r *api.Registry) {
-	r.Group("/chat").WS("/ws", func(ctx context.Context, id ws.ConnectionID, message input.Message[dxMessage]) error {
+	r.Group("/chat", api.WebSocketInterceptors((*dxInterceptor)(nil))).WS("/ws", func(ctx ws.MessageContext, id ws.ConnectionID, message input.Message[dxMessage]) error {
+		if value, ok := ctx.Get("ws-audit"); !ok || value != true {
+			return errors.New("WebSocket handler did not see the interceptor value")
+		}
 		if c.frames != nil {
 			c.frames <- dxFrame{ctx: ctx, payload: message.Value.Text}
 		}
 		c.connected <- id.Value
 		return c.service.Send(ctx, id.Value, message.Value.Text)
-	}, api.Interceptors((*dxInterceptor)(nil)))
+	})
 	r.POST("/push/:id", func(ctx sc.Ctx, id input.Path[string], body input.Body[dxMessage]) (httpx.Response[string], error) {
 		err := c.service.Send(ctx.ExecutionContext().Context(), *id, body.Text)
 		return httpx.Response[string]{Body: "sent"}, err
@@ -182,6 +185,10 @@ type dxInvalidController struct{ variant string }
 
 func (c *dxInvalidController) RegisterRoutes(r *api.Registry) {
 	switch c.variant {
+	case "http-interceptor-on-websocket":
+		r.WS("/ws", func(context.Context) error { return nil }, api.Interceptors(&responseBaselineInterceptor{}))
+	case "websocket-interceptor-on-http":
+		r.GET("/status", func() httpx.Response[string] { return httpx.Response[string]{Body: "ok"} }, api.WebSocketInterceptors(&dxInterceptor{}))
 	case "spine-context":
 		r.WS("/ws", func(sc.Ctx) error { return nil })
 	case "naked":
@@ -218,14 +225,19 @@ type dxInterceptor struct{ config *dxConfig }
 func (*dxInterceptor) Constructor(config *dxConfig) *dxInterceptor {
 	return &dxInterceptor{config: config}
 }
-func (i *dxInterceptor) PreHandle(ctx sc.Ctx, _ core.HandlerMeta) error {
+func (i *dxInterceptor) PreMessage(ctx ws.MessageContext, _ core.HandlerMeta) error {
+	if _, exists := ctx.Get("ws-audit"); exists {
+		return errors.New("WebSocket message context retained a value from a previous frame")
+	}
 	i.config.calls.Add(1)
-	ctx.ExecutionContext().Set("ws-audit", true)
+	ctx.Set("ws-audit", true)
 	return nil
 }
-func (*dxInterceptor) PostHandle(sc.Ctx, core.HandlerMeta)                  {}
-func (*dxInterceptor) BeforeResponse(sc.Ctx, core.HandlerMeta, error) error { return nil }
-func (*dxInterceptor) AfterCompletion(sc.Ctx, core.HandlerMeta, error)      {}
+func (*dxInterceptor) PostMessage(ws.MessageContext, core.HandlerMeta) {}
+func (*dxInterceptor) BeforeMessageCompletion(ws.MessageContext, core.HandlerMeta, error) error {
+	return nil
+}
+func (*dxInterceptor) AfterMessageCompletion(ws.MessageContext, core.HandlerMeta, error) {}
 
 type dxFrame struct {
 	ctx     context.Context
@@ -316,7 +328,7 @@ type legacyHandshakeController struct{ route bool }
 
 func (c *legacyHandshakeController) RegisterRoutes(r *api.Registry) {
 	if c.route {
-		r.WS("/ws", func(context.Context) error { return nil }, api.Interceptors(&legacyHandshakeAuth{}))
+		r.WS("/ws", func(context.Context) error { return nil }, api.WebSocketInterceptors(&legacyHandshakeAuth{}))
 	} else {
 		r.WS("/ws", func(context.Context) error { return nil })
 	}
@@ -327,7 +339,7 @@ func TestWSDXRejectsIncompatibleHandshakeAuthBeforeServing(t *testing.T) {
 			app := spine.New(echo.Option(), gorilla.Option())
 			app.Constructor(func() *legacyHandshakeController { return &legacyHandshakeController{route: route} })
 			if !route {
-				app.InterceptorFor(boot.InterceptorWebSocket, &legacyHandshakeAuth{})
+				app.WebSocketInterceptor(&legacyHandshakeAuth{})
 			}
 			prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{}})
 			if err == nil {
@@ -336,6 +348,50 @@ func TestWSDXRejectsIncompatibleHandshakeAuthBeforeServing(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), "WEBSOCKET_HANDSHAKE_SIGNATURE_UNSUPPORTED") {
 				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestWSDX_RejectsMismatchedInterceptorRegistration(t *testing.T) {
+	for _, tt := range []struct {
+		name              string
+		controllerVariant string
+		register          func(spine.App)
+		diagnostic        string
+	}{
+		{name: "HTTP route option on WebSocket", controllerVariant: "http-interceptor-on-websocket", diagnostic: "use api.WebSocketInterceptors"},
+		{name: "WebSocket route option on HTTP", controllerVariant: "websocket-interceptor-on-http", diagnostic: "use api.Interceptors"},
+		{
+			name: "legacy WebSocket scope",
+			register: func(app spine.App) {
+				app.InterceptorFor(boot.InterceptorWebSocket, &responseBaselineInterceptor{})
+			},
+			diagnostic: "WEBSOCKET_INTERCEPTOR_REGISTRATION_REQUIRED",
+		},
+		{
+			name: "legacy shared scope",
+			register: func(app spine.App) {
+				app.Interceptor(&responseBaselineInterceptor{})
+			},
+			diagnostic: "WEBSOCKET_INTERCEPTOR_REGISTRATION_REQUIRED",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			app := spine.New(echo.Option(), gorilla.Option())
+			app.Constructor(func() *dxInvalidController {
+				return &dxInvalidController{variant: tt.controllerVariant}
+			})
+			if tt.register != nil {
+				tt.register(app)
+			}
+			prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{}})
+			if err == nil {
+				_ = prepared.Close(context.Background())
+				t.Fatal("Prepare accepted a mismatched interceptor registration")
+			}
+			if !strings.Contains(err.Error(), tt.diagnostic) {
+				t.Fatalf("Prepare error = %v, want %s", err, tt.diagnostic)
 			}
 		})
 	}

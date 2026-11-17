@@ -46,7 +46,7 @@ type normalizedWebSocketOptions struct {
 
 type Runtime struct {
 	invoker           *invoker.Invoker
-	interceptors      []core.Interceptor
+	interceptors      []core.WebSocketInterceptor
 	argumentResolvers []wsresolver.ArgumentResolver
 	sender            *Sender
 	adapter           wsadapter.Adapter
@@ -102,7 +102,7 @@ func (c *trackedConn) writeClose(code int, reason string, timeout time.Duration)
 	return c.conn.WriteClose(code, reason, writeDeadline(timeout))
 }
 
-func NewRuntime(handlerInvoker *invoker.Invoker, adapter wsadapter.Adapter, opts configuration.WebSocketOptions, interceptors []core.Interceptor, handshakeInterceptors ...core.WebSocketHandshakeInterceptor) *Runtime {
+func NewRuntime(handlerInvoker *invoker.Invoker, adapter wsadapter.Adapter, opts configuration.WebSocketOptions, interceptors []core.WebSocketInterceptor, handshakeInterceptors ...core.WebSocketHandshakeInterceptor) *Runtime {
 	if wsadapter.ValidateAdapter(adapter) != nil {
 		panic("ws: adapter cannot be nil")
 	}
@@ -114,7 +114,7 @@ func NewRuntime(handlerInvoker *invoker.Invoker, adapter wsadapter.Adapter, opts
 
 	return &Runtime{
 		invoker:               handlerInvoker,
-		interceptors:          append([]core.Interceptor(nil), interceptors...),
+		interceptors:          append([]core.WebSocketInterceptor(nil), interceptors...),
 		argumentResolvers:     wsresolver.Resolvers(nil),
 		adapter:               adapter,
 		options:               normalizeWebSocketOptions(opts),
@@ -300,7 +300,7 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 			return
 		}
 
-		err = r.executeMessage(session, msgType, payload, sendFn, reg.Meta)
+		err = r.executeMessage(session, msgType, payload, sendFn, reg.Meta, reg.Interceptors...)
 		if err != nil {
 			log.Printf("[WS] Handler failed (conn=%p): %v", &connID, err)
 			code, reason := wsadapter.CloseInternalServerErr, "handler error"
@@ -325,7 +325,7 @@ func (r *Runtime) preHandshake(ctx context.Context, request publicws.Handshake, 
 			return err
 		}
 	}
-	for _, interceptor := range reg.Meta.Interceptors {
+	for _, interceptor := range reg.Interceptors {
 		handshakeInterceptor, ok := interceptor.(core.WebSocketHandshakeInterceptor)
 		if !ok {
 			continue

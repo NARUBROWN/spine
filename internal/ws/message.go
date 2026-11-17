@@ -6,32 +6,34 @@ import (
 	"fmt"
 
 	"github.com/NARUBROWN/spine/core"
-	"github.com/NARUBROWN/spine/internal/contextview"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipelinecontrol"
 	"github.com/NARUBROWN/spine/internal/resolver"
 	wsresolver "github.com/NARUBROWN/spine/internal/ws/resolver"
 	"github.com/NARUBROWN/spine/internal/ws/sendctx"
+	publicws "github.com/NARUBROWN/spine/pkg/ws"
 )
 
-// executeMessage는 프레임별 인터셉터, 핸들러와 컨텍스트 수명을 관리합니다.
-func (r *Runtime) executeMessage(connection session, kind int, payload []byte, send func(int, []byte) error, meta execution.HandlerMeta) (finalErr error) {
-	messageCtx, cancel := context.WithCancel(connection.ctx)
-	defer cancel()
-	messageCtx, release := sendctx.Bind(messageCtx, send)
-	defer release()
+type messageContext struct {
+	context.Context
+	values execution.Store
+}
 
-	state := execution.NewState(messageCtx)
-	defer state.ReleaseStore()
-	routes := meta.Interceptors
-	var view contextview.Ctx
-	if len(r.interceptors) != 0 || len(routes) != 0 {
-		view = execution.NewContext(state, nil)
-	}
+func (ctx *messageContext) Set(key string, value any)  { ctx.values.Set(key, value) }
+func (ctx *messageContext) Get(key string) (any, bool) { return ctx.values.Get(key) }
+
+// executeMessage는 프레임별 인터셉터, 핸들러와 컨텍스트 수명을 관리합니다.
+func (r *Runtime) executeMessage(connection session, kind int, payload []byte, send func(int, []byte) error, meta execution.HandlerMeta, routes ...core.WebSocketInterceptor) (finalErr error) {
+	ctx, cancel := context.WithCancel(connection.ctx)
+	defer cancel()
+	ctx, release := sendctx.Bind(ctx, send)
+	defer release()
+	messageCtx := &messageContext{Context: ctx}
+	defer messageCtx.values.ReleaseStore()
 
 	var activeMeta execution.HandlerMeta
-	var activeRoutes []core.Interceptor
+	var activeRoutes []core.WebSocketInterceptor
 	var returnedErr error
 	var globalStarted, routeStarted int
 	defer func() {
@@ -39,18 +41,18 @@ func (r *Runtime) executeMessage(connection session, kind int, payload []byte, s
 			finalErr = execution.PanicError(recovered)
 		}
 		var routeBeforeErr, globalBeforeErr error
-		finalErr, routeBeforeErr = execution.BeforeResponse(view, activeMeta, activeRoutes[:routeStarted], finalErr)
-		finalErr, globalBeforeErr = execution.BeforeResponse(view, activeMeta, r.interceptors[:globalStarted], finalErr)
+		finalErr, routeBeforeErr = beforeMessageCompletion(messageCtx, activeMeta.View(), activeRoutes[:routeStarted], finalErr)
+		finalErr, globalBeforeErr = beforeMessageCompletion(messageCtx, activeMeta.View(), r.interceptors[:globalStarted], finalErr)
 		if returnedErr != nil && routeBeforeErr == nil && globalBeforeErr == nil {
 			// 완료 훅이 받는 기존 반환 오류의 구성을 유지합니다.
 			finalErr = errors.Join(finalErr, fmt.Errorf("no ReturnValueHandler can handle the error return value (%T)", returnedErr))
 		}
-		finalErr = execution.AfterCompletion(view, activeMeta, activeRoutes, finalErr)
-		finalErr = execution.AfterCompletion(view, activeMeta, r.interceptors, finalErr)
+		finalErr = afterMessageCompletion(messageCtx, activeMeta.View(), activeRoutes, finalErr)
+		finalErr = afterMessageCompletion(messageCtx, activeMeta.View(), r.interceptors, finalErr)
 	}()
 
 	for _, interceptor := range r.interceptors {
-		if err := interceptor.PreHandle(view, activeMeta.View()); err != nil {
+		if err := interceptor.PreMessage(messageCtx, activeMeta.View()); err != nil {
 			if errors.Is(err, pipelinecontrol.ErrAbort) {
 				return nil
 			}
@@ -62,7 +64,7 @@ func (r *Runtime) executeMessage(connection session, kind int, payload []byte, s
 	activeMeta = meta
 	activeRoutes = routes
 	for _, interceptor := range activeRoutes {
-		if err := interceptor.PreHandle(view, activeMeta.View()); err != nil {
+		if err := interceptor.PreMessage(messageCtx, activeMeta.View()); err != nil {
 			if errors.Is(err, pipelinecontrol.ErrAbort) {
 				return nil
 			}
@@ -91,10 +93,44 @@ func (r *Runtime) executeMessage(connection session, kind int, payload []byte, s
 	}
 
 	for i := len(activeRoutes) - 1; i >= 0; i-- {
-		activeRoutes[i].PostHandle(view, activeMeta.View())
+		activeRoutes[i].PostMessage(messageCtx, activeMeta.View())
 	}
 	for i := len(r.interceptors) - 1; i >= 0; i-- {
-		r.interceptors[i].PostHandle(view, activeMeta.View())
+		r.interceptors[i].PostMessage(messageCtx, activeMeta.View())
 	}
 	return nil
+}
+
+func beforeMessageCompletion(ctx publicws.MessageContext, meta core.HandlerMeta, interceptors []core.WebSocketInterceptor, finalErr error) (error, error) {
+	var lastErr error
+	for i := len(interceptors) - 1; i >= 0; i-- {
+		if err := callMessageHook(func() error {
+			return interceptors[i].BeforeMessageCompletion(ctx, meta, finalErr)
+		}); err != nil {
+			finalErr = errors.Join(finalErr, err)
+			lastErr = err
+		}
+	}
+	return finalErr, lastErr
+}
+
+func afterMessageCompletion(ctx publicws.MessageContext, meta core.HandlerMeta, interceptors []core.WebSocketInterceptor, finalErr error) error {
+	for i := len(interceptors) - 1; i >= 0; i-- {
+		if err := callMessageHook(func() error {
+			interceptors[i].AfterMessageCompletion(ctx, meta, finalErr)
+			return nil
+		}); err != nil {
+			finalErr = errors.Join(finalErr, err)
+		}
+	}
+	return finalErr
+}
+
+func callMessageHook(hook func() error) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = execution.PanicError(recovered)
+		}
+	}()
+	return hook()
 }

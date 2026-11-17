@@ -7,13 +7,15 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/router"
 )
 
 type Registration struct {
-	Path string
-	Meta execution.HandlerMeta
+	Path         string
+	Meta         execution.HandlerMeta
+	Interceptors []core.WebSocketInterceptor
 }
 
 type Registry struct {
@@ -44,7 +46,7 @@ func (r *Registry) Register(path string, handler any) error {
 }
 
 // RegisterMeta registers an already resolved callback or method expression.
-func (r *Registry) RegisterMeta(path string, meta execution.HandlerMeta) error {
+func (r *Registry) RegisterMeta(path string, meta execution.HandlerMeta, interceptors ...core.WebSocketInterceptor) error {
 	parsed, err := url.ParseRequestURI(path)
 	if err != nil || !strings.HasPrefix(path, "/") || parsed.Path != path || parsed.RawQuery != "" || strings.ContainsAny(path, ":*{}") || strings.Contains(path, "//") {
 		return fmt.Errorf("ws: path must be an absolute static path: %q", path)
@@ -57,8 +59,9 @@ func (r *Registry) RegisterMeta(path string, meta execution.HandlerMeta) error {
 		}
 	}
 	r.registrations = append(r.registrations, Registration{
-		Path: path,
-		Meta: meta,
+		Path:         path,
+		Meta:         meta,
+		Interceptors: slices.Clone(interceptors),
 	})
 	return nil
 }
@@ -79,7 +82,7 @@ func (r *Registry) Snapshot() *Registry {
 	for i := range snapshot.registrations {
 		meta := &snapshot.registrations[i].Meta
 		meta.PathKeys = slices.Clone(meta.PathKeys)
-		meta.Interceptors = slices.Clone(meta.Interceptors)
+		snapshot.registrations[i].Interceptors = slices.Clone(snapshot.registrations[i].Interceptors)
 	}
 	return snapshot
 }
