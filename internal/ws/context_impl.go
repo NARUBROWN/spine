@@ -8,8 +8,6 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/NARUBROWN/spine/internal/event/emission"
-	"github.com/NARUBROWN/spine/internal/event/publish"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/ws/sendctx"
 )
@@ -22,7 +20,6 @@ type WSExecutionContext struct {
 	path        string
 	messageType int
 	payload     []byte
-	eventBus    publish.EventBus
 	params      map[string]string
 	pathKeys    []string
 	request     *webSocketRequestSnapshot
@@ -99,7 +96,7 @@ func (s *webSocketRequestSnapshot) RemoteAddr() string { return s.remoteAddr }
 func (s *webSocketRequestSnapshot) Host() string       { return s.host }
 func (s *webSocketRequestSnapshot) RequestURI() string { return s.requestURI }
 
-func NewWSExecutionContext(ctx context.Context, connID string, path string, messageType int, payload []byte, eventBus publish.EventBus, sendFn func(int, []byte) error, request ...execution.WebSocketRequestContext) execution.WebSocketContext {
+func NewWSExecutionContext(ctx context.Context, connID string, path string, messageType int, payload []byte, sendFn func(int, []byte) error, request ...execution.WebSocketRequestContext) execution.WebSocketContext {
 	ctx = sendctx.With(ctx, sendFn)
 	requestSnapshot := &webSocketRequestSnapshot{
 		ctx:     ctx,
@@ -118,7 +115,6 @@ func NewWSExecutionContext(ctx context.Context, connID string, path string, mess
 		path:        path,
 		messageType: messageType,
 		payload:     payload,
-		eventBus:    eventBus,
 		request:     requestSnapshot,
 	}
 }
@@ -154,15 +150,6 @@ func (w *WSExecutionContext) ConnID() string {
 
 func (w *WSExecutionContext) Context() context.Context {
 	return w.ctx
-}
-
-func (w *WSExecutionContext) EventBus() emission.Bus {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.eventBus == nil {
-		w.eventBus = publish.NewEventBus()
-	}
-	return w.eventBus
 }
 
 func (w *WSExecutionContext) Header(name string) string {

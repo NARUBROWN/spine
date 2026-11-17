@@ -14,5 +14,5 @@ func (r *StdContextResolver) Supports(parameterMeta ParameterMeta) bool {
 }
 
 func (r *StdContextResolver) Resolve(ctx execution.Context, parameterMeta ParameterMeta) (any, error) {
-	return execution.GoContext(ctx), nil
+	return ctx.Context(), nil
 }

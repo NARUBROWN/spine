@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/NARUBROWN/spine/core"
-	"github.com/NARUBROWN/spine/internal/event/emission"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
@@ -24,7 +23,6 @@ func newFakeExecutionContext() *fakeExecutionContext {
 }
 
 func (c *fakeExecutionContext) Context() context.Context     { return context.Background() }
-func (c *fakeExecutionContext) EventBus() emission.Bus       { return nil }
 func (c *fakeExecutionContext) Method() string               { return "" }
 func (c *fakeExecutionContext) Path() string                 { return "" }
 func (c *fakeExecutionContext) Params() map[string]string    { return nil }

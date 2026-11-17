@@ -119,7 +119,7 @@ func TestAppEventExecutesTrustedSubscriptionAndSerializesOnceBeforeAck(t *testin
 	}, nack: func(context.Context) error { nacks.Add(1); cancel(); return nil }}
 	makePublisher := func() *publicPublisher {
 		return &publicPublisher{send: func(_ context.Context, m eventadapter.Message) error {
-			if m.EventName != "result.created" || string(m.Payload) != `{"processed":true}` || !m.OccurredAt.Equal(at) {
+			if m.EventName != "result.created" || string(m.Payload) != `{"event":{"processed":true}}` || !m.OccurredAt.Equal(at) {
 				t.Error("직렬화된 메시지가 다릅니다")
 			}
 			sends.Add(1)
@@ -136,7 +136,7 @@ func TestAppEventExecutesTrustedSubscriptionAndSerializesOnceBeforeAck(t *testin
 			return reader, nil
 		}, publisher: func(context.Context) (eventadapter.Publisher, error) { return first, nil }}),
 		spine.WithEventAdapter("fanout", publicEventFactory{publish: true, publisher: func(context.Context) (eventadapter.Publisher, error) { return second, nil }}))
-	app.Constructor(func() *publicEventController {
+	app.Constructor(func(publisher publish.Publisher) *publicEventController {
 		return &publicEventController{handle: func(ctx context.Context, input publicInput) error {
 			if got, ok := ctx.Deadline(); !ok || !got.Equal(deadline) {
 				t.Errorf("핸들러 컨텍스트가 부모 제한 시간을 잃었습니다: %v", got)
@@ -145,8 +145,7 @@ func TestAppEventExecutesTrustedSubscriptionAndSerializesOnceBeforeAck(t *testin
 				t.Error("메시지 DTO가 다릅니다")
 			}
 			handlers.Add(1)
-			publish.DomainEvents(ctx, &serializedEvent{calls: &encoded, at: at})
-			return nil
+			return publisher.Event(ctx, "result.created", publish.Fields{"event": &serializedEvent{calls: &encoded, at: at}}, publish.WithOccurredAt(at))
 		}}
 	})
 	if err := app.Consumers().Register("trusted-route", (*publicEventController).HandleWithSpineCtx); err != nil {
@@ -171,14 +170,13 @@ func TestAppEventNacksAfterPublisherOrSerializationFailure(t *testing.T) {
 			reader.deliveries <- &publicDelivery{ack: func(context.Context) error { acks.Add(1); cancel(); return nil }, nack: func(context.Context) error { nacks.Add(1); cancel(); return nil }}
 			publisher := &publicPublisher{send: func(context.Context, eventadapter.Message) error { sends.Add(1); return cause }}
 			app := spine.New(spine.WithEventAdapter("events", publicEventFactory{consume: true, publish: true, reader: func(context.Context, eventadapter.Subscription) (eventadapter.Reader, error) { return reader, nil }, publisher: func(context.Context) (eventadapter.Publisher, error) { return publisher, nil }}))
-			app.Constructor(func() *publicEventController {
+			app.Constructor(func(publisher publish.Publisher) *publicEventController {
 				return &publicEventController{handle: func(ctx context.Context, _ publicInput) error {
 					event := &serializedEvent{calls: &encoded}
 					if failure == "serialization" {
 						event.err = cause
 					}
-					publish.DomainEvents(ctx, event)
-					return nil
+					return publisher.Event(ctx, "result.created", publish.Fields{"event": event})
 				}}
 			})
 			if err := app.Consumers().Register("trusted-route", (*publicEventController).Handle); err != nil {

@@ -11,23 +11,16 @@ import (
 
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
-	"github.com/NARUBROWN/spine/internal/event/emission"
 	"github.com/NARUBROWN/spine/internal/event/hook"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/handler"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/resolver"
-	"github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	"github.com/NARUBROWN/spine/pkg/path"
 	contextapi "github.com/NARUBROWN/spine/pkg/spine"
 )
-
-type testEventBus struct{}
-
-func (b *testEventBus) Publish(events ...publish.DomainEvent) {}
-func (b *testEventBus) Drain() []publish.DomainEvent          { return nil }
 
 type testExecutionContext struct {
 	writer   core.ResponseWriter
@@ -52,7 +45,6 @@ func newTestExecutionContext() *testExecutionContext {
 }
 
 func (c *testExecutionContext) Context() context.Context     { return context.Background() }
-func (c *testExecutionContext) EventBus() emission.Bus       { return &testEventBus{} }
 func (c *testExecutionContext) Method() string               { return c.method }
 func (c *testExecutionContext) Path() string                 { return c.path }
 func (c *testExecutionContext) Params() map[string]string    { return c.params }

@@ -3,6 +3,10 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"github.com/NARUBROWN/spine/core"
+	publicPublish "github.com/NARUBROWN/spine/pkg/event/publish"
+	"reflect"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -154,6 +158,64 @@ func TestEventPreflightHasNoConstructionSideEffects(t *testing.T) {
 	} {
 		if err := Validate(Config{EventAdapters: bindings}); err == nil {
 			t.Fatalf("잘못된 이벤트 구성이 통과했습니다: %+v", bindings)
+		}
+	}
+}
+
+func TestApplicationCloseCancelsPublisherReconnection(t *testing.T) {
+	failed := &reconnectPublisher{}
+	entered := make(chan struct{})
+	var publisher publicPublish.Publisher
+	config := Config{
+		EventAdapters: []EventAdapterBinding{{Name: "events", Factory: eventFactoryStub{publish: true, publisher: func(ctx context.Context) (eventadapter.Publisher, error) {
+			if failed.creates.Add(1) == 1 {
+				return failed, nil
+			}
+			close(entered)
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}}}},
+		ShutdownHooks: []any{func(context.Context, publicPublish.Publisher) error { return nil }},
+		CustomTransports: []core.CustomTransport{callbackTransport{init: func(c core.Container) error {
+			value, err := c.Resolve(reflect.TypeFor[publicPublish.Publisher]())
+			if err == nil {
+				publisher = value.(publicPublish.Publisher)
+			}
+			return err
+		}}},
+	}
+	app, err := Prepare(t.Context(), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := publisher.Event(t.Context(), "orders", nil); err == nil {
+		t.Fatal("expected initial failure")
+	}
+	done := make(chan error, 1)
+	go func() { done <- publisher.Event(context.Background(), "orders", nil) }()
+	<-entered
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	if err := app.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+}
+
+type reconnectPublisher struct{ creates atomic.Int32 }
+
+func (*reconnectPublisher) Publish(context.Context, eventadapter.Message) error {
+	return errors.New("connection lost")
+}
+func (*reconnectPublisher) Close(context.Context) error { return nil }
+
+func TestPublisherProviderIsReservedWithoutRunningConstructors(t *testing.T) {
+	for _, typed := range []bool{false, true} {
+		err := Validate(Config{TypedComponents: typed, Constructors: []any{func() publicPublish.Publisher { t.Error("preflight executed a provider"); return nil }}})
+		if err == nil || !strings.Contains(err.Error(), "EVENT_PUBLISHER_RESERVED") {
+			t.Fatal(err)
 		}
 	}
 }

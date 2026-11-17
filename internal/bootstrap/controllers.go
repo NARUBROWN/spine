@@ -12,6 +12,7 @@ import (
 	"github.com/NARUBROWN/spine/internal/endpoint"
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/pkg/api"
+	"github.com/NARUBROWN/spine/pkg/event/publish"
 )
 
 var ErrRoutesNotCollected = errors.New("controller routes require a prepared application; use DescribePreparedHTTP or static CLI export without executing constructors")
@@ -137,8 +138,16 @@ func (config Config) controllerCandidates() []any {
 // componentValidationIssues는 명세 조회에서도 실행 없이 공통 생성 계약을 검사합니다.
 func componentValidationIssues(config Config) []configuration.ConfigIssue {
 	issues := append([]configuration.ConfigIssue{}, config.ComponentIssues...)
+	for index, constructor := range config.Constructors {
+		signature := reflect.TypeOf(constructor)
+		if signature != nil && signature.Kind() == reflect.Func && container.ValidConstructorResults(signature) && signature.Out(0) == reflect.TypeFor[publish.Publisher]() {
+			issues = append(issues, configuration.ConfigIssue{Path: fmt.Sprintf("Constructors[%d]", index), Code: "EVENT_PUBLISHER_RESERVED", Message: "publish.Publisher is provided by the application.", Hint: "Remove the publisher constructor and register platforms with WithEventAdapter."})
+		}
+	}
 	if config.TypedComponents {
-		if err := container.ValidateConstructors(config.Constructors); err != nil {
+		constructors := append([]any(nil), config.Constructors...)
+		constructors = append(constructors, func() publish.Publisher { return nil })
+		if err := container.ValidateConstructors(constructors); err != nil {
 			issues = append(issues, configuration.ConfigIssue{Path: "Constructors", Code: "COMPONENT_DEPENDENCIES_INVALID", Message: err.Error(), Hint: "Register one provider per type and resolve missing or circular dependencies before initialization."})
 		}
 	}

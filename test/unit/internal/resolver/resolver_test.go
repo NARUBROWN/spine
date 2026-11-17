@@ -3,22 +3,18 @@ package resolver
 import (
 	"context"
 	"errors"
-	"mime/multipart"
-	"net/http"
-	"net/textproto"
-	"reflect"
-	"testing"
-	"time"
-
-	"github.com/NARUBROWN/spine/internal/event/emission"
 	"github.com/NARUBROWN/spine/internal/execution"
-	eventpublish "github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	httpinput "github.com/NARUBROWN/spine/pkg/input"
 	pkgmultipart "github.com/NARUBROWN/spine/pkg/multipart"
 	"github.com/NARUBROWN/spine/pkg/path"
 	"github.com/NARUBROWN/spine/pkg/query"
 	"github.com/NARUBROWN/spine/pkg/spine"
+	"mime/multipart"
+	"net/http"
+	"net/textproto"
+	"reflect"
+	"testing"
 )
 
 type fakeHttpCtx struct {
@@ -33,7 +29,6 @@ type fakeHttpCtx struct {
 	bindErr       error
 	multipartForm *multipart.Form
 	multipartErr  error
-	bus           emission.Bus
 }
 
 func newFakeHttpCtx() *fakeHttpCtx {
@@ -50,7 +45,6 @@ func newFakeHttpCtx() *fakeHttpCtx {
 
 // 실행 컨텍스트
 func (c *fakeHttpCtx) Context() context.Context  { return context.Background() }
-func (c *fakeHttpCtx) EventBus() emission.Bus    { return c.bus }
 func (c *fakeHttpCtx) Method() string            { return c.method }
 func (c *fakeHttpCtx) Path() string              { return c.path }
 func (c *fakeHttpCtx) Params() map[string]string { return c.params }
@@ -86,23 +80,6 @@ func (c *fakeHttpCtx) Bind(out any, _ ...[]string) error {
 func (c *fakeHttpCtx) MultipartForm() (*multipart.Form, error) {
 	return c.multipartForm, c.multipartErr
 }
-
-type fakeEventBus struct {
-	published []eventpublish.DomainEvent
-}
-
-func (b *fakeEventBus) Publish(events ...eventpublish.DomainEvent) {
-	b.published = append(b.published, events...)
-}
-func (b *fakeEventBus) Drain() []eventpublish.DomainEvent { return nil }
-
-type sampleEvent struct {
-	name string
-	at   time.Time
-}
-
-func (e sampleEvent) Name() string          { return e.name }
-func (e sampleEvent) OccurredAt() time.Time { return e.at }
 
 func TestPathIntResolver_Success(t *testing.T) {
 	r := &PathIntResolver{}
@@ -313,23 +290,11 @@ func TestControllerContextResolver_DoesNotClaimUnsupportedExtendedInterface(t *t
 	}
 }
 
-func TestStdContextResolver_InjectsPublisher(t *testing.T) {
-	r := &StdContextResolver{}
-	pm := ParameterMeta{Type: reflect.TypeFor[context.Context]()}
+func TestStdContextResolverPreservesContext(t *testing.T) {
 	ctx := newFakeHttpCtx()
-	bus := &fakeEventBus{}
-	ctx.bus = bus
-
-	val, err := r.Resolve(ctx, pm)
-	if err != nil {
-		t.Fatalf("StdContextResolver Resolve 실패: %v", err)
-	}
-
-	resolvedCtx := val.(context.Context)
-	eventpublish.DomainEvents(resolvedCtx, sampleEvent{name: "order.created", at: time.Now()})
-
-	if len(bus.published) != 1 || bus.published[0].Name() != "order.created" {
-		t.Fatalf("publisher가 context에 주입되지 않았습니다: %+v", bus.published)
+	got, err := (&StdContextResolver{}).Resolve(ctx, ParameterMeta{Type: reflect.TypeFor[context.Context]()})
+	if err != nil || got != ctx.Context() {
+		t.Fatalf("context changed: %v %v", got, err)
 	}
 }
 

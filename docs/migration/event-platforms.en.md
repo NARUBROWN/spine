@@ -1,6 +1,6 @@
 # Migrate to event platforms
 
-The development source moves Kafka and RabbitMQ implementations out of the core. Keep `publish.Event`, constructor registration and `app.Consumers().Register`; replace broker boot options with named event factories. These APIs are not part of the existing Spine v0.6.0 release.
+The development source moves Kafka and RabbitMQ implementations out of the core. Keep constructor registration and `app.Consumers().Register`; replace broker boot options with named event factories and migrate publishing to the [application DI Publisher](app-publisher.md). These APIs are not part of the existing Spine v0.6.0 release.
 
 | Removed core API | Replacement |
 | --- | --- |

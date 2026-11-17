@@ -12,10 +12,10 @@ import (
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
-	"github.com/NARUBROWN/spine/internal/event/hook"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/handler"
 	"github.com/NARUBROWN/spine/internal/invoker"
+	"github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 )
@@ -35,7 +35,7 @@ func TestHTTPErrorClassificationIsIndependentOfOrigin(t *testing.T) {
 		{"wrapped_forbidden", fmt.Errorf("wrapped: %w", &httperr.HTTPError{Status: 403, Message: "explicit"}), 403},
 		{"explicit_over_implicit", &httperr.HTTPError{Status: 422, Message: "explicit", Cause: &http.MaxBytesError{Limit: 42}}, 422},
 		{"size_limit", &http.MaxBytesError{Limit: 42}, 413},
-		{"publisher", hook.ErrPublisherUnavailable, 503},
+		{"publisher", publish.ErrUnavailable, 503},
 		{"validation", validation.NewError(validation.FieldError{Field: "/name", Rule: "required"}), 400},
 		{"generic", errors.New("private failure"), 500},
 		{"invalid_status", &httperr.HTTPError{Status: 600, Message: "private failure"}, 500},

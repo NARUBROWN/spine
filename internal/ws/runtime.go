@@ -294,7 +294,6 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 			req.URL.Path,
 			msgType,
 			payload,
-			nil,
 			sendFn,
 			handshakeContext,
 		)
@@ -315,7 +314,7 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 }
 
 func (r *Runtime) preHandshake(ctx execution.WebSocketRequestContext, reg Registration) error {
-	executionCtx := NewWSExecutionContext(ctx.Context(), "", ctx.Path(), 0, nil, nil, nil, ctx)
+	executionCtx := NewWSExecutionContext(ctx.Context(), "", ctx.Path(), 0, nil, nil, ctx)
 	defer executionCtx.(interface{ ReleaseStore() }).ReleaseStore()
 	publicCtx := execution.NewContext(executionCtx)
 	for _, interceptor := range r.handshakeInterceptors {

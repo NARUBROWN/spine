@@ -324,7 +324,7 @@ func TestWSExecutionContext_PreservesImmutableHandshakeRequestSnapshot(t *testin
 	originalRequestURI := request.RequestURI
 	handshake := newWebSocketRequestSnapshot(request)
 
-	messageContext := NewWSExecutionContext(context.Background(), "conn", "/chat", pkgws.TextMessage, []byte("payload"), nil, func(int, []byte) error { return nil }, handshake)
+	messageContext := NewWSExecutionContext(context.Background(), "conn", "/chat", pkgws.TextMessage, []byte("payload"), func(int, []byte) error { return nil }, handshake)
 	request.Header.Set("Authorization", "Bearer after")
 	request.URL.RawQuery = "token=after"
 
