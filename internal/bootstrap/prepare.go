@@ -294,8 +294,8 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 			log.Println("[Bootstrap] Configuring WebSocket runtime")
 			log.Printf("[Bootstrap] Configuring WebSocket routes (%d routes)", len(wsRegistrations))
 
-			// WS 전용 인자 리졸버 등록
-			wsPipeline := buildWSPipeline(container, resolvedWSInterceptors, config.Validator)
+			// Common execution hooks are independent of runtime-owned WS binding.
+			wsPipeline := buildWSPipeline(container, resolvedWSInterceptors)
 
 			wsAdapter, err := config.WebSocketAdapterFactory.New(ws.AdapterOptions(config.HTTP.WebSocket))
 			if err != nil {
@@ -304,14 +304,19 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 			if err := wsadapter.ValidateAdapter(wsAdapter); err != nil {
 				return nil, err
 			}
+			handshakeInterceptors, err := webSocketHandshakeInterceptors(resolvedWSInterceptors)
+			if err != nil {
+				return nil, err
+			}
 			application.wsRuntime = ws.NewRuntime(
 				wsPipeline,
 				wsAdapter,
 				config.HTTP.WebSocket,
-				webSocketHandshakeInterceptors(resolvedWSInterceptors)...,
+				handshakeInterceptors...,
 			)
 
 			application.wsRuntime.UseSender(application.wsSender)
+			application.wsRuntime.UseValidator(config.Validator)
 
 			for _, reg := range wsRegistrations {
 				resolved := make([]core.Interceptor, len(reg.Meta.Interceptors))
@@ -329,6 +334,9 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 					} else {
 						resolved[index] = interceptor
 					}
+				}
+				if _, err := webSocketHandshakeInterceptors(resolved); err != nil {
+					return nil, fmt.Errorf("WebSocket %s: %w", reg.Path, err)
 				}
 				reg.Meta.Interceptors = resolved
 				log.Printf("[Bootstrap] Registered WebSocket route: %s", reg.Path)

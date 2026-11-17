@@ -17,11 +17,13 @@ import (
 	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/configuration"
-	"github.com/NARUBROWN/spine/internal/contextview"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/httpfailure"
 	"github.com/NARUBROWN/spine/internal/pipeline"
+	"github.com/NARUBROWN/spine/internal/resolver"
+	wsresolver "github.com/NARUBROWN/spine/internal/ws/resolver"
 	"github.com/NARUBROWN/spine/internal/ws/sendctx"
+	publicws "github.com/NARUBROWN/spine/pkg/ws"
 )
 
 const (
@@ -45,17 +47,19 @@ type normalizedWebSocketOptions struct {
 }
 
 type Runtime struct {
-	pipeline *pipeline.Pipeline
-	sender   *Sender
-	adapter  wsadapter.Adapter
-	options  normalizedWebSocketOptions
-	stopOnce sync.Once
-	ctx      context.Context
-	cancel   context.CancelFunc
+	pipeline          *pipeline.Pipeline
+	argumentResolvers []wsresolver.ArgumentResolver
+	sender            *Sender
+	adapter           wsadapter.Adapter
+	options           normalizedWebSocketOptions
+	stopOnce          sync.Once
+	ctx               context.Context
+	cancel            context.CancelFunc
 	// lifecycleMu는 HandleConn 등록과 Stop의 대기 시작을 직렬화합니다.
 	// Stop이 시작된 뒤에는 WaitGroup에 새로운 작업이 추가되지 않습니다.
 	lifecycleMu sync.Mutex
 	stopping    bool
+	started     bool
 	handlers    sync.WaitGroup
 	connMu      sync.Mutex
 	conns       map[string]*trackedConn
@@ -111,6 +115,7 @@ func NewRuntime(pipeline *pipeline.Pipeline, adapter wsadapter.Adapter, opts con
 
 	return &Runtime{
 		pipeline:              pipeline,
+		argumentResolvers:     wsresolver.Resolvers(nil),
 		adapter:               adapter,
 		options:               normalizeWebSocketOptions(opts),
 		ctx:                   ctx,
@@ -295,16 +300,7 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 			return
 		}
 
-		// Each received message has its own cancellation and input lease.
-		err = func() error {
-			messageCtx, cancel := context.WithCancel(session.ctx)
-			defer cancel()
-			messageCtx, release := sendctx.Bind(messageCtx, sendFn)
-			defer release()
-			state := execution.NewState(messageCtx)
-			input := execution.NewInput(execution.Sources{WebSocketRequest: session.request, ConnectionID: session.id, WebSocket: &execution.WebSocketMessage{Kind: msgType, Payload: payload}})
-			return r.pipeline.ExecuteRegistered(state, reg.Meta, input)
-		}()
+		err = r.executeMessage(session, msgType, payload, sendFn, reg.Meta)
 		if err != nil {
 			log.Printf("[WS] Handler failed (conn=%p): %v", &connID, err)
 			code, reason := wsadapter.CloseInternalServerErr, "handler error"
@@ -320,17 +316,12 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 	}
 }
 
-func (r *Runtime) preHandshake(ctx context.Context, request execution.WebSocketRequestContext, reg Registration) error {
-	executionCtx := execution.NewState(ctx)
-	defer executionCtx.ReleaseStore()
-	input := execution.NewInput(execution.Sources{WebSocketRequest: request})
-	defer input.Close()
-	publicCtx := execution.NewContext(executionCtx, input)
+func (r *Runtime) preHandshake(ctx context.Context, request publicws.Handshake, reg Registration) error {
 	for _, interceptor := range r.handshakeInterceptors {
 		if interceptor == nil {
 			continue
 		}
-		if err := callPreHandshake(interceptor, publicCtx, reg.Meta); err != nil {
+		if err := callPreHandshake(interceptor, ctx, request, reg.Meta); err != nil {
 			return err
 		}
 	}
@@ -339,20 +330,20 @@ func (r *Runtime) preHandshake(ctx context.Context, request execution.WebSocketR
 		if !ok {
 			continue
 		}
-		if err := callPreHandshake(handshakeInterceptor, publicCtx, reg.Meta); err != nil {
+		if err := callPreHandshake(handshakeInterceptor, ctx, request, reg.Meta); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func callPreHandshake(interceptor core.WebSocketHandshakeInterceptor, ctx contextview.Ctx, meta execution.HandlerMeta) (err error) {
+func callPreHandshake(interceptor core.WebSocketHandshakeInterceptor, ctx context.Context, request publicws.Handshake, meta execution.HandlerMeta) (err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			err = fmt.Errorf("websocket handshake interceptor panic: %v", recovered)
 		}
 	}()
-	return interceptor.PreHandshake(ctx, meta.View())
+	return interceptor.PreHandshake(ctx, request, meta.View())
 }
 
 func writeHandshakeRejection(w http.ResponseWriter, err error) {
@@ -419,6 +410,7 @@ func (r *Runtime) beginHandleConn() bool {
 	if r.stopping {
 		return false
 	}
+	r.started = true
 	r.handlers.Add(1)
 	return true
 }
@@ -587,4 +579,28 @@ func (r *Runtime) UseSender(sender *Sender) {
 	sender.timeout = r.options.WriteTimeout
 	sender.mu.Unlock()
 	r.sender = sender
+}
+
+// UseValidator configures message binding before any connection handlers start.
+func (r *Runtime) UseValidator(v validation.Validator) {
+	r.lifecycleMu.Lock()
+	defer r.lifecycleMu.Unlock()
+	if r.stopping || r.started {
+		panic("ws: configure validator before accepting connections")
+	}
+	r.argumentResolvers = wsresolver.Resolvers(v)
+}
+
+// executeMessage owns one frame's cancellation, compatibility capability and
+// argument binding. None of those inputs are stored in execution.Context.
+func (r *Runtime) executeMessage(connection session, kind int, payload []byte, send func(int, []byte) error, meta execution.HandlerMeta) error {
+	messageCtx, cancel := context.WithCancel(connection.ctx)
+	defer cancel()
+	messageCtx, release := sendctx.Bind(messageCtx, send)
+	defer release()
+	state := execution.NewState(messageCtx)
+	input := &wsresolver.Input{ConnectionID: connection.id, Kind: kind, Payload: payload}
+	return r.pipeline.ExecuteBound(state, meta, func(parameters []resolver.ParameterMeta) ([]any, error) {
+		return wsresolver.Bind(messageCtx, parameters, input, r.argumentResolvers)
+	})
 }

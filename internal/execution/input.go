@@ -2,12 +2,6 @@ package execution
 
 import "sync"
 
-// WebSocketMessage is the received frame data for one handler execution.
-type WebSocketMessage struct {
-	Kind    int
-	Payload []byte
-}
-
 // ConsumerMessage excludes delivery settlement and native reader capabilities.
 type ConsumerMessage struct {
 	Name     string
@@ -18,13 +12,10 @@ type ConsumerMessage struct {
 // Sources are borrowed from the transport runtime for one pipeline execution.
 // The runtime continues to own native connections, readers and ACK/NACK callbacks.
 type Sources struct {
-	Routing          RoutingContext
-	HTTPRequest      HTTPRequestContext
-	HTTPResponse     HTTPResponseContext
-	WebSocketRequest WebSocketRequestContext
-	ConnectionID     string
-	WebSocket        *WebSocketMessage
-	Consumer         *ConsumerMessage
+	Routing      RoutingContext
+	HTTPRequest  HTTPRequestContext
+	HTTPResponse HTTPResponseContext
+	Consumer     *ConsumerMessage
 }
 
 // Input is a revocable view lease. Completion detaches every transport reference.
@@ -64,16 +55,6 @@ func (i *Input) HTTPResponse() (out HTTPResponseContext) {
 	return
 }
 func (i *Input) Routing() (out RoutingContext) { i.read(func(s Sources) { out = s.Routing }); return }
-func (i *Input) ConnectionID() (out string)    { i.read(func(s Sources) { out = s.ConnectionID }); return }
-func (i *Input) WebSocketMessage() (out WebSocketMessage, ok bool) {
-	i.read(func(s Sources) {
-		if s.WebSocket != nil {
-			out = *s.WebSocket
-			ok = true
-		}
-	})
-	return
-}
 func (i *Input) ConsumerMessage() (out ConsumerMessage, ok bool) {
 	i.read(func(s Sources) {
 		if s.Consumer != nil {

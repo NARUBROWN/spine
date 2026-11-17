@@ -6,38 +6,23 @@ import (
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/ws/sendctx"
 	pkgws "github.com/NARUBROWN/spine/pkg/ws"
-	"net/http/httptest"
 	"reflect"
 	"testing"
 )
 
-func TestMessageInputLeaseAndPureState(t *testing.T) {
-	request := newWebSocketRequestSnapshot(httptest.NewRequest("GET", "/ws?token=before", nil))
+func TestCommonContextAndInputHaveNoWebSocketAPI(t *testing.T) {
 	state := execution.NewState(context.Background())
-	for _, name := range []string{"Payload", "ConnID", "Path", "Method", "SetRoute", "EventName", "Ack", "Nack"} {
-		if _, ok := reflect.TypeOf(state).MethodByName(name); ok {
-			t.Fatalf("state owns transport method %s", name)
+	for _, typ := range []reflect.Type{reflect.TypeOf(state), reflect.TypeFor[execution.Sources](), reflect.TypeOf(execution.NewContext(state, nil))} {
+		for _, name := range []string{"WebSocket", "WebSocketRequest", "ConnID", "Payload"} {
+			if _, ok := typ.MethodByName(name); ok {
+				t.Fatalf("%s exposes %s", typ, name)
+			}
+			if typ.Kind() == reflect.Struct {
+				if _, ok := typ.FieldByName(name); ok {
+					t.Fatalf("%s owns %s", typ, name)
+				}
+			}
 		}
-	}
-	input := execution.NewInput(execution.Sources{WebSocketRequest: request, ConnectionID: "conn", WebSocket: &execution.WebSocketMessage{Kind: pkgws.TextMessage, Payload: []byte("original")}})
-	public := execution.NewContext(state, input)
-	view, ok := public.WebSocket()
-	if !ok {
-		t.Fatal("missing view")
-	}
-	view.Payload()[0] = 'X'
-	if string(view.Payload()) != "original" {
-		t.Fatal("mutable input exposed")
-	}
-	if view.ConnID() != "conn" || view.Query("token") != "before" {
-		t.Fatal("wrong session")
-	}
-	input.Close()
-	if view.Payload() != nil || view.ConnID() != "" || view.Query("token") != "" {
-		t.Fatal("input retained after completion")
-	}
-	if _, ok := public.WebSocket(); ok {
-		t.Fatal("closed input available")
 	}
 }
 func TestLegacySendCapabilityIsRevoked(t *testing.T) {

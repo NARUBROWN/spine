@@ -1,9 +1,9 @@
 package resolver
 
 import (
+	"context"
 	"fmt"
 	validation "github.com/NARUBROWN/spine/contract/validator"
-	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/jsondecode"
 	"github.com/NARUBROWN/spine/internal/resolver"
 	"reflect"
@@ -26,9 +26,9 @@ func (*MessageResolver) Supports(p resolver.ParameterMeta) bool {
 	_, ok := MessagePayload(p.Type)
 	return ok
 }
-func (r *MessageResolver) Resolve(ctx execution.Context, p resolver.ParameterMeta, source *execution.Input) (any, error) {
-	message, ok := source.WebSocketMessage()
-	if !ok {
+func (r *MessageResolver) Resolve(ctx context.Context, p resolver.ParameterMeta, source *Input) (any, error) {
+	message := source
+	if message == nil {
 		return nil, fmt.Errorf("input.Message requires a WebSocket message")
 	}
 	t, _ := MessagePayload(p.Type)
@@ -44,7 +44,7 @@ func (r *MessageResolver) Resolve(ctx execution.Context, p resolver.ParameterMet
 	if err := jsondecode.Unmarshal(slices.Clone(message.Payload), value.Interface()); err != nil {
 		return nil, fmt.Errorf("decode WebSocket message: %w", err)
 	}
-	if err := resolver.ValidateDTO(ctx.Context(), r.Validator, value.Elem().Interface()); err != nil {
+	if err := resolver.ValidateDTO(ctx, r.Validator, value.Elem().Interface()); err != nil {
 		return nil, err
 	}
 	result.FieldByName("Value").Set(value.Elem())

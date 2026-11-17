@@ -42,8 +42,8 @@ func (*ChatController) Constructor(service *ChatService) *ChatController {
 }
 func (c *ChatController) RegisterRoutes(r *api.Registry) {
 
-	r.WS("/ws", func(ctx sc.Ctx, id ws.ConnectionID, message input.Message[ChatMessage]) error {
-		return c.service.Send(ctx.ExecutionContext().Context(), id.Value, message.Value)
+	r.WS("/ws", func(ctx context.Context, id ws.ConnectionID, message input.Message[ChatMessage]) error {
+		return c.service.Send(ctx, id.Value, message.Value)
 	})
 
 	r.POST("/push/:id", func(ctx sc.Ctx, id input.Path[string], body input.Body[ChatMessage]) (httpx.Response[string], error) {

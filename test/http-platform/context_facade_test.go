@@ -109,9 +109,6 @@ func (c *firstFacadeController) Write(ctx contextapi.Ctx, path input.Path[firstF
 	if !ok {
 		return httpx.Response[facadeResult]{}, fmt.Errorf("HTTP view is missing")
 	}
-	if _, ok := ctx.WebSocket(); ok {
-		return httpx.Response[facadeResult]{}, fmt.Errorf("HTTP execution exposes a WebSocket view")
-	}
 	response, ok := ctx.HTTPResponseContext()
 	if !ok {
 		return httpx.Response[facadeResult]{}, fmt.Errorf("HTTP response view is missing")

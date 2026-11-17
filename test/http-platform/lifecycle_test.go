@@ -158,13 +158,13 @@ func TestWebSocketAndRuntimeOpenAPIOverTCP(t *testing.T) {
 	}
 }
 
-func (*websocketController) Restricted(ctx handlerspine.Ctx) error {
-	return ws.Send(ctx.ExecutionContext().Context(), ws.TextMessage, []byte("restricted"))
+func (*websocketController) Restricted(ctx context.Context) error {
+	return ws.Send(ctx, ws.TextMessage, []byte("restricted"))
 }
 
 type websocketRouteAuthorization struct{}
 
-func (websocketRouteAuthorization) PreHandshake(_ handlerspine.Ctx, meta core.HandlerMeta) error {
+func (websocketRouteAuthorization) PreHandshake(_ context.Context, _ ws.Handshake, meta core.HandlerMeta) error {
 	if meta.MethodName == "Restricted" {
 		return &httperr.HTTPError{Status: http.StatusForbidden, Message: "Forbidden"}
 	}

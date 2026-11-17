@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"slices"
 
-	"github.com/NARUBROWN/spine/internal/execution"
+	"context"
 	"github.com/NARUBROWN/spine/internal/resolver"
 )
 
@@ -15,9 +15,9 @@ func (r *PayloadResolver) Supports(meta resolver.ParameterMeta) bool {
 	return reflect.TypeFor[[]byte]().ConvertibleTo(meta.Type) && meta.Type.Kind() == reflect.Slice
 }
 
-func (r *PayloadResolver) Resolve(ctx execution.Context, meta resolver.ParameterMeta, source *execution.Input) (any, error) {
-	message, ok := source.WebSocketMessage()
-	if !ok {
+func (r *PayloadResolver) Resolve(ctx context.Context, meta resolver.ParameterMeta, source *Input) (any, error) {
+	message := source
+	if message == nil {
 		return nil, fmt.Errorf("WebSocket message input is not available")
 	}
 	payload := reflect.ValueOf(slices.Clone(message.Payload))

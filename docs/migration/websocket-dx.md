@@ -7,7 +7,7 @@ resources cannot overlap a WebSocket endpoint. WebSocket callbacks are excluded
 from the HTTP OpenAPI document.
 
 The callback runs once per incoming message, after upgrade. It accepts
-`spine.Ctx`, `context.Context`, `ws.ConnectionID` and explicit
+`context.Context`, `ws.ConnectionID` and explicit
 `input.Message[T]` parameters, and returns only errors. Use `Message[DTO]` for
 JSON objects and `Message[[]byte]` for raw text or binary bytes. Read the decoded
 value through `.Value`. Plain DTO parameters in new callbacks are rejected.
@@ -18,8 +18,8 @@ available for migration.
 ```go
 func (c *ChatController) RegisterRoutes(r *api.Registry) {
 
-    r.WS("/ws", func(sc spine.Ctx, id ws.ConnectionID, message input.Message[ChatMessage]) error {
-        return c.service.Send(sc.ExecutionContext().Context(), id.Value, message.Value)
+    r.WS("/ws", func(ctx context.Context, id ws.ConnectionID, message input.Message[ChatMessage]) error {
+        return c.service.Send(ctx, id.Value, message.Value)
     })
 
 }
@@ -58,26 +58,37 @@ its own context and must be canceled and awaited by its owner. Existing
 `ws.Send(ctx, ...)` remains a connection-local migration API; a missing sender
 now returns ErrConnectionNotFound instead of reporting success.
 
-The common execution state now contains only the standard context and the
-per-execution value store. HTTP input/output, a connection's immutable handshake
-snapshot, and the received WS or consumer message travel separately to the
-pipeline and its resolvers. No WS/consumer execution-context adapter remains.
+WebSocket handlers receive the standard `context.Context`; `spine.Ctx` is rejected
+in both callbacks and legacy WS method expressions. The common execution context,
+its Input/Sources, and the public `spine.Ctx` contain no WS data or WS views.
+`spine.Ctx.WebSocket()`, `WebSocketView` and `WebSocketRequestView` are removed.
 
-A WS connection owns its session until disconnect. Each received frame gets a
-child context and an input lease for one pipeline execution. Completion hooks
-run before the store and input references are cleared; then the child context is
-canceled. A retained public transport view becomes unavailable after completion.
-Use `input.Message[T]` for received application data and explicitly copy any data
-needed by owned background work. The legacy `ws.Send(ctx, ...)` capability is
-also revoked at message completion. Injected `ws.Sender` remains usable with the
-background owner's context while the target connection is active.
+The WS runtime owns connection sessions, immutable handshake snapshots and
+received frames. It binds message arguments after common PreHandle interceptors
+succeed and supplies those arguments through a transport-neutral pipeline binding
+function. The shared pipeline does not resolve WS inputs or retain WS types.
+Common interceptors still receive the common execution view and its value store.
 
-Consumer runtimes keep the delivery and ACK/NACK callbacks outside the pipeline.
-They pass only subscription name, payload and metadata as input, and settle the
-delivery after completion and per-message cancellation. HTTP still flushes its
-staged response before completion hooks and releases its transport input before
-parser cleanup. Connection-start and disconnect callbacks are not introduced;
-existing handshake interceptors still run.
+A connection context lives until disconnect. Each received frame gets a child
+context canceled after completion hooks. Decoded DTOs and raw byte inputs are
+independent copies of runtime-owned bytes. Handlers may retain their own decoded
+data, but background work needs its owner's context. The legacy `ws.Send(ctx,...)`
+compatibility capability is revoked at message completion; injected `ws.Sender`
+can send with a background owner's context while the target connection is active.
+
+Handshake interceptors now receive the standard context and an explicit immutable
+snapshot, with no common execution store or message payload:
+
+```go
+func (*Auth) PreHandshake(ctx context.Context, request ws.Handshake, meta core.HandlerMeta) error {
+    return authenticate(ctx, request.Header("Authorization"))
+}
+```
+
+Existing handshake implementations must migrate to this signature. Prepare rejects
+interceptors with an incompatible PreHandshake method instead of skipping them. Connection
+start and disconnect callbacks are not introduced. Consumer delivery settlement
+remains runtime-owned and runs after the pipeline completes.
 
 A runnable echo and HTTP-push example is in
 [cmd/reference/websocket](../../cmd/reference/websocket/main.go). From

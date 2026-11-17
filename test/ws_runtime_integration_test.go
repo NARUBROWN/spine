@@ -28,27 +28,21 @@ type requestAwareInterceptor struct {
 	handshakeSeen chan struct{}
 	messageSeen   chan struct{}
 	handshakeAuth string
-	messageAuth   string
 	messageQuery  string
 	messageCookie string
 	messageRemote string
 }
 
-func (i *requestAwareInterceptor) PreHandshake(ctx contextapi.Ctx, _ core.HandlerMeta) error {
-	request, _ := ctx.WebSocket()
+func (i *requestAwareInterceptor) PreHandshake(ctx context.Context, request pkgws.Handshake, _ core.HandlerMeta) error {
 	i.handshakeAuth = request.Header("Authorization")
+	i.messageQuery = request.Query("token")
+	i.messageCookie, _ = request.Cookie("session")
+	i.messageRemote = request.RemoteAddr()
 	close(i.handshakeSeen)
 	return nil
 }
-
 func (i *requestAwareInterceptor) PreHandle(ctx contextapi.Ctx, _ core.HandlerMeta) error {
-	request, _ := ctx.WebSocket()
-	i.messageAuth = request.Header("Authorization")
-	i.messageQuery = request.Queries()["token"][0]
-	if requestCtx, ok := ctx.WebSocket(); ok {
-		i.messageCookie, _ = requestCtx.Cookie("session")
-		i.messageRemote = requestCtx.RemoteAddr()
-	}
+	ctx.ExecutionContext().Set("message-interceptor", true)
 	close(i.messageSeen)
 	return nil
 }
@@ -294,7 +288,7 @@ func TestRuntime_RejectsCapacityBeforeWebSocketUpgrade(t *testing.T) {
 	}
 }
 
-func TestRuntime_CommonInterceptorReadsHandshakeCredentialsFromMessageContext(t *testing.T) {
+func TestRuntime_ExplicitHandshakeMetadataAndCommonMessageInterceptors(t *testing.T) {
 	controller := &cancellationController{
 		started:  make(chan struct{}),
 		canceled: make(chan struct{}),
@@ -332,8 +326,8 @@ func TestRuntime_CommonInterceptorReadsHandshakeCredentialsFromMessageContext(t 
 	case <-time.After(time.Second):
 		t.Fatal("common message interceptor did not run")
 	}
-	if interceptor.handshakeAuth != "Bearer shared-token" || interceptor.messageAuth != "Bearer shared-token" || interceptor.messageQuery != "query-token" || interceptor.messageCookie != "cookie-token" || interceptor.messageRemote == "" {
-		t.Fatalf("credentials were not preserved across handshake/message contexts: %+v", interceptor)
+	if interceptor.handshakeAuth != "Bearer shared-token" || interceptor.messageQuery != "query-token" || interceptor.messageCookie != "cookie-token" || interceptor.messageRemote == "" {
+		t.Fatalf("explicit handshake snapshot is incomplete: %+v", interceptor)
 	}
 }
 

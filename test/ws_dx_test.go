@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -45,6 +46,7 @@ type dxConfig struct {
 	service *dxService
 	ids     chan string
 	frames  chan dxFrame
+	calls   atomic.Int32
 }
 
 func (*dxController) Constructor(s *dxService, config *dxConfig) *dxController {
@@ -53,16 +55,12 @@ func (*dxController) Constructor(s *dxService, config *dxConfig) *dxController {
 }
 
 func (c *dxController) RegisterRoutes(r *api.Registry) {
-	r.Group("/chat").WS("/ws", func(ctx sc.Ctx, id ws.ConnectionID, message input.Message[dxMessage]) error {
-		if value, _ := ctx.ExecutionContext().Get("ws-audit"); value != true {
-			return fmt.Errorf("DI interceptor did not execute")
-		}
+	r.Group("/chat").WS("/ws", func(ctx context.Context, id ws.ConnectionID, message input.Message[dxMessage]) error {
 		if c.frames != nil {
-			view, _ := ctx.WebSocket()
-			c.frames <- dxFrame{ctx: ctx, view: view, query: view.Query("token"), payload: string(view.Payload())}
+			c.frames <- dxFrame{ctx: ctx, payload: message.Value.Text}
 		}
 		c.connected <- id.Value
-		return c.service.Send(ctx.ExecutionContext().Context(), id.Value, message.Value.Text)
+		return c.service.Send(ctx, id.Value, message.Value.Text)
 	}, api.Interceptors((*dxInterceptor)(nil)))
 	r.POST("/push/:id", func(ctx sc.Ctx, id input.Path[string], body input.Body[dxMessage]) (httpx.Response[string], error) {
 		err := c.service.Send(ctx.ExecutionContext().Context(), *id, body.Text)
@@ -98,6 +96,9 @@ func TestWSDX_CallbackMessageAndDISenderOverNetwork(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := <-ids
+	if config.calls.Load() == 0 {
+		t.Fatal("DI message interceptor did not run")
+	}
 	_, data, err := conn.ReadMessage()
 	if err != nil || string(data) != "echo" {
 		t.Fatalf("echo=%s err=%v", data, err)
@@ -181,6 +182,8 @@ type dxInvalidController struct{ variant string }
 
 func (c *dxInvalidController) RegisterRoutes(r *api.Registry) {
 	switch c.variant {
+	case "spine-context":
+		r.WS("/ws", func(sc.Ctx) error { return nil })
 	case "naked":
 		r.WS("/ws", func(message dxMessage) error { return nil })
 	case "type":
@@ -193,7 +196,7 @@ func (c *dxInvalidController) RegisterRoutes(r *api.Registry) {
 	}
 }
 func TestWSDX_PreparationValidatesCollectedCallbacksAndPlatforms(t *testing.T) {
-	for _, variant := range []string{"naked", "type", "collision", "missing-platform"} {
+	for _, variant := range []string{"naked", "type", "spine-context", "collision", "missing-platform"} {
 		t.Run(variant, func(t *testing.T) {
 			options := []spine.Option{echo.Option()}
 			if variant != "missing-platform" {
@@ -210,10 +213,13 @@ func TestWSDX_PreparationValidatesCollectedCallbacksAndPlatforms(t *testing.T) {
 	}
 }
 
-type dxInterceptor struct{}
+type dxInterceptor struct{ config *dxConfig }
 
-func (*dxInterceptor) Constructor() *dxInterceptor { return &dxInterceptor{} }
-func (*dxInterceptor) PreHandle(ctx sc.Ctx, _ core.HandlerMeta) error {
+func (*dxInterceptor) Constructor(config *dxConfig) *dxInterceptor {
+	return &dxInterceptor{config: config}
+}
+func (i *dxInterceptor) PreHandle(ctx sc.Ctx, _ core.HandlerMeta) error {
+	i.config.calls.Add(1)
 	ctx.ExecutionContext().Set("ws-audit", true)
 	return nil
 }
@@ -222,12 +228,11 @@ func (*dxInterceptor) BeforeResponse(sc.Ctx, core.HandlerMeta, error) error { re
 func (*dxInterceptor) AfterCompletion(sc.Ctx, core.HandlerMeta, error)      {}
 
 type dxFrame struct {
-	ctx            sc.Ctx
-	view           sc.WebSocketView
-	query, payload string
+	ctx     context.Context
+	payload string
 }
 
-func TestWSDX_MessageCompletionReleasesViewsWithoutClosingConnection(t *testing.T) {
+func TestWSDX_StandardContextsCancelPerMessageWithoutClosingConnection(t *testing.T) {
 	frames := make(chan dxFrame, 2)
 	config := &dxConfig{ids: make(chan string, 2), frames: frames}
 	app := spine.New(echo.Option(), gorilla.Option())
@@ -260,14 +265,14 @@ func TestWSDX_MessageCompletionReleasesViewsWithoutClosingConnection(t *testing.
 		case <-time.After(3 * time.Second):
 			t.Fatal("handler did not run")
 		}
-		if frame.query != "snapshot" || !strings.Contains(frame.payload, text) {
+		if frame.payload != text {
 			t.Fatal("wrong received input")
 		}
 		_, payload, err := conn.ReadMessage()
 		if err != nil || string(payload) != text {
 			t.Fatalf("echo=%s err=%v", payload, err)
 		}
-		messageCtx := frame.ctx.ExecutionContext().Context()
+		messageCtx := frame.ctx
 		select {
 		case <-messageCtx.Done():
 		case <-time.After(3 * time.Second):
@@ -277,14 +282,61 @@ func TestWSDX_MessageCompletionReleasesViewsWithoutClosingConnection(t *testing.
 			t.Fatal("message context reused")
 		}
 		first = messageCtx
-		if frame.view.Payload() != nil || frame.view.ConnID() != "" || frame.view.Query("token") != "" {
-			t.Fatal("retained view holds completed input")
+		if config.calls.Load() == 0 {
+			t.Fatal("DI message interceptor did not run")
 		}
-		if _, ok := frame.ctx.WebSocket(); ok {
-			t.Fatal("completed session input remains available")
-		}
-		if _, ok := frame.ctx.ExecutionContext().Get("ws-audit"); ok {
-			t.Fatal("completed store remains available")
-		}
+	}
+}
+
+type legacyWSCtxController struct{}
+
+func (*legacyWSCtxController) Handle(sc.Ctx) error { return nil }
+func TestWSDXRejectsSpineContextInLegacyRegistration(t *testing.T) {
+	app := spine.New(echo.Option(), gorilla.Option())
+	app.Constructor(func() *legacyWSCtxController { return &legacyWSCtxController{} })
+	if err := app.WebSocket().Register("/ws", (*legacyWSCtxController).Handle); err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{}})
+	if err == nil {
+		prepared.Close(context.Background())
+		t.Fatal("legacy spine.Ctx handler accepted")
+	}
+	if !strings.Contains(err.Error(), "WEBSOCKET_PARAMETER_UNSUPPORTED") {
+		t.Fatal(err)
+	}
+}
+
+// An old auth hook must never disappear silently during signature migration.
+type legacyHandshakeAuth struct{ dxInterceptor }
+
+func (*legacyHandshakeAuth) PreHandshake(sc.Ctx, core.HandlerMeta) error { return errors.New("deny") }
+
+type legacyHandshakeController struct{ route bool }
+
+func (c *legacyHandshakeController) RegisterRoutes(r *api.Registry) {
+	if c.route {
+		r.WS("/ws", func(context.Context) error { return nil }, api.Interceptors(&legacyHandshakeAuth{}))
+	} else {
+		r.WS("/ws", func(context.Context) error { return nil })
+	}
+}
+func TestWSDXRejectsIncompatibleHandshakeAuthBeforeServing(t *testing.T) {
+	for _, route := range []bool{false, true} {
+		t.Run(fmt.Sprint(route), func(t *testing.T) {
+			app := spine.New(echo.Option(), gorilla.Option())
+			app.Constructor(func() *legacyHandshakeController { return &legacyHandshakeController{route: route} })
+			if !route {
+				app.InterceptorFor(boot.InterceptorWebSocket, &legacyHandshakeAuth{})
+			}
+			prepared, err := app.Prepare(t.Context(), boot.Options{HTTP: &boot.HTTPOptions{}})
+			if err == nil {
+				prepared.Close(context.Background())
+				t.Fatal("incompatible auth hook was ignored")
+			}
+			if !strings.Contains(err.Error(), "WEBSOCKET_HANDSHAKE_SIGNATURE_UNSUPPORTED") {
+				t.Fatal(err)
+			}
+		})
 	}
 }

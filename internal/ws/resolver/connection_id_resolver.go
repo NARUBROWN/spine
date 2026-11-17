@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/NARUBROWN/spine/internal/execution"
+	"context"
 	"github.com/NARUBROWN/spine/internal/resolver"
 	pkgws "github.com/NARUBROWN/spine/pkg/ws"
 )
@@ -15,8 +15,11 @@ func (r *ConnectionIDResolver) Supports(meta resolver.ParameterMeta) bool {
 	return meta.Type == reflect.TypeFor[pkgws.ConnectionID]()
 }
 
-func (r *ConnectionIDResolver) Resolve(ctx execution.Context, meta resolver.ParameterMeta, source *execution.Input) (any, error) {
-	id := source.ConnectionID()
+func (r *ConnectionIDResolver) Resolve(ctx context.Context, meta resolver.ParameterMeta, source *Input) (any, error) {
+	id := ""
+	if source != nil {
+		id = source.ConnectionID
+	}
 	if id == "" {
 		return nil, fmt.Errorf("WebSocket connection ID is not available")
 	}

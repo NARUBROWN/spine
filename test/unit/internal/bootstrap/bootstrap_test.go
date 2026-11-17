@@ -6,6 +6,7 @@ import (
 	"fmt"
 	eventadapter "github.com/NARUBROWN/spine/contract/event"
 	contextapi "github.com/NARUBROWN/spine/pkg/spine"
+	pkgws "github.com/NARUBROWN/spine/pkg/ws"
 	"net"
 	"strings"
 	"sync"
@@ -659,7 +660,10 @@ func TestResolveGlobalInterceptorsMergesTypedNilPlaceholderByType(t *testing.T) 
 func TestWebSocketHandshakeInterceptorsSelectsOnlyOptionalCapability(t *testing.T) {
 	handshake := &bootstrapHandshakeInterceptor{}
 	regular := &bootstrapTestInterceptor{}
-	selected := webSocketHandshakeInterceptors([]core.Interceptor{regular, handshake})
+	selected, err := webSocketHandshakeInterceptors([]core.Interceptor{regular, handshake})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(selected) != 1 || selected[0] != handshake {
 		t.Fatalf("selected handshake interceptors = %v, want only %T", selected, handshake)
 	}
@@ -669,7 +673,7 @@ type bootstrapTestInterceptor struct{ calls atomic.Int32 }
 
 type bootstrapHandshakeInterceptor struct{ bootstrapTestInterceptor }
 
-func (*bootstrapHandshakeInterceptor) PreHandshake(contextapi.Ctx, core.HandlerMeta) error {
+func (*bootstrapHandshakeInterceptor) PreHandshake(context.Context, pkgws.Handshake, core.HandlerMeta) error {
 	return nil
 }
 

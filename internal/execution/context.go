@@ -55,17 +55,3 @@ type HTTPResponseContext interface {
 	ResponseWriter() httpcontract.ResponseWriter
 	SetResponseWriter(httpcontract.ResponseWriter)
 }
-
-// WebSocketRequestContext는 내부 upgrade 요청의 불변 정보 계약입니다.
-type WebSocketRequestContext interface {
-	Path() string
-	Header(name string) string
-	Headers() map[string][]string
-	Query(name string) string
-	Queries() map[string][]string
-	Cookie(name string) (string, bool)
-	Cookies() map[string]string
-	RemoteAddr() string
-	Host() string
-	RequestURI() string
-}
