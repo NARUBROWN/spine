@@ -294,9 +294,6 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 			log.Println("[Bootstrap] Configuring WebSocket runtime")
 			log.Printf("[Bootstrap] Configuring WebSocket routes (%d routes)", len(wsRegistrations))
 
-			// Common execution hooks are independent of runtime-owned WS binding.
-			wsPipeline := buildWSPipeline(container, resolvedWSInterceptors)
-
 			wsAdapter, err := config.WebSocketAdapterFactory.New(ws.AdapterOptions(config.HTTP.WebSocket))
 			if err != nil {
 				return nil, fmt.Errorf("[Bootstrap] failed to configure WebSocket adapter: %w", err)
@@ -309,9 +306,10 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 				return nil, err
 			}
 			application.wsRuntime = ws.NewRuntime(
-				wsPipeline,
+				invoker.NewInvoker(container),
 				wsAdapter,
 				config.HTTP.WebSocket,
+				resolvedWSInterceptors,
 				handshakeInterceptors...,
 			)
 

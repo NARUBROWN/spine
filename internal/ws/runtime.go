@@ -19,10 +19,8 @@ import (
 	"github.com/NARUBROWN/spine/internal/configuration"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/httpfailure"
-	"github.com/NARUBROWN/spine/internal/pipeline"
-	"github.com/NARUBROWN/spine/internal/resolver"
+	"github.com/NARUBROWN/spine/internal/invoker"
 	wsresolver "github.com/NARUBROWN/spine/internal/ws/resolver"
-	"github.com/NARUBROWN/spine/internal/ws/sendctx"
 	publicws "github.com/NARUBROWN/spine/pkg/ws"
 )
 
@@ -47,7 +45,8 @@ type normalizedWebSocketOptions struct {
 }
 
 type Runtime struct {
-	pipeline          *pipeline.Pipeline
+	invoker           *invoker.Invoker
+	interceptors      []core.Interceptor
 	argumentResolvers []wsresolver.ArgumentResolver
 	sender            *Sender
 	adapter           wsadapter.Adapter
@@ -103,18 +102,19 @@ func (c *trackedConn) writeClose(code int, reason string, timeout time.Duration)
 	return c.conn.WriteClose(code, reason, writeDeadline(timeout))
 }
 
-func NewRuntime(pipeline *pipeline.Pipeline, adapter wsadapter.Adapter, opts configuration.WebSocketOptions, handshakeInterceptors ...core.WebSocketHandshakeInterceptor) *Runtime {
+func NewRuntime(handlerInvoker *invoker.Invoker, adapter wsadapter.Adapter, opts configuration.WebSocketOptions, interceptors []core.Interceptor, handshakeInterceptors ...core.WebSocketHandshakeInterceptor) *Runtime {
 	if wsadapter.ValidateAdapter(adapter) != nil {
 		panic("ws: adapter cannot be nil")
 	}
-	if pipeline == nil {
-		panic("ws: pipeline cannot be nil")
+	if handlerInvoker == nil {
+		panic("ws: invoker cannot be nil")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Runtime{
-		pipeline:              pipeline,
+		invoker:               handlerInvoker,
+		interceptors:          append([]core.Interceptor(nil), interceptors...),
 		argumentResolvers:     wsresolver.Resolvers(nil),
 		adapter:               adapter,
 		options:               normalizeWebSocketOptions(opts),
@@ -589,18 +589,4 @@ func (r *Runtime) UseValidator(v validation.Validator) {
 		panic("ws: configure validator before accepting connections")
 	}
 	r.argumentResolvers = wsresolver.Resolvers(v)
-}
-
-// executeMessage owns one frame's cancellation, compatibility capability and
-// argument binding. None of those inputs are stored in execution.Context.
-func (r *Runtime) executeMessage(connection session, kind int, payload []byte, send func(int, []byte) error, meta execution.HandlerMeta) error {
-	messageCtx, cancel := context.WithCancel(connection.ctx)
-	defer cancel()
-	messageCtx, release := sendctx.Bind(messageCtx, send)
-	defer release()
-	state := execution.NewState(messageCtx)
-	input := &wsresolver.Input{ConnectionID: connection.id, Kind: kind, Payload: payload}
-	return r.pipeline.ExecuteBound(state, meta, func(parameters []resolver.ParameterMeta) ([]any, error) {
-		return wsresolver.Bind(messageCtx, parameters, input, r.argumentResolvers)
-	})
 }

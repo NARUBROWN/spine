@@ -12,7 +12,6 @@ import (
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
-	"github.com/NARUBROWN/spine/internal/resolver"
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/transport"
 	"github.com/NARUBROWN/spine/pkg/spine"
@@ -60,9 +59,6 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 		"event": func() *execution.Input {
 			return execution.NewInput(execution.Sources{Consumer: &execution.ConsumerMessage{Name: "probe", Payload: make([]byte, 1024)}})
 		},
-		"websocket": func() *execution.Input {
-			return execution.NewInput(execution.Sources{})
-		},
 	}
 
 	for name, create := range contexts {
@@ -104,12 +100,7 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 					meta := execution.HandlerMeta{Callback: reflect.ValueOf(callback)}
 					run := pipeline.NewPipeline(routes, invoker.NewInvoker(container.New()))
 					run.AddInterceptor(observer)
-					var err error
-					if name == "websocket" {
-						err = run.ExecuteBound(ctx, meta, func([]resolver.ParameterMeta) ([]any, error) { return nil, nil })
-					} else {
-						err = run.ExecuteRegistered(ctx, meta, input)
-					}
+					err := run.ExecuteRegistered(ctx, meta, input)
 					if (err != nil) != (outcome != "success") || !observer.completed {
 						t.Fatalf("err=%v completed=%v", err, observer.completed)
 					}

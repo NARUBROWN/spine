@@ -478,18 +478,6 @@ func consumerArgumentResolvers(validator validation.Validator) []resolver.Argume
 	}
 }
 
-func buildWSPipeline(
-	container *container.Container,
-	interceptors []core.Interceptor,
-) *pipeline.Pipeline {
-	wsPipeline := pipeline.NewPipeline(nil, invoker.NewInvoker(container))
-	for _, interceptor := range interceptors {
-		wsPipeline.AddInterceptor(interceptor)
-	}
-
-	return wsPipeline
-}
-
 func webSocketArgumentResolvers(v validation.Validator) []wsResolver.ArgumentResolver {
 	return wsResolver.Resolvers(v)
 }

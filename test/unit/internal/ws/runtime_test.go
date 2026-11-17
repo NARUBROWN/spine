@@ -16,9 +16,6 @@ import (
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/invoker"
-	"github.com/NARUBROWN/spine/internal/pipeline"
-	"github.com/NARUBROWN/spine/internal/resolver"
-	spinerouter "github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	pkgws "github.com/NARUBROWN/spine/pkg/ws"
 )
@@ -413,12 +410,7 @@ func newTestRuntime(t *testing.T, controller any, handler any, options boot.WebS
 		t.Fatalf("지원하지 않는 테스트 컨트롤러: %T", controller)
 	}
 
-	router := spinerouter.NewRouter()
-	router.Register("WS", registration.Path, registration.Meta)
-	p := pipeline.NewPipeline(router, invoker.NewInvoker(c))
-	p.AddArgumentResolver(&resolver.StdContextResolver{})
-
-	return NewRuntime(p, failingUpgradeAdapter{}, options), registration
+	return NewRuntime(invoker.NewInvoker(c), failingUpgradeAdapter{}, options, nil), registration
 }
 
 type failingUpgradeAdapter struct{}

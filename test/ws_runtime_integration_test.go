@@ -14,9 +14,6 @@ import (
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/invoker"
-	"github.com/NARUBROWN/spine/internal/pipeline"
-	"github.com/NARUBROWN/spine/internal/resolver"
-	spinerouter "github.com/NARUBROWN/spine/internal/router"
 	wsruntime "github.com/NARUBROWN/spine/internal/ws"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	contextapi "github.com/NARUBROWN/spine/pkg/spine"
@@ -352,21 +349,17 @@ func newTestRuntime(t *testing.T, controller any, handler any, options boot.WebS
 		t.Fatalf("지원하지 않는 테스트 컨트롤러: %T", controller)
 	}
 
-	router := spinerouter.NewRouter()
-	router.Register("WS", registration.Path, registration.Meta)
-	p := pipeline.NewPipeline(router, invoker.NewInvoker(c))
-	p.AddArgumentResolver(&resolver.StdContextResolver{})
-
+	var messageInterceptors []core.Interceptor
 	for _, interceptor := range handshake {
 		if common, ok := interceptor.(core.Interceptor); ok {
-			p.AddInterceptor(common)
+			messageInterceptors = append(messageInterceptors, common)
 		}
 	}
 	adapter, err := gorillaplatform.NewFactory().New(wsruntime.AdapterOptions(options))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return wsruntime.NewRuntime(p, adapter, options, handshake...), registration
+	return wsruntime.NewRuntime(invoker.NewInvoker(c), adapter, options, messageInterceptors, handshake...), registration
 }
 
 func newRuntimeTestServer(runtime *wsruntime.Runtime, registration wsruntime.Registration) *httptest.Server {

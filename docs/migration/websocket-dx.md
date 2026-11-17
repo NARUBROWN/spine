@@ -64,10 +64,10 @@ its Input/Sources, and the public `spine.Ctx` contain no WS data or WS views.
 `spine.Ctx.WebSocket()`, `WebSocketView` and `WebSocketRequestView` are removed.
 
 The WS runtime owns connection sessions, immutable handshake snapshots and
-received frames. It binds message arguments after common PreHandle interceptors
-succeed and supplies those arguments through a transport-neutral pipeline binding
-function. The shared pipeline does not resolve WS inputs or retain WS types.
-Common interceptors still receive the common execution view and its value store.
+received frames. For each frame, it runs global `PreHandle` hooks followed by
+route `PreHandle` hooks. After they succeed, the runtime binds the message
+arguments and invokes the handler. It runs completion hooks before canceling
+the frame context. Interceptors use the frame's execution view and value store.
 
 A connection context lives until disconnect. Each received frame gets a child
 context canceled after completion hooks. Decoded DTOs and raw byte inputs are

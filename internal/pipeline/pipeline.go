@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
-	"runtime/debug"
 
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/contextview"
@@ -49,25 +48,17 @@ func (p *Pipeline) AddReturnValueHandler(handlers ...handler.ReturnValueHandler)
 
 // Execute는 하나의 요청 실행 전체를 소유합니다.
 func (p *Pipeline) Execute(ctx execution.Context, input *execution.Input) error {
-	return p.execute(ctx, func() (execution.HandlerMeta, error) { return p.router.Route(input.Routing()) }, input, nil)
+	return p.execute(ctx, func() (execution.HandlerMeta, error) { return p.router.Route(input.Routing()) }, input)
 }
 
 // ExecuteRegistered는 이미 전송 계층에서 선택한 핸들러를 실행합니다.
 func (p *Pipeline) ExecuteRegistered(ctx execution.Context, meta execution.HandlerMeta, input *execution.Input) error {
 	return p.execute(ctx, func() (execution.HandlerMeta, error) {
 		return meta, nil
-	}, input, nil)
+	}, input)
 }
 
-// ArgumentBinder lets a transport bind its inputs after PreHandle, without
-// exposing those inputs through the common execution context.
-type ArgumentBinder func([]resolver.ParameterMeta) ([]any, error)
-
-func (p *Pipeline) ExecuteBound(ctx execution.Context, meta execution.HandlerMeta, bind ArgumentBinder) error {
-	return p.execute(ctx, func() (execution.HandlerMeta, error) { return meta, nil }, execution.NewInput(execution.Sources{}), bind)
-}
-
-func (p *Pipeline) execute(ctx execution.Context, resolve func() (execution.HandlerMeta, error), input *execution.Input, bind ArgumentBinder) (finalErr error) {
+func (p *Pipeline) execute(ctx execution.Context, resolve func() (execution.HandlerMeta, error), input *execution.Input) (finalErr error) {
 	// Detach transport data after completion hooks and before runtime settlement.
 	defer input.Close()
 	// Release per-execution values after completion.
@@ -90,16 +81,8 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func() (execution.Hand
 
 	// AfterCompletion은 응답 처리가 끝난 뒤 실행한다.
 	defer func() {
-		for i := len(routeInterceptors) - 1; i >= 0; i-- {
-			if err := callAfterCompletion(routeInterceptors[i], interceptorCtx, globalMeta, finalErr); err != nil {
-				finalErr = errors.Join(finalErr, err)
-			}
-		}
-		for i := len(p.interceptors) - 1; i >= 0; i-- {
-			if err := callAfterCompletion(p.interceptors[i], interceptorCtx, globalMeta, finalErr); err != nil {
-				finalErr = errors.Join(finalErr, err)
-			}
-		}
+		finalErr = execution.AfterCompletion(interceptorCtx, globalMeta, routeInterceptors, finalErr)
+		finalErr = execution.AfterCompletion(interceptorCtx, globalMeta, p.interceptors, finalErr)
 	}()
 
 	// Error rendering runs before this deferred flush. AfterCompletion then sees
@@ -152,7 +135,7 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func() (execution.Hand
 	// 패닉과 모든 조기 반환도 응답 전에 동일한 마무리 처리를 거친다.
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			finalErr = panicAsError(recovered)
+			finalErr = execution.PanicError(recovered)
 		}
 		if !beforeResponseCalled {
 			var beforeErr error
@@ -214,12 +197,7 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func() (execution.Hand
 	paramMetas := resolver.HandlerParameters(meta, meta.PathKeys)
 
 	// 인자 리졸버 체인 실행
-	var args []any
-	if bind != nil {
-		args, err = bind(paramMetas)
-	} else {
-		args, err = p.resolveArguments(ctx, input, paramMetas)
-	}
+	args, err := p.resolveArguments(ctx, input, paramMetas)
 	if err != nil {
 		return err
 	}
@@ -230,7 +208,7 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func() (execution.Hand
 		return err
 	}
 
-	returnedErr = findReturnedError(results)
+	returnedErr = invoker.ReturnedError(results)
 	if returnedErr != nil {
 		return returnedErr
 	}
@@ -269,18 +247,6 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func() (execution.Hand
 	return nil
 }
 
-func findReturnedError(results []any) error {
-	for _, result := range results {
-		if isNilResult(result) {
-			continue
-		}
-		if err, ok := result.(error); ok {
-			return err
-		}
-	}
-	return nil
-}
-
 func runBeforeResponse(
 	ctx contextview.Ctx,
 	meta execution.HandlerMeta,
@@ -288,50 +254,12 @@ func runBeforeResponse(
 	globalInterceptors []core.Interceptor,
 	executionErr error,
 ) (error, error) {
-	finalErr := executionErr
-	var responseErr error
-	for i := len(routeInterceptors) - 1; i >= 0; i-- {
-		if err := callBeforeResponse(routeInterceptors[i], ctx, meta, finalErr); err != nil {
-			finalErr = errors.Join(finalErr, err)
-			responseErr = err
-		}
+	finalErr, routeErr := execution.BeforeResponse(ctx, meta, routeInterceptors, executionErr)
+	finalErr, globalErr := execution.BeforeResponse(ctx, meta, globalInterceptors, finalErr)
+	if globalErr != nil {
+		return finalErr, globalErr
 	}
-	for i := len(globalInterceptors) - 1; i >= 0; i-- {
-		if err := callBeforeResponse(globalInterceptors[i], ctx, meta, finalErr); err != nil {
-			finalErr = errors.Join(finalErr, err)
-			responseErr = err
-		}
-	}
-	return finalErr, responseErr
-}
-
-func callBeforeResponse(
-	interceptor core.Interceptor,
-	ctx contextview.Ctx,
-	meta execution.HandlerMeta,
-	executionErr error,
-) (err error) {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			err = panicAsError(recovered)
-		}
-	}()
-	return interceptor.BeforeResponse(ctx, meta.View(), executionErr)
-}
-
-func callAfterCompletion(
-	interceptor core.Interceptor,
-	ctx contextview.Ctx,
-	meta execution.HandlerMeta,
-	executionErr error,
-) (err error) {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			err = panicAsError(recovered)
-		}
-	}()
-	interceptor.AfterCompletion(ctx, meta.View(), executionErr)
-	return nil
+	return finalErr, routeErr
 }
 
 func callHandleErrorReturn(
@@ -342,7 +270,7 @@ func callHandleErrorReturn(
 ) (handled bool, err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			err = panicAsError(recovered)
+			err = execution.PanicError(recovered)
 		}
 	}()
 	return p.handleErrorReturn(ctx, input, returnedErr)
@@ -356,7 +284,7 @@ func callHandleExecutionError(
 ) (err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			err = panicAsError(recovered)
+			err = execution.PanicError(recovered)
 		}
 	}()
 	return p.handleExecutionError(ctx, input, executionErr)
@@ -366,24 +294,8 @@ func buildParameterMeta(method reflect.Method, pathKeys []string) []resolver.Par
 	return resolver.Parameters(method, pathKeys)
 }
 
-// isNilResult는 명시적으로 nil을 검사합니다. error 인터페이스에 nil이 담긴 경우처럼
-// 타입 정보가 있으나 값이 nil인 경우까지 포괄적으로 처리한다.
-func isNilResult(v any) bool {
-	if v == nil {
-		return true
-	}
-
-	rv := reflect.ValueOf(v)
-	switch rv.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Map, reflect.Pointer, reflect.Slice, reflect.Interface:
-		return rv.IsNil()
-	default:
-		return false
-	}
-}
-
 func (p *Pipeline) handleErrorReturn(ctx execution.Context, input *execution.Input, returnedErr error) (bool, error) {
-	if isNilResult(returnedErr) {
+	if invoker.IsNilResult(returnedErr) {
 		return false, nil
 	}
 	resultType := reflect.TypeOf(returnedErr)
@@ -400,7 +312,7 @@ func (p *Pipeline) handleErrorReturn(ctx execution.Context, input *execution.Inp
 
 func (p *Pipeline) handleSuccessReturn(ctx execution.Context, input *execution.Input, results []any) error {
 	for _, result := range results {
-		if isNilResult(result) {
+		if invoker.IsNilResult(result) {
 			continue
 		}
 		if _, isErr := result.(error); isErr {
@@ -495,11 +407,4 @@ func stageResponseWriter(input *execution.Input) *stagedResponseWriter {
 	staged := newStagedResponseWriter(rw)
 	response.SetResponseWriter(staged)
 	return staged
-}
-
-func panicAsError(recovered any) error {
-	if err, ok := recovered.(error); ok {
-		return fmt.Errorf("panic recovered: %w\n%s", err, debug.Stack())
-	}
-	return fmt.Errorf("panic recovered: %v\n%s", recovered, debug.Stack())
 }
