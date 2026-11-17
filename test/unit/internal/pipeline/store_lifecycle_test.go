@@ -9,13 +9,11 @@ import (
 	httpcontract "github.com/NARUBROWN/spine/contract/http"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
-	"github.com/NARUBROWN/spine/internal/event/consumer"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/transport"
-	"github.com/NARUBROWN/spine/internal/ws"
 	"github.com/NARUBROWN/spine/pkg/spine"
 )
 
@@ -53,23 +51,26 @@ func (o *storeObserver) AfterCompletion(ctx spine.Ctx, _ core.HandlerMeta, _ err
 }
 
 func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
-	contexts := map[string]func() execution.Context{
-		"http": func() execution.Context {
-			return transport.NewHTTPContext(storeScope{}, 0)
+	contexts := map[string]func() *execution.Input{
+		"http": func() *execution.Input {
+			request := transport.NewHTTPContext(storeScope{}, 0)
+			return execution.NewInput(execution.Sources{HTTPRequest: request, HTTPResponse: request, Routing: request})
 		},
-		"event": func() execution.Context {
-			return consumer.NewRequestContext(context.Background(), &consumer.Message{EventName: "probe"})
+		"event": func() *execution.Input {
+			return execution.NewInput(execution.Sources{Consumer: &execution.ConsumerMessage{Name: "probe", Payload: make([]byte, 1024)}})
 		},
-		"websocket": func() execution.Context {
-			return ws.NewWSExecutionContext(context.Background(), "conn", "/probe", 1, nil, func(int, []byte) error { return nil })
+		"websocket": func() *execution.Input {
+			return execution.NewInput(execution.Sources{WebSocketRequest: storeHandshake{}, ConnectionID: "conn", WebSocket: &execution.WebSocketMessage{Kind: 1, Payload: make([]byte, 1024)}})
 		},
 	}
+
 	for name, create := range contexts {
 		t.Run(name, func(t *testing.T) {
 			for _, outcome := range []string{"success", "error", "panic"} {
 				t.Run(outcome, func(t *testing.T) {
-					ctx := create()
-					public := execution.NewContext(ctx)
+					ctx := execution.NewState(context.Background())
+					input := create()
+					public := execution.NewContext(ctx, input)
 					if _, ok := public.HTTPRequestContext(); ok != (name == "http") {
 						t.Fatal("전송 종류와 HTTP 뷰 지원 여부가 다릅니다")
 					}
@@ -93,7 +94,7 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 							}
 						}
 					}
-					var retainedHandler spine.Ctx = execution.NewContext(ctx)
+					var retainedHandler spine.Ctx = execution.NewContext(ctx, input)
 					observer := &storeObserver{t: t}
 					callback := func() error {
 						switch outcome {
@@ -105,12 +106,21 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 						return nil
 					}
 					routes := router.NewRouter()
-					routes.Register(ctx.Method(), ctx.Path(), execution.HandlerMeta{Callback: reflect.ValueOf(callback)})
+					meta := execution.HandlerMeta{Callback: reflect.ValueOf(callback)}
 					run := pipeline.NewPipeline(routes, invoker.NewInvoker(container.New()))
 					run.AddInterceptor(observer)
-					err := run.Execute(ctx)
+					err := run.ExecuteRegistered(ctx, meta, input)
 					if (err != nil) != (outcome != "success") || !observer.completed {
 						t.Fatalf("err=%v completed=%v", err, observer.completed)
+					}
+					if _, ok := public.HTTPRequestContext(); ok {
+						t.Fatal("HTTP input retained")
+					}
+					if _, ok := public.WebSocket(); ok {
+						t.Fatal("WS input retained")
+					}
+					if _, ok := input.ConsumerMessage(); ok {
+						t.Fatal("consumer input retained")
 					}
 					observer.retained.ExecutionContext().Set("late", make([]byte, 1024))
 					for _, key := range []string{"payload", "completion", "late"} {
@@ -126,3 +136,9 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 		})
 	}
 }
+
+type storeHandshake struct {
+	execution.WebSocketRequestContext
+}
+
+func (storeHandshake) Path() string { return "/probe" }

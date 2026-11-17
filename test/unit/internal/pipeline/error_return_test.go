@@ -60,7 +60,7 @@ func TestExecute_ErrorReturnPreservesSelectedError(t *testing.T) {
 					return nil
 				},
 			})
-			got := p.Execute(newTestExecutionContext())
+			got := p.Execute(newTestExecutionContext(), httpTestInput(newTestExecutionContext()))
 			if !errors.Is(got, tt.want) || handled != tt.want {
 				t.Fatalf("첫 유효 오류와 구체 타입을 보존해야 합니다: got=%v handled=%v want=%v", got, handled, tt.want)
 			}

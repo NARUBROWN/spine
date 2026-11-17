@@ -48,26 +48,28 @@ func (p *Pipeline) AddReturnValueHandler(handlers ...handler.ReturnValueHandler)
 }
 
 // Execute는 하나의 요청 실행 전체를 소유합니다.
-func (p *Pipeline) Execute(ctx execution.Context) error {
-	return p.execute(ctx, p.router.Route)
+func (p *Pipeline) Execute(ctx execution.Context, input *execution.Input) error {
+	return p.execute(ctx, func() (execution.HandlerMeta, error) { return p.router.Route(input.Routing()) }, input)
 }
 
 // ExecuteRegistered는 이미 전송 계층에서 선택한 핸들러를 실행합니다.
-func (p *Pipeline) ExecuteRegistered(ctx execution.Context, meta execution.HandlerMeta) error {
-	return p.execute(ctx, func(execution.Context) (execution.HandlerMeta, error) {
+func (p *Pipeline) ExecuteRegistered(ctx execution.Context, meta execution.HandlerMeta, input *execution.Input) error {
+	return p.execute(ctx, func() (execution.HandlerMeta, error) {
 		return meta, nil
-	})
+	}, input)
 }
 
-func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context) (execution.HandlerMeta, error)) (finalErr error) {
-	// 응답 처리와 완료 훅이 끝난 뒤 저장값의 참조를 해제합니다.
+func (p *Pipeline) execute(ctx execution.Context, resolve func() (execution.HandlerMeta, error), input *execution.Input) (finalErr error) {
+	// Detach transport data after completion hooks and before runtime settlement.
+	defer input.Close()
+	// Release per-execution values after completion.
 	if store, ok := ctx.(interface{ ReleaseStore() }); ok {
 		defer store.ReleaseStore()
 	}
 	globalMeta := execution.HandlerMeta{}
 	var interceptorCtx contextview.Ctx
 	if len(p.interceptors) > 0 {
-		interceptorCtx = execution.NewContext(ctx)
+		interceptorCtx = execution.NewContext(ctx, input)
 	}
 	var routeInterceptors []core.Interceptor
 	var globalFinalizers []core.Interceptor
@@ -76,7 +78,7 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 	var returnedErr error
 	var interceptorErr error
 	beforeResponseCalled := false
-	responseStage := stageResponseWriter(ctx)
+	responseStage := stageResponseWriter(input)
 
 	// AfterCompletion은 응답 처리가 끝난 뒤 실행한다.
 	defer func() {
@@ -98,7 +100,7 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 		if responseStage == nil {
 			return
 		}
-		ctx.(execution.HTTPResponseContext).SetResponseWriter(responseStage.target)
+		input.HTTPResponse().SetResponseWriter(responseStage.target)
 		if err := responseStage.flush(); err != nil {
 			finalErr = errors.Join(finalErr, fmt.Errorf("flush staged response: %w", err))
 			if !responseStage.target.IsCommitted() {
@@ -122,7 +124,7 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 		}
 
 		if returnedErr != nil && interceptorErr == nil {
-			handled, err := callHandleErrorReturn(p, ctx, returnedErr)
+			handled, err := callHandleErrorReturn(p, ctx, input, returnedErr)
 			if err != nil {
 				finalErr = errors.Join(finalErr, err)
 			} else if handled {
@@ -134,7 +136,7 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 		if interceptorErr != nil {
 			responseErr = interceptorErr
 		}
-		if err := callHandleExecutionError(p, ctx, responseErr); err != nil {
+		if err := callHandleExecutionError(p, ctx, input, responseErr); err != nil {
 			finalErr = errors.Join(finalErr, err)
 		}
 	}()
@@ -168,9 +170,9 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 	}
 
 	// 라우터가 실행 대상을 결정
-	meta, err := resolve(ctx)
+	meta, err := resolve()
 	if err != nil {
-		if _, ok := ctx.(execution.HTTPResponseContext); ok {
+		if input.HTTPResponse() != nil {
 			switch {
 			case errors.Is(err, router.ErrRouteNotFound):
 				return &httpfailure.HTTPError{Status: http.StatusNotFound, Message: err.Error(), Cause: err}
@@ -184,7 +186,7 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 
 	routeInterceptors = meta.Interceptors
 	if interceptorCtx == nil && len(routeInterceptors) > 0 {
-		interceptorCtx = execution.NewContext(ctx)
+		interceptorCtx = execution.NewContext(ctx, input)
 	}
 
 	// 라우트 인터셉터는 요청 본문과 멀티파트를 읽기 전에 실행한다.
@@ -204,7 +206,7 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 	paramMetas := resolver.HandlerParameters(meta, meta.PathKeys)
 
 	// 인자 리졸버 체인 실행
-	args, err := p.resolveArguments(ctx, paramMetas)
+	args, err := p.resolveArguments(ctx, input, paramMetas)
 	if err != nil {
 		return err
 	}
@@ -223,7 +225,7 @@ func (p *Pipeline) execute(ctx execution.Context, resolve func(execution.Context
 	if responseStage != nil {
 		responseStage.checkpointSuccessResponse()
 	}
-	if err := p.handleSuccessReturn(ctx, results); err != nil {
+	if err := p.handleSuccessReturn(ctx, input, results); err != nil {
 		return err
 	}
 
@@ -322,6 +324,7 @@ func callAfterCompletion(
 func callHandleErrorReturn(
 	p *Pipeline,
 	ctx execution.Context,
+	input *execution.Input,
 	returnedErr error,
 ) (handled bool, err error) {
 	defer func() {
@@ -329,12 +332,13 @@ func callHandleErrorReturn(
 			err = panicAsError(recovered)
 		}
 	}()
-	return p.handleErrorReturn(ctx, returnedErr)
+	return p.handleErrorReturn(ctx, input, returnedErr)
 }
 
 func callHandleExecutionError(
 	p *Pipeline,
 	ctx execution.Context,
+	input *execution.Input,
 	executionErr error,
 ) (err error) {
 	defer func() {
@@ -342,7 +346,7 @@ func callHandleExecutionError(
 			err = panicAsError(recovered)
 		}
 	}()
-	return p.handleExecutionError(ctx, executionErr)
+	return p.handleExecutionError(ctx, input, executionErr)
 }
 
 func buildParameterMeta(method reflect.Method, pathKeys []string) []resolver.ParameterMeta {
@@ -365,14 +369,14 @@ func isNilResult(v any) bool {
 	}
 }
 
-func (p *Pipeline) handleErrorReturn(ctx execution.Context, returnedErr error) (bool, error) {
+func (p *Pipeline) handleErrorReturn(ctx execution.Context, input *execution.Input, returnedErr error) (bool, error) {
 	if isNilResult(returnedErr) {
 		return false, nil
 	}
 	resultType := reflect.TypeOf(returnedErr)
 	for _, h := range p.returnHandlers {
 		if h.Supports(resultType) {
-			if err := h.Handle(returnedErr, ctx); err != nil {
+			if err := h.Handle(returnedErr, ctx, input); err != nil {
 				return false, err
 			}
 			return true, nil
@@ -381,7 +385,7 @@ func (p *Pipeline) handleErrorReturn(ctx execution.Context, returnedErr error) (
 	return false, fmt.Errorf("no ReturnValueHandler can handle the error return value (%s)", resultType.String())
 }
 
-func (p *Pipeline) handleSuccessReturn(ctx execution.Context, results []any) error {
+func (p *Pipeline) handleSuccessReturn(ctx execution.Context, input *execution.Input, results []any) error {
 	for _, result := range results {
 		if isNilResult(result) {
 			continue
@@ -396,7 +400,7 @@ func (p *Pipeline) handleSuccessReturn(ctx execution.Context, results []any) err
 				continue
 			}
 
-			if err := h.Handle(result, ctx); err != nil {
+			if err := h.Handle(result, ctx, input); err != nil {
 				return err
 			}
 			return nil
@@ -410,7 +414,7 @@ func (p *Pipeline) handleSuccessReturn(ctx execution.Context, results []any) err
 	return nil
 }
 
-func (p *Pipeline) resolveArguments(ctx execution.Context, paramMetas []resolver.ParameterMeta) ([]any, error) {
+func (p *Pipeline) resolveArguments(ctx execution.Context, input *execution.Input, paramMetas []resolver.ParameterMeta) ([]any, error) {
 	args := make([]any, 0, len(paramMetas))
 
 	for _, paramMeta := range paramMetas {
@@ -421,7 +425,7 @@ func (p *Pipeline) resolveArguments(ctx execution.Context, paramMetas []resolver
 				continue
 			}
 
-			val, err := r.Resolve(ctx, paramMeta)
+			val, err := r.Resolve(ctx, paramMeta, input)
 			if err != nil {
 				return nil, err
 			}
@@ -446,8 +450,9 @@ func (p *Pipeline) AddPostExecutionHook(hook hook.PostExecutionHook) {
 	p.postHooks = append(p.postHooks, hook)
 }
 
-func (p *Pipeline) handleExecutionError(ctx execution.Context, err error) error {
-	response, ok := ctx.(execution.HTTPResponseContext)
+func (p *Pipeline) handleExecutionError(ctx execution.Context, input *execution.Input, err error) error {
+	response := input.HTTPResponse()
+	ok := response != nil
 	if !ok {
 		return nil
 	}
@@ -464,8 +469,9 @@ func (p *Pipeline) handleExecutionError(ctx execution.Context, err error) error 
 	return handler.WriteErrorResponse(rw, err)
 }
 
-func stageResponseWriter(ctx execution.Context) *stagedResponseWriter {
-	response, ok := ctx.(execution.HTTPResponseContext)
+func stageResponseWriter(input *execution.Input) *stagedResponseWriter {
+	response := input.HTTPResponse()
+	ok := response != nil
 	if !ok {
 		return nil
 	}

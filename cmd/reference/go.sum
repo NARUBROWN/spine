@@ -4,8 +4,12 @@ github.com/NARUBROWN/spine-gorilla-platform v0.2.0-preview.2 h1:LF2lSFsOh+1k1Q/G
 github.com/NARUBROWN/spine-gorilla-platform v0.2.0-preview.2/go.mod h1:QlMfNA9LsoNPt8nMSAw7s1uZ7YutZ5l/viGpwF9jK2g=
 github.com/NARUBROWN/spine-kafka-platform v0.0.0-20261102223502-7b4626c6f222 h1:G4H+V2vBUZU0BPuySjpcgUxj6eFyY6lFgPhJcWZUfPI=
 github.com/NARUBROWN/spine-kafka-platform v0.0.0-20261102223502-7b4626c6f222/go.mod h1:QUDgjIv9i9kYs1yaRZBIW8buCKibea0AQsltWYGLH/o=
+github.com/NARUBROWN/spine-kafka-platform v0.3.0-preview.1 h1:gcLkpm1cTc7p834r86ba8Jj7oV6s6BbaGandBXwz+eg=
+github.com/NARUBROWN/spine-kafka-platform v0.3.0-preview.1/go.mod h1:VjP82f3XdQ4M5mZtZj36rIKWEv23mDixImjuxW6CdjQ=
 github.com/NARUBROWN/spine-rabbitmq-platform v0.0.0-20261102223515-967e684aff1c h1:W71H5PYGD/y8ScW/5nMIFLKDLMPnF//qkWyAMNk7Rek=
 github.com/NARUBROWN/spine-rabbitmq-platform v0.0.0-20261102223515-967e684aff1c/go.mod h1:Bxt3rhbu2cpHpctuQ6ux/yCfTLKDL3W1wjJ+LlrlZl8=
+github.com/NARUBROWN/spine-rabbitmq-platform v0.3.0-preview.1 h1:ztx2H59GnaeyezsLFgoyi65u7VcRa3gsbCXHvFbSsWY=
+github.com/NARUBROWN/spine-rabbitmq-platform v0.3.0-preview.1/go.mod h1:bZ1cVvsSyOqHDKSM42YYi04cCxvPOE/IJkDSqLPOAss=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=

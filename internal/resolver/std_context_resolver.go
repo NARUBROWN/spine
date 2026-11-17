@@ -13,6 +13,6 @@ func (r *StdContextResolver) Supports(parameterMeta ParameterMeta) bool {
 	return parameterMeta.Type == reflect.TypeFor[context.Context]()
 }
 
-func (r *StdContextResolver) Resolve(ctx execution.Context, parameterMeta ParameterMeta) (any, error) {
+func (r *StdContextResolver) Resolve(ctx execution.Context, parameterMeta ParameterMeta, source *execution.Input) (any, error) {
 	return ctx.Context(), nil
 }

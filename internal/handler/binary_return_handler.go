@@ -19,7 +19,7 @@ func (h *BinaryReturnHandler) Supports(returnType reflect.Type) bool {
 	return returnType == reflect.TypeFor[httpx.Binary]()
 }
 
-func (h *BinaryReturnHandler) Handle(value any, ctx execution.Context) error {
+func (h *BinaryReturnHandler) Handle(value any, ctx execution.Context, source *execution.Input) error {
 	var binary httpx.Binary
 	switch v := value.(type) {
 	case httpx.Binary:
@@ -33,7 +33,7 @@ func (h *BinaryReturnHandler) Handle(value any, ctx execution.Context) error {
 		return fmt.Errorf("BinaryReturnValueHandler: value is not an httpx.Binary")
 	}
 
-	rw, writerErr := responseWriter(ctx)
+	rw, writerErr := responseWriter(ctx, source)
 	if writerErr != nil {
 		return writerErr
 	}

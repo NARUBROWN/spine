@@ -21,7 +21,7 @@ func (c *testExecutionContext) Get(key string) (any, bool)   { v, ok := c.store[
 
 func TestNewContext_ReadsFromExecutionContext(t *testing.T) {
 	ec := &testExecutionContext{store: map[string]any{"userID": 7}}
-	ctx := NewContext(ec)
+	ctx := NewContext(ec, httpTestInput(ec))
 
 	got, ok := ctx.Get("userID")
 	if !ok || got.(int) != 7 {

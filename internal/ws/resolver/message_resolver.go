@@ -26,22 +26,22 @@ func (*MessageResolver) Supports(p resolver.ParameterMeta) bool {
 	_, ok := MessagePayload(p.Type)
 	return ok
 }
-func (r *MessageResolver) Resolve(ctx execution.Context, p resolver.ParameterMeta) (any, error) {
-	message, ok := ctx.(execution.WebSocketContext)
+func (r *MessageResolver) Resolve(ctx execution.Context, p resolver.ParameterMeta, source *execution.Input) (any, error) {
+	message, ok := source.WebSocketMessage()
 	if !ok {
 		return nil, fmt.Errorf("input.Message requires a WebSocket message")
 	}
 	t, _ := MessagePayload(p.Type)
 	result := reflect.New(p.Type).Elem()
 	if t == reflect.TypeFor[[]byte]() {
-		result.FieldByName("Value").SetBytes(slices.Clone(message.Payload()))
+		result.FieldByName("Value").SetBytes(slices.Clone(message.Payload))
 		return result.Interface(), nil
 	}
 	if t.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("input.Message requires a struct or []byte payload")
 	}
 	value := reflect.New(t)
-	if err := jsondecode.Unmarshal(slices.Clone(message.Payload()), value.Interface()); err != nil {
+	if err := jsondecode.Unmarshal(slices.Clone(message.Payload), value.Interface()); err != nil {
 		return nil, fmt.Errorf("decode WebSocket message: %w", err)
 	}
 	if err := resolver.ValidateDTO(ctx.Context(), r.Validator, value.Elem().Interface()); err != nil {

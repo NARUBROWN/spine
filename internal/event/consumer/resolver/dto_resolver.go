@@ -19,13 +19,13 @@ func (r *DTOResolver) Supports(meta resolver.ParameterMeta) bool {
 	return meta.Type.Kind() == reflect.Struct
 }
 
-func (r *DTOResolver) Resolve(ctx execution.Context, meta resolver.ParameterMeta) (any, error) {
-	consumerCtx, ok := ctx.(execution.ConsumerRequestContext)
+func (r *DTOResolver) Resolve(ctx execution.Context, meta resolver.ParameterMeta, source *execution.Input) (any, error) {
+	message, ok := source.ConsumerMessage()
 	if !ok {
-		return nil, fmt.Errorf("context is not a ConsumerRequestContext")
+		return nil, fmt.Errorf("consumer message input is not available")
 	}
 
-	payload := consumerCtx.Payload()
+	payload := message.Payload
 	if payload == nil {
 		return nil, fmt.Errorf("cannot create DTO because payload is empty")
 	}

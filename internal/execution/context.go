@@ -7,19 +7,34 @@ import (
 	httpcontract "github.com/NARUBROWN/spine/contract/http"
 )
 
-// Context는 전송 상태와 실행 파이프라인의 제어를 함께 제공합니다.
+// Context is the state shared by one pipeline execution.
+// Transport inputs are passed separately in Input.
 type Context interface {
 	Context() context.Context
+	Set(string, any)
+	Get(string) (any, bool)
+}
+
+// RoutingContext is the HTTP router's input, not a common execution requirement.
+type RoutingContext interface {
 	Method() string
 	Path() string
-	Params() map[string]string
-	Header(name string) string
-	PathKeys() []string
-	SetRoute(params map[string]string, pathKeys []string)
-	Queries() map[string][]string
-	Set(key string, value any)
-	Get(key string) (any, bool)
+	SetRoute(map[string]string, []string)
 }
+
+// State owns only per-execution values and the caller's cancellation context.
+type State struct {
+	Store
+	ctx context.Context
+}
+
+func NewState(ctx context.Context) *State {
+	if ctx == nil {
+		panic("execution context is nil")
+	}
+	return &State{ctx: ctx}
+}
+func (s *State) Context() context.Context { return s.ctx }
 
 type HTTPRequestContext interface {
 	Context() context.Context
@@ -41,21 +56,8 @@ type HTTPResponseContext interface {
 	SetResponseWriter(httpcontract.ResponseWriter)
 }
 
-type ConsumerRequestContext interface {
-	EventName() string
-	Payload() []byte
-}
-
-type WebSocketContext interface {
-	Context
-	ConnID() string
-	MessageType() int
-	Payload() []byte
-}
-
 // WebSocketRequestContext는 내부 upgrade 요청의 불변 정보 계약입니다.
 type WebSocketRequestContext interface {
-	Context() context.Context
 	Path() string
 	Header(name string) string
 	Headers() map[string][]string

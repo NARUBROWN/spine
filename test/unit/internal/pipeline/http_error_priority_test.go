@@ -69,7 +69,7 @@ func TestHTTPErrorClassificationIsIndependentOfOrigin(t *testing.T) {
 					ctx := newTestExecutionContext()
 					writer := &testResponseWriter{}
 					ctx.SetResponseWriter(writer)
-					err := p.Execute(ctx)
+					err := p.Execute(ctx, httpTestInput(ctx))
 					if !errors.Is(err, tc.err) || writer.status != tc.status || writer.writes != 1 {
 						t.Fatalf("오류 발생 위치에 따라 응답이 달라졌습니다: status=%d writes=%d err=%v", writer.status, writer.writes, err)
 					}
@@ -117,7 +117,7 @@ func TestBeforeResponseErrorOverridesHandlerAndPendingResponse(t *testing.T) {
 			override := httperr.Unauthorized("interceptor error")
 			var completed error
 			p.AddInterceptor(&testInterceptor{name: "override", events: &events, beforeErr: override, after: func(_ core.HandlerMeta, err error) { completed = err }})
-			err := p.Execute(ctx)
+			err := p.Execute(ctx, httpTestInput(ctx))
 			if !errors.Is(err, override) || !errors.Is(completed, override) || writer.status != 401 || writer.writes != 1 ||
 				string(writer.body.(json.RawMessage)) != `{"message":"interceptor error"}` {
 				t.Fatalf("인터셉터 오류를 최종 응답에 우선해야 합니다: status=%d writes=%d body=%s err=%v", writer.status, writer.writes, writer.body, err)
@@ -146,7 +146,7 @@ func TestLastBeforeResponseErrorDeterminesHTTPResponse(t *testing.T) {
 	ctx := newTestExecutionContext()
 	writer := &testResponseWriter{}
 	ctx.SetResponseWriter(writer)
-	err := p.Execute(ctx)
+	err := p.Execute(ctx, httpTestInput(ctx))
 	if !errors.Is(err, original) || !errors.Is(err, routeErr) || !errors.Is(err, globalErr) || writer.status != 429 {
 		t.Fatalf("마지막 인터셉터 오류를 응답에 적용하고 모든 원인을 보존해야 합니다: status=%d err=%v", writer.status, err)
 	}
@@ -165,7 +165,7 @@ func TestInvalidInterceptorHTTPErrorDoesNotRestoreHandlerResponse(t *testing.T) 
 			ctx := newTestExecutionContext()
 			writer := &testResponseWriter{}
 			ctx.SetResponseWriter(writer)
-			err := p.Execute(ctx)
+			err := p.Execute(ctx, httpTestInput(ctx))
 			if !errors.Is(err, original) || !errors.Is(err, override) || writer.status != 500 || writer.writes != 1 ||
 				!strings.Contains(err.Error(), fmt.Sprintf("invalid HTTP error status %d", status)) ||
 				string(writer.body.(json.RawMessage)) != `{"message":"Internal server error"}` {

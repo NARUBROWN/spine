@@ -20,7 +20,7 @@ func (h *RedirectReturnValueHandler) Supports(returnType reflect.Type) bool {
 	return returnType == reflect.TypeFor[httpx.Redirect]()
 }
 
-func (h *RedirectReturnValueHandler) Handle(value any, ctx execution.Context) error {
+func (h *RedirectReturnValueHandler) Handle(value any, ctx execution.Context, source *execution.Input) error {
 	var redirect httpx.Redirect
 	switch v := value.(type) {
 	case httpx.Redirect:
@@ -34,7 +34,7 @@ func (h *RedirectReturnValueHandler) Handle(value any, ctx execution.Context) er
 		return fmt.Errorf("RedirectReturnValueHandler: value is not an httpx.Redirect")
 	}
 
-	rw, writerErr := responseWriter(ctx)
+	rw, writerErr := responseWriter(ctx, source)
 	if writerErr != nil {
 		return writerErr
 	}

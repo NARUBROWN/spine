@@ -12,6 +12,7 @@ import (
 	eventadapter "github.com/NARUBROWN/spine/contract/event"
 	"github.com/NARUBROWN/spine/internal/configuration"
 	"github.com/NARUBROWN/spine/internal/event/cleanup"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 )
 
@@ -191,11 +192,15 @@ func (r *Runtime) Start(ctx context.Context) {
 						continue
 					}
 
-					// 컨슈머 실행 컨텍스트 생성
-					reqCtx := NewRequestContext(ctx, msg)
-
-					// 핸들러 실행
-					if err := r.pipeline.ExecuteRegistered(reqCtx, reg.Meta); err != nil {
+					// Delivery settlement stays here; the pipeline sees data only.
+					executionErr := func() error {
+						messageCtx, cancel := context.WithCancel(ctx)
+						defer cancel()
+						state := execution.NewState(messageCtx)
+						input := execution.NewInput(execution.Sources{Consumer: &execution.ConsumerMessage{Name: reg.Topic, Payload: msg.Payload, Metadata: msg.Metadata}})
+						return r.pipeline.ExecuteRegistered(state, reg.Meta, input)
+					}()
+					if err := executionErr; err != nil {
 						log.Printf(
 							"[Event Consumer] Handler execution failed (%s): %v",
 							reg.Topic,

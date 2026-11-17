@@ -45,7 +45,7 @@ type MultipartFields = contextview.MultipartFields
 
 // WebSocketView는 handshake 요청과 현재 메시지 정보를 조회합니다.
 // upgrade 전에는 ConnID가 빈 문자열이고 MessageType은 0, Payload는 nil입니다.
-// Payload는 독립 사본을 반환합니다.
+// Payload는 독립 사본을 반환합니다. 실행 완료 후 보관된 뷰는 입력을 노출하지 않습니다.
 type WebSocketView = contextview.WebSocketView
 
 // WebSocketRequestView는 upgrade 요청에서 보존한 불변 요청 정보입니다.

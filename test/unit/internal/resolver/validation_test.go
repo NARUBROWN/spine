@@ -44,12 +44,12 @@ func TestHTTPDTOValidationRunsAfterBinding(t *testing.T) {
 				pm.Type = reflect.TypeFor[httpinput.Body[formDTO]]()
 				r = &FormDTOResolver{Validator: validator}
 			}
-			value, err := r.Resolve(ctx, pm)
+			value, err := r.Resolve(ctx, pm, httpTestInput(ctx))
 			if calls != 1 || (reject && (value != nil || !errors.Is(err, failure))) || (!reject && (err != nil || value == nil)) {
 				t.Fatalf("폼=%v 거부=%v: 호출=%d 값=%v 오류=%v", isForm, reject, calls, value, err)
 			}
 			ctx.bindErr = errors.New("binding failed")
-			if _, err := r.Resolve(ctx, pm); !errors.Is(err, ctx.bindErr) || calls != 1 {
+			if _, err := r.Resolve(ctx, pm, httpTestInput(ctx)); !errors.Is(err, ctx.bindErr) || calls != 1 {
 				t.Fatalf("바인딩 실패 뒤 검증기를 호출하면 안 됩니다: %v", err)
 			}
 		}

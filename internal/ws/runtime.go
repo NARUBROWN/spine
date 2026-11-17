@@ -21,6 +21,7 @@ import (
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/httpfailure"
 	"github.com/NARUBROWN/spine/internal/pipeline"
+	"github.com/NARUBROWN/spine/internal/ws/sendctx"
 )
 
 const (
@@ -214,7 +215,7 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 		cancelHandshake()
 	}()
 	handshakeContext := newWebSocketRequestSnapshot(req.WithContext(handshakeCtx))
-	if err := r.preHandshake(handshakeContext, reg); err != nil {
+	if err := r.preHandshake(handshakeCtx, handshakeContext, reg); err != nil {
 		writeHandshakeRejection(w, err)
 		log.Printf("[WS] Handshake rejected (path=%s): %v", reg.Path, err)
 		return
@@ -285,6 +286,7 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 		}
 	}()
 
+	session := session{ctx: connCtx, id: connID, request: handshakeContext}
 	// 연결당 루프
 	for {
 		msgType, payload, err := conn.ReadMessage()
@@ -293,17 +295,17 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 			return
 		}
 
-		ctx := NewWSExecutionContext(
-			connCtx,
-			connID,
-			req.URL.Path,
-			msgType,
-			payload,
-			sendFn,
-			handshakeContext,
-		)
-
-		if err := r.pipeline.ExecuteRegistered(ctx, reg.Meta); err != nil {
+		// Each received message has its own cancellation and input lease.
+		err = func() error {
+			messageCtx, cancel := context.WithCancel(session.ctx)
+			defer cancel()
+			messageCtx, release := sendctx.Bind(messageCtx, sendFn)
+			defer release()
+			state := execution.NewState(messageCtx)
+			input := execution.NewInput(execution.Sources{WebSocketRequest: session.request, ConnectionID: session.id, WebSocket: &execution.WebSocketMessage{Kind: msgType, Payload: payload}})
+			return r.pipeline.ExecuteRegistered(state, reg.Meta, input)
+		}()
+		if err != nil {
 			log.Printf("[WS] Handler failed (conn=%p): %v", &connID, err)
 			code, reason := wsadapter.CloseInternalServerErr, "handler error"
 			if _, ok := validation.AsError(err); ok {
@@ -318,10 +320,12 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 	}
 }
 
-func (r *Runtime) preHandshake(ctx execution.WebSocketRequestContext, reg Registration) error {
-	executionCtx := NewWSExecutionContext(ctx.Context(), "", ctx.Path(), 0, nil, nil, ctx)
-	defer executionCtx.(interface{ ReleaseStore() }).ReleaseStore()
-	publicCtx := execution.NewContext(executionCtx)
+func (r *Runtime) preHandshake(ctx context.Context, request execution.WebSocketRequestContext, reg Registration) error {
+	executionCtx := execution.NewState(ctx)
+	defer executionCtx.ReleaseStore()
+	input := execution.NewInput(execution.Sources{WebSocketRequest: request})
+	defer input.Close()
+	publicCtx := execution.NewContext(executionCtx, input)
 	for _, interceptor := range r.handshakeInterceptors {
 		if interceptor == nil {
 			continue

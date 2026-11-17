@@ -58,10 +58,26 @@ its own context and must be canceled and awaited by its owner. Existing
 `ws.Send(ctx, ...)` remains a connection-local migration API; a missing sender
 now returns ErrConnectionNotFound instead of reporting success.
 
-This change does not remove the internal WS execution adapter. A broader split
-of common execution state, connection sessions and received input is separate
-from the public callback/Sender API. Connection-start and disconnect callbacks
-are not introduced by this change; existing handshake interceptors still run.
+The common execution state now contains only the standard context and the
+per-execution value store. HTTP input/output, a connection's immutable handshake
+snapshot, and the received WS or consumer message travel separately to the
+pipeline and its resolvers. No WS/consumer execution-context adapter remains.
+
+A WS connection owns its session until disconnect. Each received frame gets a
+child context and an input lease for one pipeline execution. Completion hooks
+run before the store and input references are cleared; then the child context is
+canceled. A retained public transport view becomes unavailable after completion.
+Use `input.Message[T]` for received application data and explicitly copy any data
+needed by owned background work. The legacy `ws.Send(ctx, ...)` capability is
+also revoked at message completion. Injected `ws.Sender` remains usable with the
+background owner's context while the target connection is active.
+
+Consumer runtimes keep the delivery and ACK/NACK callbacks outside the pipeline.
+They pass only subscription name, payload and metadata as input, and settle the
+delivery after completion and per-message cancellation. HTTP still flushes its
+staged response before completion hooks and releases its transport input before
+parser cleanup. Connection-start and disconnect callbacks are not introduced;
+existing handshake interceptors still run.
 
 A runnable echo and HTTP-push example is in
 [cmd/reference/websocket](../../cmd/reference/websocket/main.go). From
