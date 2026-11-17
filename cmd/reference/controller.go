@@ -30,14 +30,17 @@ type StockPath struct {
 
 type eventPublishingConfig struct{ enabled bool }
 
-type UserController struct{ publishEnabled bool }
+type UserController struct {
+	publishEnabled bool
+	publisher      publish.Publisher
+}
 
 type CommonController struct{}
 
 type ChatController struct{}
 
-func (*UserController) Constructor(publishing eventPublishingConfig) *UserController {
-	return &UserController{publishEnabled: publishing.enabled}
+func (*UserController) Constructor(publishing eventPublishingConfig, publisher publish.Publisher) *UserController {
+	return &UserController{publishEnabled: publishing.enabled, publisher: publisher}
 }
 
 func (*CommonController) Constructor() *CommonController {
@@ -147,10 +150,10 @@ func (c *UserController) CreateOrder(ctx spine.Ctx, p httpinput.Path[OrderPath])
 	if !c.publishEnabled {
 		return httpx.Response[string]{}, &httperr.HTTPError{Status: http.StatusServiceUnavailable, Message: "Event publishing is not configured."}
 	}
-	publish.DomainEvents(ctx.ExecutionContext().Context(), OrderCreated{
-		OrderID: p.OrderID,
-		At:      time.Now(),
-	})
+	at := time.Now()
+	if err := c.publisher.Event(ctx.ExecutionContext().Context(), "order.created", publish.Fields{"order_id": p.OrderID, "at": at}, publish.WithOccurredAt(at)); err != nil {
+		return httpx.Response[string]{}, err
+	}
 
 	return httpx.Response[string]{
 		Body: "OK",
@@ -161,10 +164,10 @@ func (c *UserController) CreateStock(ctx spine.Ctx, p httpinput.Path[StockPath])
 	if !c.publishEnabled {
 		return httpx.Response[string]{}, &httperr.HTTPError{Status: http.StatusServiceUnavailable, Message: "Event publishing is not configured."}
 	}
-	publish.DomainEvents(ctx.ExecutionContext().Context(), StockCreated{
-		OrderID: p.StockID,
-		At:      time.Now(),
-	})
+	at := time.Now()
+	if err := c.publisher.Event(ctx.ExecutionContext().Context(), "stock.created", publish.Fields{"order_id": p.StockID, "at": at}, publish.WithOccurredAt(at)); err != nil {
+		return httpx.Response[string]{}, err
+	}
 
 	return httpx.Response[string]{
 		Body: "OK",

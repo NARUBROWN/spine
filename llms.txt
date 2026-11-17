@@ -75,7 +75,7 @@ A custom implementation uses `spine.New(spine.WithHTTPAdapter(factory))`.
 HTTP-less workers do not need an HTTP adapter.
 
 The contract contains transport metadata, binding, a writer, capabilities and server lifecycle methods.
-The kernel wraps the HTTP scope to add request store, routing results and EventBus. Native Echo store
+The kernel wraps the HTTP scope to add request store, routing results. Native Echo store
 is separate; use standard request context to share values. Contract RequestError is converted to the
 kernel's httperr.HTTPError while preserving causes. Response staging remains in the kernel.
 ASGI informs the boundary and lifetime design. This does not provide Python ASGI compatibility.
@@ -295,7 +295,7 @@ Use this map instead of searching the entire repository blindly:
 - `github.com/NARUBROWN/spine-validator-playground`: the external go-playground implementation; create it with `playground.New()` and pass it to `spine.WithValidator`. Its current validator/v10 v10.30.6 dependency requires Go 1.26+. `test/platform-e2e` pins public implementations and checks HTTP/form/WebSocket validation plus actual Kafka/RabbitMQ publication, consumer validation and ACK/NACK. Broker subtests skip without both documented environment variables; run the configured tests for broker evidence. This fixture is a separate module and does not add native engines to the core.
 - `adapter`, `adapter/http`, `adapter/event`: compatibility aliases for released HTTP and event integrations. New implementations use `contract/http` and `contract/event`.
 - [spine-echo-platform](https://github.com/NARUBROWN/spine-echo-platform): independent Echo implementation and starter repository, checked out beside Spine.
-- `internal/transport`: kernel HTTP scope bridge adding Spine store, routing state, EventBus and error conversion.
+- `internal/transport`: kernel HTTP scope bridge adding Spine store, routing state and error conversion.
 - `internal/bootstrap`: shared preparation, managed execution and resource cleanup; no concrete HTTP platform import.
 - `internal/pipeline`: Spine request execution; adapters call an ExecuteFunc without importing this implementation.
 - `interceptor/cors`: built-in CORS interceptor.
@@ -603,7 +603,7 @@ type Interceptor interface {
 - `boot.InterceptorAll` means HTTP plus WebSocket, not Kafka/RabbitMQ consumers.
 - Use `api.Interceptors` to apply interceptors to a route or group.
 - Use `request, ok := ctx.HTTPRequestContext()` for headers, params, query and multipart access. Use `response, ok := ctx.HTTPResponseContext()` for response headers, status and body writing. Guard each boolean. Both views reference the same request execution, and retained response views follow writer replacement. Request and response capabilities are checked independently. Public views do not expose routing, body binding, raw writers or writer replacement.
-- Call `publish.DomainEvents(ctx.ExecutionContext().Context(), event)` in `PreHandle` to queue an event from an interceptor. Read handler information with `meta.HandlerName()` and `meta.FunctionType()`. WebSocket message views return an independent payload copy. See [the migration guide](docs/migration/v0.7.5.md) for removed execution members.
+- Inject `publish.Publisher` into interceptors and call `publisher.Event(ctx.ExecutionContext().Context(), destination, fields)`. Handle the synchronous transmission error at the call site. Read handler information with `meta.HandlerName()` and `meta.FunctionType()`. WebSocket message views return an independent payload copy. See [the publisher migration guide](docs/migration/app-publisher.md).
 - `ctx.ExecutionContext().Set/Get` shares values throughout one execution, including handler writes read by later interceptor phases. Separate HTTP requests, event messages and WS messages are isolated. After `AfterCompletion`, retained views return `nil, false` and ignore writes. Clearing store references permits GC; it does not force a collection or clear app-owned references.
 - Reusing the same interceptor pointer across scopes merges its scopes and executes that instance once. Different instances of the same type execute independently.
 
@@ -711,41 +711,36 @@ WebSocket requires non-nil `HTTP`. Configure `HTTP.WebSocket` fields such as `Al
 - Capacity rejection is HTTP 503 with `Retry-After` and code `WEBSOCKET_CAPACITY_EXCEEDED`.
 - Oversized messages close with WebSocket code 1009.
 
-## Domain events and Kafka
+## Event publishing and Kafka
 
-An event must implement:
+Publish JSON fields by logical destination through the application-owned `publish.Publisher`.
+Consumer payloads can use plain DTO structs such as `OrderCreated`; no domain event interface is required.
+
+Inject `publish.Publisher` into a service or controller and publish with a standard context:
 
 ```go
-type DomainEvent interface {
-	Name() string
-	OccurredAt() time.Time
+if err := s.publisher.Event(ctx, "order.created", publish.Fields{
+    "event_id": eventID,
+    "order_id": orderID,
+}, publish.WithMessageID(eventID), publish.WithOccurredAt(createdAt)); err != nil {
+    return err
 }
 ```
 
-Example event:
-
-```go
-type OrderCreated struct {
-	EventID string    `json:"event_id"`
-	OrderID int64     `json:"order_id"`
-	At      time.Time `json:"at"`
-}
-
-func (e OrderCreated) Name() string         { return "order.created" }
-func (e OrderCreated) OccurredAt() time.Time { return e.At }
-```
-
-Queue it from an HTTP, WebSocket, or consumer handler's `spine.Ctx`:
-
-```go
-publish.DomainEvents(ctx.ExecutionContext().Context(), OrderCreated{
-	EventID: eventID,
-	OrderID: orderID.Value,
-	At:      time.Now().UTC(),
-})
-```
-
-`publish.DomainEvents` queues typed events without returning an error. Use `publish.Event(ctx, destination, publish.Fields{...})` to encode a JSON body and queue it by destination. It returns registration and encoding errors. Spine dispatches after successful handler execution and HTTP response preparation, after `PostHandle`, and after successful `BeforeResponse`. Use these stages to queue events before the response is written. Configure an event platform factory with Publish enabled. If an execution queues an event without an available publisher, HTTP returns 503, WebSocket closes with code 1011, and the consumer NACKs the message. The core serializes each queued domain event once before fanout. A failed publisher instance is retired after its active calls finish and recreated on the next publication; failed messages are not immediately resent.
+`publisher.Event` serializes once and waits for all configured publishing platforms. The application
+provides this DI dependency after preparing factories from `WithEventAdapter`. The same publisher works
+in HTTP, WebSocket, consumer and independent polling services, including apps with no handlers. Package
+functions `publish.Event`, `DomainEvents`, `WithPublisher`, the old `EventPublisher` and `DomainEvent`
+aliases, request EventBus and drain paths are removed. Use standard `context.Context` at service boundaries.
+A successful publication survives later handler and response serialization errors. No publishing platform
+returns `publish.ErrUnavailable` (default HTTP 503). Platform errors retain their identity with errors.Is/As;
+multiple failures are joined in registration order after all sends finish. Partial success remains sent.
+No automatic message retry occurs. Preserve outbox IDs and timestamps on explicit retries; cancellation
+can occur after broker acceptance. Message IDs travel in metadata under `message_id`, not native AMQP
+MessageId. Keep deduplication IDs in the body when consumers read only the JSON payload. During shutdown,
+hooks stop workers before new publication is blocked and platforms are closed. Calls admitted earlier are
+awaited, and pending factory creation is canceled. See [the migration guide](docs/migration/app-publisher.md)
+and [the publish-only example](cmd/reference/publish-only/main.go).
 
 Use a consumer signature such as `func (c *OrderConsumer) OnCreated(ctx spine.Ctx, eventName string, event OrderCreated) error`. Register `NewOrderConsumer` with `app.Constructor`, then check the error from `app.Consumers().Register("order.created", (*OrderConsumer).OnCreated)`. Consumer inputs are `spine.Ctx` (standard context injection remains compatible), event name `string`, raw `[]byte`, and a non-pointer struct decoded from JSON. A topic can have only one registered handler; make it idempotent by stable event ID.
 
@@ -770,7 +765,7 @@ Import the two platform modules with aliases kafkaplatform and echoplatform. TLS
 configuration belong to the Kafka platform. TopicPrefix maps both publishing and subscription names;
 register the logical name `order.created`, rather than manually adding the prefix.
 
-The core keeps the shared consumer execution engine, request EventBus, dispatch and reconnect backoff.
+The core keeps the shared consumer execution engine, application DI publisher and reconnect backoff.
 ACK follows handler and post-hook success; failure NACKs. Kafka-style ErrReaderInvalidated closes and
 recreates the reader before any higher offset can be read. Settlement uses a bounded context independent
 of run cancellation (default 5s), and shutdown waits for readers before publishers. ConsumerRetry controls

@@ -33,33 +33,29 @@ type validatedInput struct {
 	Email string `json:"email" validate:"required,email"`
 	Age   int    `json:"age" validate:"gte=18"`
 }
-type domainEvent struct {
-	validatedInput
-	topic string
-}
-
-func (e domainEvent) Name() string        { return e.topic }
-func (domainEvent) OccurredAt() time.Time { return time.Now() }
-
 type senderController struct {
-	topic string
-	calls atomic.Int32
+	publisher publish.Publisher
+	topic     string
+	calls     atomic.Int32
 }
 
-func (c *senderController) Emit(ctx context.Context, input *validatedInput) httpx.Response[string] {
+func (c *senderController) Emit(ctx context.Context, input *validatedInput) (httpx.Response[string], error) {
 	c.calls.Add(1)
-	publish.DomainEvents(ctx, domainEvent{validatedInput: *input, topic: c.topic})
-	return httpx.Response[string]{Body: "accepted"}
+	if err := c.publisher.Event(ctx, c.topic, publish.Fields{"email": input.Email, "age": input.Age}); err != nil {
+		return httpx.Response[string]{}, err
+	}
+	return httpx.Response[string]{Body: "accepted"}, nil
 }
 
 type workerController struct {
-	topic string
-	calls atomic.Int32
+	publisher publish.Publisher
+	topic     string
+	calls     atomic.Int32
 }
 
-func (c *workerController) Handle(ctx context.Context, input validatedInput) {
+func (c *workerController) Handle(ctx context.Context, input validatedInput) error {
 	c.calls.Add(1)
-	publish.DomainEvents(ctx, domainEvent{validatedInput: input, topic: c.topic})
+	return c.publisher.Event(ctx, c.topic, publish.Fields{"email": input.Email, "age": input.Age})
 }
 
 // 실제 브로커와 공개 계약 사이에서 readiness·결과 확인만 관찰합니다.
@@ -190,7 +186,10 @@ func TestFinalE2EHTTPValidatorBrokerConsumer(t *testing.T) {
 			validator := observedValidator{Validator: newRealValidator(t), failures: make(chan error, 8)}
 			workerCtrl := &workerController{topic: output}
 			worker := spine.New(spine.WithValidator(validator), spine.WithEventAdapter("events", observed, spine.WithEventConsumerRetry(boot.ConsumerRetryOptions{InitialDelay: 10 * time.Millisecond, MaxDelay: 100 * time.Millisecond, MaxAttempts: 5})))
-			worker.Constructor(func() *workerController { return workerCtrl })
+			worker.Constructor(func(publisher publish.Publisher) *workerController {
+				workerCtrl.publisher = publisher
+				return workerCtrl
+			})
 			if err := worker.Consumers().Register(input, (*workerController).Handle); err != nil {
 				t.Fatal(err)
 			}
@@ -219,7 +218,10 @@ func TestFinalE2EHTTPValidatorBrokerConsumer(t *testing.T) {
 			}
 			senderCtrl := &senderController{topic: input}
 			sender := spine.New(echo.Option(), spine.WithValidator(newRealValidator(t)), spine.WithEventAdapter("events", factory(false, true, "")))
-			sender.Constructor(func() *senderController { return senderCtrl })
+			sender.Constructor(func(publisher publish.Publisher) *senderController {
+				senderCtrl.publisher = publisher
+				return senderCtrl
+			})
 			prepared, err := sender.Prepare(ctx, boot.Options{HTTP: &boot.HTTPOptions{}})
 			if err != nil {
 				t.Fatal(err)
@@ -307,7 +309,7 @@ func TestFinalE2EHTTPValidatorBrokerConsumer(t *testing.T) {
 
 // RegisterRoutes는 새 HTTP 콜백에서 기존 이벤트 Pipeline까지 실제 전달을 검증합니다.
 func (c *senderController) RegisterRoutes(r *api.Registry) {
-	r.POST("/events", func(ctx context.Context, a input.Body[validatedInput]) httpx.Response[string] {
+	r.POST("/events", func(ctx context.Context, a input.Body[validatedInput]) (httpx.Response[string], error) {
 		return c.Emit(ctx, (*validatedInput)(a))
 	})
 }

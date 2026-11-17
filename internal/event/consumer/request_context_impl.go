@@ -4,9 +4,7 @@ import (
 	"context"
 	"maps"
 	"slices"
-	"sync"
 
-	"github.com/NARUBROWN/spine/internal/event/publish"
 	"github.com/NARUBROWN/spine/internal/execution"
 )
 
@@ -14,8 +12,6 @@ type ConsumerRequestContextImpl struct {
 	execution.Store
 	ctx      context.Context
 	msg      *Message
-	eventBus publish.EventBus
-	busOnce  sync.Once
 	params   map[string]string
 	pathKeys []string
 }
@@ -23,12 +19,10 @@ type ConsumerRequestContextImpl struct {
 func NewRequestContext(
 	ctx context.Context,
 	msg *Message,
-	eventBus publish.EventBus,
 ) execution.Context {
 	return &ConsumerRequestContextImpl{
-		ctx:      ctx,
-		msg:      msg,
-		eventBus: eventBus,
+		ctx: ctx,
+		msg: msg,
 	}
 }
 
@@ -42,15 +36,6 @@ func (c *ConsumerRequestContextImpl) EventName() string {
 
 func (c *ConsumerRequestContextImpl) Payload() []byte {
 	return c.msg.Payload
-}
-
-func (c *ConsumerRequestContextImpl) EventBus() publish.EventBus {
-	c.busOnce.Do(func() {
-		if c.eventBus == nil {
-			c.eventBus = publish.NewEventBus()
-		}
-	})
-	return c.eventBus
 }
 
 func (c *ConsumerRequestContextImpl) Header(key string) string {

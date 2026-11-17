@@ -29,22 +29,25 @@ type order struct {
 	ID int `json:"id"`
 }
 
-type senderController struct{}
+type senderController struct{ publisher publish.Publisher }
 
-func (*senderController) Send(ctx context.Context, body input.Body[order]) (httpx.Response[string], error) {
-	if err := publish.Event(ctx, "order.created", publish.Fields{"id": body.ID}); err != nil {
+func (c *senderController) Send(ctx context.Context, body input.Body[order]) (httpx.Response[string], error) {
+	if err := c.publisher.Event(ctx, "order.created", publish.Fields{"id": body.ID}); err != nil {
 		return httpx.Response[string]{}, err
 	}
 	return httpx.Response[string]{Body: "accepted"}, nil
 }
 
-type workerController struct{ calls atomic.Int32 }
+type workerController struct {
+	calls     atomic.Int32
+	publisher publish.Publisher
+}
 
 func (c *workerController) Handle(ctx context.Context, input order) error {
 	if c.calls.Add(1) == 1 {
 		return errors.New("일시적인 처리 실패")
 	}
-	return publish.Event(ctx, "order.completed", publish.Fields{"id": input.ID})
+	return c.publisher.Event(ctx, "order.completed", publish.Fields{"id": input.ID})
 }
 
 type observedFactory struct {
@@ -133,7 +136,10 @@ func TestHTTPPublishWorkerRedeliveryAndResult(t *testing.T) {
 	observed := &observedFactory{Factory: factory(true, true, "worker"), ready: make(chan struct{}, 8), acks: make(chan error, 8), nacks: make(chan error, 8)}
 	workerCtrl := &workerController{}
 	worker := spine.New(spine.WithEventAdapter("nats", observed))
-	worker.Constructor(func() *workerController { return workerCtrl })
+	worker.Constructor(func(publisher publish.Publisher) *workerController {
+		workerCtrl.publisher = publisher
+		return workerCtrl
+	})
 	if err := worker.Consumers().Register("order.created", (*workerController).Handle); err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +165,7 @@ func TestHTTPPublishWorkerRedeliveryAndResult(t *testing.T) {
 		t.Fatal(ctx.Err())
 	}
 	sender := spine.New(echo.Option(), spine.WithEventAdapter("nats", factory(false, true, "")))
-	sender.Constructor(func() *senderController { return &senderController{} })
+	sender.Constructor(func(publisher publish.Publisher) *senderController { return &senderController{publisher: publisher} })
 	sender.Route(http.MethodPost, "/orders", (*senderController).Send)
 	prepared, err := sender.Prepare(ctx, boot.Options{HTTP: &boot.HTTPOptions{}})
 	if err != nil {

@@ -1,6 +1,6 @@
 # 이벤트 플랫폼으로 전환하기
 
-현재 개발 소스는 Kafka·RabbitMQ 구현을 외부 플랫폼으로 분리합니다. `publish.Event`와 `app.Consumers().Register`는 유지하고, 브로커 설정과 App 연결을 바꿉니다. 이 안내는 개발 브랜치의 API이며 기존 Spine v0.6.0 릴리스에 소급 적용되지 않습니다.
+현재 개발 소스는 Kafka, RabbitMQ 구현을 외부 플랫폼으로 분리합니다. 브로커 설정과 App 연결을 바꿉니다. 이벤트 발행 호출은 [앱 수명의 DI Publisher](app-publisher.md)로 이전하고, `app.Consumers().Register`는 유지합니다. 이 안내는 개발 브랜치의 API이며 기존 Spine v0.6.0 릴리스에 소급 적용되지 않습니다.
 
 ## 제거된 설정
 

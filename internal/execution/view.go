@@ -55,7 +55,7 @@ func (v publicContext) WebSocket() (contextview.WebSocketView, bool) {
 
 type executionView struct{ source Context }
 
-func (v executionView) Context() context.Context   { return GoContext(v.source) }
+func (v executionView) Context() context.Context   { return v.source.Context() }
 func (v executionView) Get(key string) (any, bool) { return v.source.Get(key) }
 func (v executionView) Set(key string, value any)  { v.source.Set(key, value) }
 
@@ -64,7 +64,7 @@ type httpRequestView struct {
 	request HTTPRequestContext
 }
 
-func (v httpRequestView) Context() context.Context     { return GoContext(v.source) }
+func (v httpRequestView) Context() context.Context     { return v.source.Context() }
 func (v httpRequestView) Method() string               { return v.request.Method() }
 func (v httpRequestView) Path() string                 { return v.request.Path() }
 func (v httpRequestView) Params() map[string]string    { return v.request.Params() }
@@ -153,7 +153,7 @@ type webSocketView struct {
 	message WebSocketContext
 }
 
-func (v webSocketView) Context() context.Context          { return GoContext(v.source) }
+func (v webSocketView) Context() context.Context          { return v.source.Context() }
 func (v webSocketView) ConnID() string                    { return v.message.ConnID() }
 func (v webSocketView) MessageType() int                  { return v.message.MessageType() }
 func (v webSocketView) Payload() []byte                   { return slices.Clone(v.message.Payload()) }

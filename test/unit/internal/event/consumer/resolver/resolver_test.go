@@ -2,12 +2,9 @@ package resolver
 
 import (
 	"context"
+	internalresolver "github.com/NARUBROWN/spine/internal/resolver"
 	"reflect"
 	"testing"
-
-	"github.com/NARUBROWN/spine/internal/event/emission"
-	internalpublish "github.com/NARUBROWN/spine/internal/event/publish"
-	internalresolver "github.com/NARUBROWN/spine/internal/resolver"
 )
 
 type testConsumerContext struct {
@@ -25,7 +22,6 @@ func newTestConsumerContext(eventName string, payload []byte) *testConsumerConte
 }
 
 func (c *testConsumerContext) Context() context.Context     { return context.Background() }
-func (c *testConsumerContext) EventBus() emission.Bus       { return internalpublish.NewEventBus() }
 func (c *testConsumerContext) Method() string               { return "EVENT" }
 func (c *testConsumerContext) Path() string                 { return c.eventName }
 func (c *testConsumerContext) Params() map[string]string    { return map[string]string{} }
@@ -40,7 +36,6 @@ func (c *testConsumerContext) Payload() []byte              { return c.payload }
 type nonConsumerContext struct{}
 
 func (c *nonConsumerContext) Context() context.Context     { return context.Background() }
-func (c *nonConsumerContext) EventBus() emission.Bus       { return internalpublish.NewEventBus() }
 func (c *nonConsumerContext) Method() string               { return "GET" }
 func (c *nonConsumerContext) Path() string                 { return "/" }
 func (c *nonConsumerContext) Params() map[string]string    { return map[string]string{} }

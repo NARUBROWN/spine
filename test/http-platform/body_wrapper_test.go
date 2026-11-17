@@ -149,9 +149,9 @@ type optionalChildBody struct {
 	Child *optionalXMLChild `json:"child" xml:"child"`
 }
 
-type bodyMediaController struct{}
+type bodyMediaController struct{ publisher publish.Publisher }
 
-func (*bodyMediaController) RegisterRoutes(r *api.Registry) {
+func (c *bodyMediaController) RegisterRoutes(r *api.Registry) {
 	r.POST("/form", func(body input.Body[formOnlyBody]) httpx.Response[string] {
 		return httpx.Response[string]{Body: body.Value}
 	})
@@ -165,13 +165,13 @@ func (*bodyMediaController) RegisterRoutes(r *api.Registry) {
 		return httpx.Response[bool]{Body: body.Child != nil}
 	})
 	r.POST("/publish", func(ctx handlerspine.Ctx) (httpx.Response[string], error) {
-		if err := publish.Event(ctx.ExecutionContext().Context(), "test.created", publish.Fields{}); err != nil {
+		if err := c.publisher.Event(ctx.ExecutionContext().Context(), "test.created", publish.Fields{}); err != nil {
 			return httpx.Response[string]{}, err
 		}
 		return httpx.Response[string]{Body: "queued"}, nil
 	})
 	r.POST("/publish-written", func(ctx handlerspine.Ctx) error {
-		if err := publish.Event(ctx.ExecutionContext().Context(), "test.created", publish.Fields{}); err != nil {
+		if err := c.publisher.Event(ctx.ExecutionContext().Context(), "test.created", publish.Fields{}); err != nil {
 			return err
 		}
 		response, _ := ctx.HTTPResponseContext()
@@ -195,7 +195,9 @@ func TestBodyMediaDescriptionAndBindingAgreeOverTCP(t *testing.T) {
 				t.Fatal(err)
 			}
 			app := spine.New(spine.WithHTTPAdapter(platformFactory(engine, nativeHooks{})), spine.WithValidator(validator))
-			app.Constructor(func() *bodyMediaController { return &bodyMediaController{} })
+			app.Constructor(func(publisher publish.Publisher) *bodyMediaController {
+				return &bodyMediaController{publisher: publisher}
+			})
 			prepared := prepare(t, app, boot.HTTPOptions{})
 			desc, err := spine.DescribePreparedHTTP(prepared)
 			if err != nil {
@@ -287,21 +289,22 @@ func TestBodyMediaDescriptionAndBindingAgreeOverTCP(t *testing.T) {
 }
 
 type latePublishInterceptor struct {
-	phase string
-	fail  bool
+	publisher publish.Publisher
+	phase     string
+	fail      bool
 }
 
 func (latePublishInterceptor) PreHandle(handlerspine.Ctx, core.HandlerMeta) error { return nil }
 func (i latePublishInterceptor) PostHandle(ctx handlerspine.Ctx, _ core.HandlerMeta) {
 	if i.phase == "post" {
-		if err := publish.Event(ctx.ExecutionContext().Context(), "test.created", publish.Fields{}); err != nil {
+		if err := i.publisher.Event(ctx.ExecutionContext().Context(), "test.created", publish.Fields{}); err != nil {
 			panic(err)
 		}
 	}
 }
 func (i latePublishInterceptor) BeforeResponse(ctx handlerspine.Ctx, _ core.HandlerMeta, err error) error {
 	if i.phase == "before" && err == nil {
-		if err := publish.Event(ctx.ExecutionContext().Context(), "test.created", publish.Fields{}); err != nil {
+		if err := i.publisher.Event(ctx.ExecutionContext().Context(), "test.created", publish.Fields{}); err != nil {
 			return err
 		}
 		if i.fail {
@@ -339,7 +342,7 @@ func TestLateInterceptorEventsOverTCP(t *testing.T) {
 			{"post", false, false, http.StatusServiceUnavailable, 0},
 			{"before", true, false, http.StatusOK, 1},
 			{"before", false, false, http.StatusServiceUnavailable, 0},
-			{"before", true, true, http.StatusInternalServerError, 0},
+			{"before", true, true, http.StatusInternalServerError, 1},
 		} {
 			t.Run(fmt.Sprintf("%s/%s/%t/%t", engine, tc.phase, tc.configured, tc.fail), func(t *testing.T) {
 				var published atomic.Int32
@@ -348,7 +351,10 @@ func TestLateInterceptorEventsOverTCP(t *testing.T) {
 					options = append(options, spine.WithEventAdapter("test", latePublishFactory{published: &published}))
 				}
 				app := spine.New(options...)
-				app.Interceptor(latePublishInterceptor{phase: tc.phase, fail: tc.fail})
+				app.Constructor(func(publisher publish.Publisher) *latePublishInterceptor {
+					return &latePublishInterceptor{phase: tc.phase, fail: tc.fail, publisher: publisher}
+				})
+				app.Interceptor((*latePublishInterceptor)(nil))
 				app.Constructor(func() *bodyWrapperController { return &bodyWrapperController{} })
 				base, client := managedServer(t, prepare(t, app, boot.HTTPOptions{}))
 				response, err := client.Post(base+"/body", "application/json", strings.NewReader(`{"name":"test"}`))

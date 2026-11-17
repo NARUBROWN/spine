@@ -5,13 +5,11 @@ import (
 	"mime/multipart"
 
 	httpcontract "github.com/NARUBROWN/spine/contract/http"
-	"github.com/NARUBROWN/spine/internal/event/emission"
 )
 
 // Context는 전송 상태와 실행 파이프라인의 제어를 함께 제공합니다.
 type Context interface {
 	Context() context.Context
-	EventBus() emission.Bus
 	Method() string
 	Path() string
 	Params() map[string]string
@@ -53,14 +51,6 @@ type WebSocketContext interface {
 	ConnID() string
 	MessageType() int
 	Payload() []byte
-}
-
-func GoContext(ctx Context) context.Context {
-	parent := ctx.Context()
-	if bus := ctx.EventBus(); bus != nil {
-		return emission.WithPublisher(parent, bus)
-	}
-	return parent
 }
 
 // WebSocketRequestContext는 내부 upgrade 요청의 불변 정보 계약입니다.

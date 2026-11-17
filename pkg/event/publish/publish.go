@@ -1,67 +1,46 @@
+// Package publish defines the application-owned synchronous event publisher.
 package publish
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"strings"
+	"maps"
 	"time"
-
-	"github.com/NARUBROWN/spine/internal/event/emission"
 )
 
-// EventPublisher는 현재 실행에서 발생한 도메인 이벤트를 받습니다.
-type EventPublisher = emission.Publisher
+// ErrUnavailable means the application has no publishing platform.
+var ErrUnavailable = errors.New("event publisher is unavailable")
 
-// WithPublisher는 발행 호출을 publisher에 전달하는 자식 컨텍스트를 반환합니다.
-// 핸들러를 직접 호출하는 테스트에서는 기록용 발행기를 연결할 수 있습니다.
-// ctx와 publisher는 nil일 수 없습니다.
-// 앱에서 브로커를 설정할 때는 spine.WithEventAdapter를 사용합니다.
-func WithPublisher(ctx context.Context, publisher EventPublisher) context.Context {
-	return emission.WithPublisher(ctx, publisher)
-}
-
-// DomainEvents는 타입으로 정의한 도메인 이벤트를 현재 실행에 등록합니다.
-func DomainEvents(ctx context.Context, events ...DomainEvent) {
-	if publisher := emission.FromContext(ctx); publisher != nil {
-		publisher.Publish(events...)
-	}
-}
-
-// Fields는 JSON 이벤트 본문에 담을 필드입니다.
+// Fields is the JSON object sent as an event body. Do not mutate it during Event.
 type Fields map[string]any
 
-// Event는 본문을 JSON으로 직렬화해 현재 실행의 발행 대기열에 넣습니다.
-// 반환 오류는 등록 실패를 뜻합니다. 브로커 전송은 실행 후처리에서 처리합니다.
-func Event(ctx context.Context, destination string, fields Fields) error {
-	if strings.TrimSpace(destination) == "" {
-		return errors.New("event destination is empty")
-	}
-	if ctx == nil {
-		return errors.New("event context is nil")
-	}
-	publisher := emission.FromContext(ctx)
-	if publisher == nil {
-		return errors.New("event publisher is missing from context")
-	}
-	if fields == nil {
-		fields = Fields{}
-	}
-	payload, err := json.Marshal(fields)
-	if err != nil {
-		return fmt.Errorf("serialize event (%s): %w", destination, err)
-	}
-	publisher.Publish(fieldEvent{destination: destination, at: time.Now(), payload: payload})
-	return nil
+// Publisher is injected by Spine after preparing WithEventAdapter factories.
+// Event waits for every registered publishing platform's transmission result.
+// A successful send is not rolled back by later handler or response errors.
+// Errors and cancellation can follow broker acceptance; retries can duplicate delivery.
+type Publisher interface {
+	Event(context.Context, string, Fields, ...Option) error
 }
 
-type fieldEvent struct {
-	destination string
-	at          time.Time
-	payload     json.RawMessage
+// Options carries per-call metadata. Applications normally use the With functions.
+// MessageID is carried in Metadata["message_id"]; no identifier is generated.
+type Options struct {
+	MessageID  string
+	OccurredAt time.Time
+	Metadata   map[string]string
 }
 
-func (e fieldEvent) Name() string                 { return e.destination }
-func (e fieldEvent) OccurredAt() time.Time        { return e.at }
-func (e fieldEvent) MarshalJSON() ([]byte, error) { return e.payload.MarshalJSON() }
+// Option configures one immediate Event call. Later options override earlier values.
+type Option func(*Options)
+
+// WithMessageID preserves an outbox identifier across explicit retries.
+func WithMessageID(id string) Option { return func(o *Options) { o.MessageID = id } }
+
+// WithOccurredAt preserves the original event time across explicit retries.
+func WithOccurredAt(at time.Time) Option { return func(o *Options) { o.OccurredAt = at } }
+
+// WithMetadata snapshots metadata so the option can be reused by concurrent calls.
+func WithMetadata(metadata map[string]string) Option {
+	snapshot := maps.Clone(metadata)
+	return func(o *Options) { o.Metadata = maps.Clone(snapshot) }
+}

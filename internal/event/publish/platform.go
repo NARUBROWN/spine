@@ -2,14 +2,21 @@ package publish
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"sync"
 
 	eventadapter "github.com/NARUBROWN/spine/contract/event"
 	"github.com/NARUBROWN/spine/internal/configuration"
 	"github.com/NARUBROWN/spine/internal/event/cleanup"
 )
+
+// EventPublisher is the synchronous, serialized platform transmission boundary.
+type EventPublisher interface {
+	Publish(context.Context, eventadapter.Message) error
+}
 
 // PlatformPublisher는 실패한 발행기를 분리하고 다음 호출에서 새 자원을 준비합니다.
 // 실패한 메시지를 자동 재발행하지 않으며 정상 발행의 병렬성은 유지합니다.
@@ -134,8 +141,10 @@ func (p *PlatformPublisher) Publish(ctx context.Context, message eventadapter.Me
 	defer func() {
 		p.mu.Lock()
 		instance.active--
-		// 다른 발행이 진행 중이면 모두 끝난 뒤 실패한 자원을 정리합니다.
-		if !completed || resultErr != nil || p.closing {
+		// Caller cancellation does not itself retire the shared resource.
+		// An adapter's own timeout still marks a failed transport for replacement.
+		callerCanceled := ctx.Err() != nil && errors.Is(resultErr, ctx.Err())
+		if !completed || (resultErr != nil && !callerCanceled) || p.closing {
 			instance.retired = true
 			if p.current == instance {
 				p.current = nil
@@ -176,7 +185,7 @@ func (i *publisherInstance) startClose() {
 			// 닫은 native 인스턴스를 장시간 실행하는 App에 계속 보관하지 않습니다.
 			for index, instance := range p.instances {
 				if instance == i {
-					p.instances = append(p.instances[:index], p.instances[index+1:]...)
+					p.instances = slices.Delete(p.instances, index, index+1)
 					break
 				}
 			}

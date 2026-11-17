@@ -2,13 +2,10 @@ package resolver
 
 import (
 	"context"
-	"reflect"
-	"testing"
-
-	"github.com/NARUBROWN/spine/internal/event/emission"
-	internalpublish "github.com/NARUBROWN/spine/internal/event/publish"
 	internalresolver "github.com/NARUBROWN/spine/internal/resolver"
 	pkgws "github.com/NARUBROWN/spine/pkg/ws"
+	"reflect"
+	"testing"
 )
 
 type testWSContext struct {
@@ -28,7 +25,6 @@ func newTestWSContext(payload []byte) *testWSContext {
 }
 
 func (c *testWSContext) Context() context.Context     { return context.Background() }
-func (c *testWSContext) EventBus() emission.Bus       { return internalpublish.NewEventBus() }
 func (c *testWSContext) Method() string               { return "WS" }
 func (c *testWSContext) Path() string                 { return c.connID }
 func (c *testWSContext) Params() map[string]string    { return map[string]string{} }
@@ -44,7 +40,6 @@ func (c *testWSContext) Payload() []byte              { return c.payload }
 type nonWSContext struct{}
 
 func (c *nonWSContext) Context() context.Context     { return context.Background() }
-func (c *nonWSContext) EventBus() emission.Bus       { return internalpublish.NewEventBus() }
 func (c *nonWSContext) Method() string               { return "GET" }
 func (c *nonWSContext) Path() string                 { return "/" }
 func (c *nonWSContext) Params() map[string]string    { return map[string]string{} }
