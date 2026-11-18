@@ -48,7 +48,7 @@ func (p *Pipeline) AddReturnValueHandler(handlers ...handler.ReturnValueHandler)
 
 // Execute는 하나의 요청 실행 전체를 소유합니다.
 func (p *Pipeline) Execute(ctx *execution.Context) error {
-	return p.execute(ctx, func() (execution.HandlerMeta, error) { return p.router.Route(ctx.Routing()) })
+	return p.execute(ctx, func() (execution.HandlerMeta, error) { return p.router.Route(ctx.Input.Routing) })
 }
 
 func (p *Pipeline) execute(ctx *execution.Context, resolve func() (execution.HandlerMeta, error)) (finalErr error) {
@@ -80,7 +80,7 @@ func (p *Pipeline) execute(ctx *execution.Context, resolve func() (execution.Han
 		if responseStage == nil {
 			return
 		}
-		ctx.HTTPResponse().SetResponseWriter(responseStage.target)
+		ctx.Input.HTTPResponse.SetResponseWriter(responseStage.target)
 		if err := responseStage.flush(); err != nil {
 			finalErr = errors.Join(finalErr, fmt.Errorf("flush staged response: %w", err))
 			if !responseStage.target.IsCommitted() {
@@ -152,7 +152,7 @@ func (p *Pipeline) execute(ctx *execution.Context, resolve func() (execution.Han
 	// 라우터가 실행 대상을 결정
 	meta, err := resolve()
 	if err != nil {
-		if ctx.HTTPResponse() != nil {
+		if ctx.Input.HTTPResponse != nil {
 			switch {
 			case errors.Is(err, router.ErrRouteNotFound):
 				return &httpfailure.HTTPError{Status: http.StatusNotFound, Message: err.Error(), Cause: err}
@@ -363,7 +363,7 @@ func (p *Pipeline) AddPostExecutionHook(hook hook.PostExecutionHook) {
 }
 
 func (p *Pipeline) handleExecutionError(ctx *execution.Context, err error) error {
-	response := ctx.HTTPResponse()
+	response := ctx.Input.HTTPResponse
 	ok := response != nil
 	if !ok {
 		return nil
@@ -382,7 +382,7 @@ func (p *Pipeline) handleExecutionError(ctx *execution.Context, err error) error
 }
 
 func stageResponseWriter(ctx *execution.Context) *stagedResponseWriter {
-	response := ctx.HTTPResponse()
+	response := ctx.Input.HTTPResponse
 	ok := response != nil
 	if !ok {
 		return nil

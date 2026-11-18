@@ -16,7 +16,7 @@ func (*QueryValuesResolver) Supports(pm ParameterMeta) bool {
 }
 
 func (*QueryValuesResolver) Resolve(ctx *execution.Context, _ ParameterMeta) (any, error) {
-	httpCtx := ctx.HTTPRequest()
+	httpCtx := ctx.Input.HTTPRequest
 	ok := httpCtx != nil
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")

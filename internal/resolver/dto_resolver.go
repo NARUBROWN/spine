@@ -36,7 +36,7 @@ func (r *DTOResolver) Resolve(ctx *execution.Context, parameterMeta ParameterMet
 }
 
 func resolveBodyDTO(ctx *execution.Context, parameter ParameterMeta, validator validation.Validator, mediaCache *sync.Map) (any, error) {
-	httpCtx := ctx.HTTPRequest()
+	httpCtx := ctx.Input.HTTPRequest
 	ok := httpCtx != nil
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")

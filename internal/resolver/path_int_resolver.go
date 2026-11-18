@@ -19,7 +19,7 @@ func (r *PathIntResolver) Supports(parameterMeta ParameterMeta) bool {
 }
 
 func (r *PathIntResolver) Resolve(ctx *execution.Context, parameterMeta ParameterMeta) (any, error) {
-	httpCtx := ctx.HTTPRequest()
+	httpCtx := ctx.Input.HTTPRequest
 	ok := httpCtx != nil
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")

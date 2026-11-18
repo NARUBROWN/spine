@@ -17,7 +17,7 @@ func (r *UploadedFilesResolver) Supports(parameterMeta ParameterMeta) bool {
 }
 
 func (r *UploadedFilesResolver) Resolve(ctx *execution.Context, parameterMeta ParameterMeta) (any, error) {
-	httpCtx := ctx.HTTPRequest()
+	httpCtx := ctx.Input.HTTPRequest
 	ok := httpCtx != nil
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")

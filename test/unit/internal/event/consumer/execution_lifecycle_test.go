@@ -36,6 +36,7 @@ func TestConsumerRuntimeCancelsExecutionBeforeSettlement(t *testing.T) {
 					return errors.New("untrusted event name used")
 				}
 				captured = ctx
+				assertMessageContextContract(t, ctx)
 				ctx.Set("probe", true)
 				switch outcome {
 				case "error":
@@ -50,6 +51,7 @@ func TestConsumerRuntimeCancelsExecutionBeforeSettlement(t *testing.T) {
 			message := &Message{EventName: "untrusted-name", Payload: []byte("message")}
 			settled := func(kind string) func() error {
 				return func() error {
+					assertMessageContextContract(t, captured)
 					if captured == nil || captured.Err() != context.Canceled {
 						signals <- "uncanceled"
 					} else if _, ok := captured.Get("probe"); ok {

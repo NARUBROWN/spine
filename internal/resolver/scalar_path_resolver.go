@@ -18,7 +18,7 @@ func (*ScalarPathResolver) Supports(parameter ParameterMeta) bool {
 }
 
 func (*ScalarPathResolver) Resolve(ctx *execution.Context, parameter ParameterMeta) (any, error) {
-	httpCtx := ctx.HTTPRequest()
+	httpCtx := ctx.Input.HTTPRequest
 	ok := httpCtx != nil
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")

@@ -19,10 +19,14 @@ import (
 	publicws "github.com/NARUBROWN/spine/pkg/ws"
 )
 
-type retainedExecutionObserver struct{ retained spine.WebSocketCtx }
+type retainedExecutionObserver struct {
+	t        *testing.T
+	retained spine.WebSocketCtx
+}
 
 func (o *retainedExecutionObserver) PreMessage(ctx spine.WebSocketCtx, _ core.HandlerMeta) error {
 	o.retained = ctx
+	assertMessageContextContract(o.t, ctx)
 	ctx.Set("owned", true)
 	return nil
 }
@@ -36,11 +40,12 @@ func (*retainedExecutionObserver) AfterMessageCompletion(spine.WebSocketCtx, cor
 func TestMessageRuntimeReleasesOwnedScopeForEveryOutcome(t *testing.T) {
 	for _, outcome := range []string{"success", "error", "panic", "invalid-input"} {
 		t.Run(outcome, func(t *testing.T) {
-			observer := &retainedExecutionObserver{}
+			observer := &retainedExecutionObserver{t: t}
 			runtime := &Runtime{invoker: invoker.NewInvoker(container.New()), interceptors: []core.WebSocketInterceptor{observer}, argumentResolvers: wsresolver.Resolvers(nil)}
 			connectionCtx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			callback := func(ctx context.Context, message input.Message[struct{ Text string }]) error {
+				assertMessageContextContract(t, ctx)
 				if ctx != observer.retained {
 					t.Error("핸들러가 인터셉터와 같은 프레임 컨텍스트를 받지 못했습니다")
 				}
@@ -60,6 +65,7 @@ func TestMessageRuntimeReleasesOwnedScopeForEveryOutcome(t *testing.T) {
 			if (err != nil) != (outcome != "success") {
 				t.Fatal(err)
 			}
+			assertMessageContextContract(t, observer.retained)
 			if observer.retained.Err() != context.Canceled {
 				t.Fatal("message context remains active")
 			}

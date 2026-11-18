@@ -19,7 +19,7 @@ func (r *PaginationResolver) Supports(parameterMeta ParameterMeta) bool {
 }
 
 func (r *PaginationResolver) Resolve(ctx *execution.Context, parameterMeta ParameterMeta) (any, error) {
-	httpCtx := ctx.HTTPRequest()
+	httpCtx := ctx.Input.HTTPRequest
 	ok := httpCtx != nil
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")

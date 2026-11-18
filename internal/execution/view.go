@@ -24,7 +24,11 @@ func (v publicContext) ExecutionContext() contextview.ExecutionContextView {
 	return executionView{source: v.source}
 }
 func (v publicContext) HTTPRequestContext() (contextview.HTTPRequestView, bool) {
-	if v.source == nil || v.source.HTTPRequest() == nil {
+	available := false
+	if v.source != nil {
+		v.source.readInput(func(input Input) { available = input.HTTPRequest != nil })
+	}
+	if !available {
 		return nil, false
 	}
 	return httpRequestView{source: v.source}, true
@@ -32,7 +36,7 @@ func (v publicContext) HTTPRequestContext() (contextview.HTTPRequestView, bool) 
 func (v publicContext) HTTPResponseContext() (contextview.HTTPResponseView, bool) {
 	available := false
 	if v.source != nil {
-		v.source.readInput(func(s Sources) { available = s.HTTPResponse != nil && s.HTTPResponse.ResponseWriter() != nil })
+		v.source.readInput(func(s Input) { available = s.HTTPResponse != nil && s.HTTPResponse.ResponseWriter() != nil })
 	}
 	if !available {
 		return nil, false
@@ -41,8 +45,8 @@ func (v publicContext) HTTPResponseContext() (contextview.HTTPResponseView, bool
 }
 
 // readInput holds the lease while a view reads borrowed transport data.
-func readInput[T any](c *Context, read func(Sources) T) (value T) {
-	c.readInput(func(s Sources) { value = read(s) })
+func readInput[T any](c *Context, read func(Input) T) (value T) {
+	c.readInput(func(s Input) { value = read(s) })
 	return
 }
 
@@ -55,7 +59,7 @@ func (v executionView) Set(key string, value any)  { v.source.Set(key, value) }
 type httpRequestView struct{ source *Context }
 
 func (v httpRequestView) Method() string {
-	return readInput(v.source, func(s Sources) string {
+	return readInput(v.source, func(s Input) string {
 		if s.HTTPRequest == nil {
 			var zero string
 			return zero
@@ -64,7 +68,7 @@ func (v httpRequestView) Method() string {
 	})
 }
 func (v httpRequestView) Path() string {
-	return readInput(v.source, func(s Sources) string {
+	return readInput(v.source, func(s Input) string {
 		if s.HTTPRequest == nil {
 			var zero string
 			return zero
@@ -73,7 +77,7 @@ func (v httpRequestView) Path() string {
 	})
 }
 func (v httpRequestView) Params() map[string]string {
-	return readInput(v.source, func(s Sources) map[string]string {
+	return readInput(v.source, func(s Input) map[string]string {
 		if s.HTTPRequest == nil {
 			var zero map[string]string
 			return zero
@@ -82,7 +86,7 @@ func (v httpRequestView) Params() map[string]string {
 	})
 }
 func (v httpRequestView) PathKeys() []string {
-	return readInput(v.source, func(s Sources) []string {
+	return readInput(v.source, func(s Input) []string {
 		if s.HTTPRequest == nil {
 			var zero []string
 			return zero
@@ -91,7 +95,7 @@ func (v httpRequestView) PathKeys() []string {
 	})
 }
 func (v httpRequestView) Header(name string) string {
-	return readInput(v.source, func(s Sources) string {
+	return readInput(v.source, func(s Input) string {
 		if s.HTTPRequest == nil {
 			var zero string
 			return zero
@@ -100,7 +104,7 @@ func (v httpRequestView) Header(name string) string {
 	})
 }
 func (v httpRequestView) Queries() map[string][]string {
-	return readInput(v.source, func(s Sources) map[string][]string {
+	return readInput(v.source, func(s Input) map[string][]string {
 		if s.HTTPRequest == nil {
 			var zero map[string][]string
 			return zero
@@ -109,7 +113,7 @@ func (v httpRequestView) Queries() map[string][]string {
 	})
 }
 func (v httpRequestView) Param(name string) string {
-	return readInput(v.source, func(s Sources) string {
+	return readInput(v.source, func(s Input) string {
 		if s.HTTPRequest == nil {
 			var zero string
 			return zero
@@ -118,7 +122,7 @@ func (v httpRequestView) Param(name string) string {
 	})
 }
 func (v httpRequestView) Query(name string) string {
-	return readInput(v.source, func(s Sources) string {
+	return readInput(v.source, func(s Input) string {
 		if s.HTTPRequest == nil {
 			var zero string
 			return zero
@@ -127,7 +131,7 @@ func (v httpRequestView) Query(name string) string {
 	})
 }
 func (v httpRequestView) Headers() map[string][]string {
-	return readInput(v.source, func(s Sources) map[string][]string {
+	return readInput(v.source, func(s Input) map[string][]string {
 		if s.HTTPRequest == nil {
 			var zero map[string][]string
 			return zero
@@ -136,7 +140,7 @@ func (v httpRequestView) Headers() map[string][]string {
 	})
 }
 func (v httpRequestView) MultipartForm() (fields contextview.MultipartFields, err error) {
-	v.source.readInput(func(s Sources) {
+	v.source.readInput(func(s Input) {
 		if s.HTTPRequest == nil {
 			err = errResponseUnavailable
 			return
@@ -174,7 +178,7 @@ type httpResponseView struct{ source *Context }
 var errResponseUnavailable = errors.New("HTTP response is no longer available")
 
 func (v httpResponseView) useWriter(use func(httpcontract.ResponseWriter)) (available bool) {
-	v.source.readInput(func(s Sources) {
+	v.source.readInput(func(s Input) {
 		if s.HTTPResponse == nil {
 			return
 		}

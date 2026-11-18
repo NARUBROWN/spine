@@ -364,7 +364,7 @@ func TestExecute_PostHookFailureDiscardsPreparedSuccessResponse(t *testing.T) {
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
 		handle: func(v any, ctx *execution.Context) error {
 			handled = true
-			rw := ctx.HTTPResponse().ResponseWriter()
+			rw := ctx.Input.HTTPResponse.ResponseWriter()
 			return rw.WriteStatus(204)
 		},
 	})
@@ -607,7 +607,7 @@ func TestExecute_NoContentTransportErrorReachesAfterCompletion(t *testing.T) {
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
 		handle: func(_ any, ctx *execution.Context) error {
-			return ctx.HTTPResponse().ResponseWriter().WriteStatus(http.StatusNoContent)
+			return ctx.Input.HTTPResponse.ResponseWriter().WriteStatus(http.StatusNoContent)
 		},
 	})
 	want := errors.New("transport write failed")
@@ -731,7 +731,7 @@ func TestExecute_BeforeResponseFailurePreventsSuccessWrite(t *testing.T) {
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
 		handle: func(v any, ctx *execution.Context) error {
 			successHandled = true
-			return ctx.HTTPResponse().ResponseWriter().WriteString(200, v.(string))
+			return ctx.Input.HTTPResponse.ResponseWriter().WriteString(200, v.(string))
 		},
 	})
 
@@ -839,7 +839,7 @@ func TestExecute_StagedTransportWriteFailureIsReturned(t *testing.T) {
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
 		handle: func(value any, ctx *execution.Context) error {
-			rw := ctx.HTTPResponse().ResponseWriter()
+			rw := ctx.Input.HTTPResponse.ResponseWriter()
 			return rw.WriteString(http.StatusOK, value.(string))
 		},
 	})

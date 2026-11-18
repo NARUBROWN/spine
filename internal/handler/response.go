@@ -11,7 +11,7 @@ import (
 )
 
 func responseWriter(ctx *execution.Context) (httpcontract.ResponseWriter, error) {
-	response := ctx.HTTPResponse()
+	response := ctx.Input.HTTPResponse
 	ok := response != nil
 	if !ok || response.ResponseWriter() == nil {
 		return nil, fmt.Errorf("HTTP response writer is not available")

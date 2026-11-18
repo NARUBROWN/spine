@@ -32,7 +32,7 @@ func (r *InputDTOResolver) Resolve(ctx *execution.Context, parameter ParameterMe
 	if err != nil {
 		return nil, err
 	}
-	httpCtx := ctx.HTTPRequest()
+	httpCtx := ctx.Input.HTTPRequest
 	ok := httpCtx != nil
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")

@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"mime/multipart"
+	"sync"
 
 	httpcontract "github.com/NARUBROWN/spine/contract/http"
 )
@@ -10,16 +11,18 @@ import (
 // Context owns the state and HTTP input of one pipeline execution.
 // Internal consumers use its methods; public callers receive a separate view.
 type Context struct {
-	state State
-	input Input
+	state   State
+	Input   Input
+	inputMu sync.RWMutex
+	closed  bool
 }
 
-// NewContext initializes one execution and owns its state and input.
-func NewContext(ctx context.Context, sources Sources) *Context {
+// NewContext initializes one execution and owns its state and HTTP input.
+func NewContext(ctx context.Context, input Input) *Context {
 	if ctx == nil {
 		panic("execution context is nil")
 	}
-	return &Context{state: State{ctx: ctx}, input: Input{sources: sources}}
+	return &Context{state: State{ctx: ctx}, Input: input}
 }
 
 // NewHTTPContext initializes an execution from a single HTTP transport scope.
@@ -28,26 +31,34 @@ func NewHTTPContext(request interface {
 	HTTPResponseContext
 	RoutingContext
 }) *Context {
-	return NewContext(request.Context(), Sources{
+	return NewContext(request.Context(), Input{
 		Routing: request, HTTPRequest: request, HTTPResponse: request,
 	})
 }
 
-func (c *Context) Context() context.Context          { return c.state.ctx }
-func (c *Context) Get(key string) (any, bool)        { return c.state.Get(key) }
-func (c *Context) Set(key string, value any)         { c.state.Set(key, value) }
-func (c *Context) Routing() RoutingContext           { return c.input.Routing() }
-func (c *Context) HTTPRequest() HTTPRequestContext   { return c.input.HTTPRequest() }
-func (c *Context) HTTPResponse() HTTPResponseContext { return c.input.HTTPResponse() }
+func (c *Context) Context() context.Context   { return c.state.ctx }
+func (c *Context) Get(key string) (any, bool) { return c.state.Get(key) }
+func (c *Context) Set(key string, value any)  { c.state.Set(key, value) }
 
 // Close runs after completion hooks and revokes retained views. It is idempotent.
 // HTTP transport cleanup follows this operation in the transport owner.
 func (c *Context) Close() {
 	c.state.ReleaseStore()
-	c.input.Close()
+	c.inputMu.Lock()
+	defer c.inputMu.Unlock()
+	c.closed = true
+	c.Input = Input{}
 }
 
-func (c *Context) readInput(read func(Sources)) { c.input.read(read) }
+// readInput keeps borrowed HTTP references alive for one public view operation.
+// Runtime consumers access Input fields directly within the pipeline lifetime.
+func (c *Context) readInput(read func(Input)) {
+	c.inputMu.RLock()
+	defer c.inputMu.RUnlock()
+	if !c.closed {
+		read(c.Input)
+	}
+}
 
 // RoutingContext is the HTTP router's input, not a common execution requirement.
 type RoutingContext interface {

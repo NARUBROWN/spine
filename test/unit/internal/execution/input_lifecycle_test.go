@@ -11,7 +11,7 @@ import (
 func TestInputCloseDetachesAllSourcesAndRetainedViews(t *testing.T) {
 	request := &requestOnlyContext{}
 	response := &responseOnlyContext{writer: &viewWriter{headers: map[string]string{}}}
-	ctx := NewContext(context.Background(), Sources{Routing: request, HTTPRequest: request, HTTPResponse: response})
+	ctx := NewContext(context.Background(), Input{Routing: request, HTTPRequest: request, HTTPResponse: response})
 	public := ctx.PublicView()
 	httpView, _ := public.HTTPRequestContext()
 	responseView, _ := public.HTTPResponseContext()
@@ -29,7 +29,7 @@ func TestInputCloseDetachesAllSourcesAndRetainedViews(t *testing.T) {
 	ctx.Close()
 	ctx.Close()
 	wg.Wait()
-	if !reflect.DeepEqual(ctx.input.sources, Sources{}) {
+	if !reflect.DeepEqual(ctx.Input, Input{}) {
 		t.Fatal("transport references remain")
 	}
 	if httpView.Path() != "" {
@@ -52,7 +52,7 @@ var retainedInputViews []contextview.Ctx
 func BenchmarkCompletedInputLeaseChurn(b *testing.B) {
 	retainedInputViews = make([]contextview.Ctx, 256)
 	for n := 0; n < b.N; n++ {
-		ctx := NewContext(context.Background(), Sources{HTTPRequest: &requestOnlyContext{}})
+		ctx := NewContext(context.Background(), Input{HTTPRequest: &requestOnlyContext{}})
 		retainedInputViews[n%len(retainedInputViews)] = ctx.PublicView()
 		ctx.Close()
 	}

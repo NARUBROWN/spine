@@ -1,10 +1,11 @@
 # HTTP execution context ownership
 
 Each HTTP request now creates one `execution.Context`. Its constructor initializes
-its private `State` and `Input`. The pipeline, argument resolvers, return handlers
+its private `State` and its internal `Input` field. The pipeline, argument resolvers, return handlers
 and post-execution hooks receive that context instead of separate state and input
-arguments. They access request data and response operations through the context's
-methods. The context does not return its state or input objects.
+arguments. They access HTTP contracts directly through `ctx.Input.HTTPRequest`,
+`ctx.Input.HTTPResponse` and `ctx.Input.Routing`. `Input` stores those contracts
+directly, without a nested `Sources` object or forwarding getters.
 
 The public HTTP contract remains `spine.Ctx`. Its method set comes from the
 canonical `contextview.Ctx` contract. Handler and interceptor arguments receive a
@@ -22,8 +23,8 @@ request context. Controllers and interceptors can receive separate view instance
 that share the same execution owner.
 
 Response preparation, interceptor ordering and flushing are preserved. After
-`AfterCompletion`, `Context.Close` releases execution values and detaches the HTTP
-input. Retained views cannot restore values or write to a completed response.
+`AfterCompletion`, `Context.Close` releases execution values and clears the HTTP
+input under the same lock used by public view operations. Retained views cannot restore values or write to a completed response.
 Transport cleanup then releases the body parser's resources and the response
 writer. Closing the execution does not cancel the original Go request context;
 its cancellation remains owned by the HTTP platform.

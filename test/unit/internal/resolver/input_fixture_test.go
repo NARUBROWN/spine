@@ -9,7 +9,7 @@ func httpTestContext(source interface{ Context() context.Context }) *execution.C
 	if ctx, ok := source.(*execution.Context); ok {
 		return ctx
 	}
-	s := execution.Sources{}
+	s := execution.Input{}
 	s.HTTPRequest, _ = source.(execution.HTTPRequestContext)
 	s.HTTPResponse, _ = source.(execution.HTTPResponseContext)
 	s.Routing, _ = source.(execution.RoutingContext)
