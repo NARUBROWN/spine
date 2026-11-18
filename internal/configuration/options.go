@@ -17,9 +17,9 @@ type InterceptorScope uint8
 const (
 	// InterceptorHTTP는 HTTP 요청에만 인터셉터를 실행합니다.
 	InterceptorHTTP InterceptorScope = 1 << iota
-	// InterceptorWebSocket은 WebSocket 메시지에만 인터셉터를 실행합니다.
+	// InterceptorWebSocket은 이전 범위 값입니다. WebSocketInterceptor 등록을 사용하세요.
 	InterceptorWebSocket
-	// InterceptorAll은 HTTP 요청과 WebSocket 메시지에 인터셉터를 실행합니다.
+	// InterceptorAll은 HTTP 전용 앱의 기존 전역 등록 범위입니다.
 	InterceptorAll = InterceptorHTTP | InterceptorWebSocket
 
 	// DefaultWebSocketMaxConnections는 Spine의 기본 동시 연결 수 제한입니다.

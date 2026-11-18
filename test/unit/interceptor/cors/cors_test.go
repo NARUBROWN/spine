@@ -310,10 +310,9 @@ func (c *testExecutionContext) HTTPRequestContext() (contextapi.HTTPRequestView,
 func (c *testExecutionContext) HTTPResponseContext() (contextapi.HTTPResponseView, bool) {
 	return c.writer, c.writer != nil
 }
-func (*testExecutionContext) WebSocket() (contextapi.WebSocketView, bool) { return nil, false }
-func (*testExecutionContext) Param(string) string                         { return "" }
-func (*testExecutionContext) Query(string) string                         { return "" }
-func (*testExecutionContext) Headers() map[string][]string                { return nil }
+func (*testExecutionContext) Param(string) string          { return "" }
+func (*testExecutionContext) Query(string) string          { return "" }
+func (*testExecutionContext) Headers() map[string][]string { return nil }
 func (*testExecutionContext) MultipartForm() (contextapi.MultipartFields, error) {
 	return contextapi.MultipartFields{}, nil
 }

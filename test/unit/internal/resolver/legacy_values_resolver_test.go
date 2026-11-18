@@ -25,7 +25,7 @@ func TestLegacyValuesResolversInjectViewsWithoutBodyBinding(t *testing.T) {
 		if !test.resolver.Supports(pm) || test.resolver.Supports(ParameterMeta{Type: reflect.PointerTo(test.typ)}) {
 			t.Fatalf("기존 타입은 값 인자로만 주입합니다: %v", test.typ)
 		}
-		value, err := test.resolver.Resolve(ctx, pm)
+		value, err := test.resolver.Resolve(httpTestContext(ctx), pm)
 		if err != nil {
 			t.Fatal(err)
 		}

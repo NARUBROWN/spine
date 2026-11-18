@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/resolver"
+	"github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type EventNameResolver struct{}
@@ -14,15 +14,14 @@ func (r *EventNameResolver) Supports(meta resolver.ParameterMeta) bool {
 	return meta.Type.Kind() == reflect.String
 }
 
-func (r *EventNameResolver) Resolve(ctx execution.Context, meta resolver.ParameterMeta) (any, error) {
-	consumerCtx, ok := ctx.(execution.ConsumerRequestContext)
-	if !ok {
-		return nil, fmt.Errorf("context is not a ConsumerRequestContext")
+func (r *EventNameResolver) Resolve(ctx spine.EventCtx, meta resolver.ParameterMeta, message *Input) (any, error) {
+	if message == nil {
+		return nil, fmt.Errorf("consumer message input is not available")
 	}
 
-	name := consumerCtx.EventName()
+	name := message.Name
 	if name == "" {
-		return nil, fmt.Errorf("EventName not found in RequestContext")
+		return nil, fmt.Errorf("event name is empty")
 	}
 
 	value := reflect.ValueOf(name)

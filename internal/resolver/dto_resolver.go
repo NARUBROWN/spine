@@ -28,15 +28,16 @@ func (r *DTOResolver) Supports(pm ParameterMeta) bool {
 	return !input.HasForm(pm.Type.Elem())
 }
 
-func (r *DTOResolver) Resolve(ctx execution.Context, parameterMeta ParameterMeta) (any, error) {
+func (r *DTOResolver) Resolve(ctx *execution.Context, parameterMeta ParameterMeta) (any, error) {
 	if !r.Supports(parameterMeta) {
 		return nil, fmt.Errorf("HTTP DTO inputs require an explicit input wrapper")
 	}
 	return resolveBodyDTO(ctx, parameterMeta, r.Validator, &r.media)
 }
 
-func resolveBodyDTO(ctx execution.Context, parameter ParameterMeta, validator validation.Validator, mediaCache *sync.Map) (any, error) {
-	httpCtx, ok := ctx.(execution.HTTPRequestContext)
+func resolveBodyDTO(ctx *execution.Context, parameter ParameterMeta, validator validation.Validator, mediaCache *sync.Map) (any, error) {
+	httpCtx := ctx.Input.HTTPRequest
+	ok := httpCtx != nil
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")
 	}

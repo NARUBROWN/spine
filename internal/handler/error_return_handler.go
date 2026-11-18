@@ -14,7 +14,7 @@ func (h *ErrorReturnHandler) Supports(returnType reflect.Type) bool {
 	return returnType.Implements(errorType)
 }
 
-func (h *ErrorReturnHandler) Handle(value any, ctx execution.Context) error {
+func (h *ErrorReturnHandler) Handle(value any, ctx *execution.Context) error {
 	rw, writerErr := responseWriter(ctx)
 	if writerErr != nil {
 		return writerErr

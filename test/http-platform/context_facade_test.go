@@ -109,9 +109,6 @@ func (c *firstFacadeController) Write(ctx contextapi.Ctx, path input.Path[firstF
 	if !ok {
 		return httpx.Response[facadeResult]{}, fmt.Errorf("HTTP view is missing")
 	}
-	if _, ok := ctx.WebSocket(); ok {
-		return httpx.Response[facadeResult]{}, fmt.Errorf("HTTP execution exposes a WebSocket view")
-	}
 	response, ok := ctx.HTTPResponseContext()
 	if !ok {
 		return httpx.Response[facadeResult]{}, fmt.Errorf("HTTP response view is missing")
@@ -218,9 +215,17 @@ func TestCommonContextSharesWithinExecutionAndIsolatesControllers(t *testing.T) 
 				}
 				state.mu.Lock()
 				retained := state.retained[requestID]
+				retainedResponse := state.responses[requestID]
 				state.mu.Unlock()
 				if retained == nil {
 					t.Fatal("controller did not retain its context view")
+				}
+				for _, view := range []any{retained, retained.ExecutionContext(), retainedResponse} {
+					for _, method := range []string{"Close", "PublicView", "State", "Input", "Unwrap", "ReleaseStore", "Routing", "HTTPRequest", "HTTPResponse", "SetResponseWriter", "ResponseWriter", "Bind"} {
+						if _, exposed := reflect.TypeOf(view).MethodByName(method); exposed {
+							t.Fatalf("public view %T exposes internal method %s", view, method)
+						}
+					}
 				}
 				retained.ExecutionContext().Set("late", make([]byte, 1024))
 				for _, key := range []string{"value", "shared", "requestID", "late"} {

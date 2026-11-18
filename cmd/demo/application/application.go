@@ -1,4 +1,4 @@
-// Package application은 CLI 계약 검사와 실제 demo 실행이 공유하는 앱 구성을 제공합니다.
+// Package application shares composition between CLI checks and the demo server.
 package application
 
 import (
@@ -12,13 +12,10 @@ import (
 	"github.com/NARUBROWN/spine/pkg/constructor"
 )
 
-// BuildApplication은 리스너나 외부 브로커를 열지 않고 최소 HTTP/WS 앱을 구성합니다.
+// BuildApplication assembles the HTTP and WebSocket demo without opening listeners.
 func BuildApplication() (spine.App, boot.Options, error) {
 	app := spine.New(gorillaplatform.Option(), platform.Option())
 	app.Constructor(constructor.Controller(&Controller{}))
-	if err := app.WebSocket().Register("/ws/echo", (*Controller).WebSocketEcho); err != nil {
-		return nil, boot.Options{}, err
-	}
 
 	address := "127.0.0.1:8080"
 	if port := os.Getenv("SPINE_PORT"); port != "" {

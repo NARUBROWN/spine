@@ -17,10 +17,11 @@ import (
 	wsadapter "github.com/NARUBROWN/spine/contract/websocket"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/configuration"
-	"github.com/NARUBROWN/spine/internal/contextview"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/httpfailure"
-	"github.com/NARUBROWN/spine/internal/pipeline"
+	"github.com/NARUBROWN/spine/internal/invoker"
+	wsresolver "github.com/NARUBROWN/spine/internal/ws/resolver"
+	publicws "github.com/NARUBROWN/spine/pkg/ws"
 )
 
 const (
@@ -44,29 +45,34 @@ type normalizedWebSocketOptions struct {
 }
 
 type Runtime struct {
-	pipeline *pipeline.Pipeline
-	adapter  wsadapter.Adapter
-	options  normalizedWebSocketOptions
-	stopOnce sync.Once
-	ctx      context.Context
-	cancel   context.CancelFunc
+	invoker           *invoker.Invoker
+	interceptors      []core.WebSocketInterceptor
+	argumentResolvers []wsresolver.ArgumentResolver
+	sender            *Sender
+	adapter           wsadapter.Adapter
+	options           normalizedWebSocketOptions
+	stopOnce          sync.Once
+	ctx               context.Context
+	cancel            context.CancelFunc
 	// lifecycleMu는 HandleConn 등록과 Stop의 대기 시작을 직렬화합니다.
 	// Stop이 시작된 뒤에는 WaitGroup에 새로운 작업이 추가되지 않습니다.
 	lifecycleMu sync.Mutex
 	stopping    bool
+	started     bool
 	handlers    sync.WaitGroup
 	connMu      sync.Mutex
 	conns       map[string]*trackedConn
 	// connectionSlots는 활성 연결과 진행 중인 핸드셰이크를 모두 포함합니다.
 	// 동시에 여러 핸드셰이크가 진행되어도 최대 연결 수를 넘지 않도록
 	// 연결을 업그레이드하기 전에 슬롯을 미리 확보합니다.
-	connectionSlots       int
-	handshakeInterceptors []core.WebSocketHandshakeInterceptor
+	connectionSlots     int
+	upgradeInterceptors []core.WebSocketUpgradeInterceptor
 }
 
 type trackedConn struct {
-	conn wsadapter.Connection
-	mu   sync.Mutex
+	conn     wsadapter.Connection
+	gateOnce sync.Once
+	gate     chan struct{}
 }
 
 func writeDeadline(timeout time.Duration) time.Time {
@@ -77,41 +83,46 @@ func writeDeadline(timeout time.Duration) time.Time {
 }
 
 func (c *trackedConn) writeMessage(messageType int, data []byte, timeout time.Duration) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.conn.WriteMessage(messageType, data, writeDeadline(timeout))
+	return c.writeMessageContext(context.Background(), messageType, data, timeout)
 }
 
 func (c *trackedConn) ping(timeout time.Duration) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	if err := c.lock(context.Background()); err != nil {
+		return err
+	}
+	defer c.unlock()
 	return c.conn.Ping(writeDeadline(timeout))
 }
 
 func (c *trackedConn) writeClose(code int, reason string, timeout time.Duration) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	if err := c.lock(context.Background()); err != nil {
+		return err
+	}
+	defer c.unlock()
 	return c.conn.WriteClose(code, reason, writeDeadline(timeout))
 }
 
-func NewRuntime(pipeline *pipeline.Pipeline, adapter wsadapter.Adapter, opts configuration.WebSocketOptions, handshakeInterceptors ...core.WebSocketHandshakeInterceptor) *Runtime {
+func NewRuntime(handlerInvoker *invoker.Invoker, adapter wsadapter.Adapter, opts configuration.WebSocketOptions, interceptors []core.WebSocketInterceptor, upgradeInterceptors ...core.WebSocketUpgradeInterceptor) *Runtime {
 	if wsadapter.ValidateAdapter(adapter) != nil {
 		panic("ws: adapter cannot be nil")
 	}
-	if pipeline == nil {
-		panic("ws: pipeline cannot be nil")
+	if handlerInvoker == nil {
+		panic("ws: invoker cannot be nil")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Runtime{
-		pipeline:              pipeline,
-		adapter:               adapter,
-		options:               normalizeWebSocketOptions(opts),
-		ctx:                   ctx,
-		cancel:                cancel,
-		conns:                 make(map[string]*trackedConn),
-		handshakeInterceptors: append([]core.WebSocketHandshakeInterceptor(nil), handshakeInterceptors...),
+		invoker:             handlerInvoker,
+		interceptors:        append([]core.WebSocketInterceptor(nil), interceptors...),
+		argumentResolvers:   wsresolver.Resolvers(nil),
+		adapter:             adapter,
+		options:             normalizeWebSocketOptions(opts),
+		ctx:                 ctx,
+		cancel:              cancel,
+		conns:               make(map[string]*trackedConn),
+		sender:              NewSender(),
+		upgradeInterceptors: append([]core.WebSocketUpgradeInterceptor(nil), upgradeInterceptors...),
 	}
 }
 
@@ -202,37 +213,14 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 		}
 	}()
 
-	handshakeCtx, cancelHandshake := context.WithCancel(req.Context())
-	stopHandshakeCancellation := context.AfterFunc(r.ctx, cancelHandshake)
+	upgradeCtx, cancelUpgrade := context.WithCancel(req.Context())
+	stopUpgradeCancellation := context.AfterFunc(r.ctx, cancelUpgrade)
 	defer func() {
-		stopHandshakeCancellation()
-		cancelHandshake()
+		stopUpgradeCancellation()
+		cancelUpgrade()
 	}()
-	handshakeContext := newWebSocketRequestSnapshot(req.WithContext(handshakeCtx))
-	if err := r.preHandshake(handshakeContext, reg); err != nil {
-		writeHandshakeRejection(w, err)
-		log.Printf("[WS] Handshake rejected (path=%s): %v", reg.Path, err)
-		return
-	}
-
-	if handshakeCtx.Err() != nil || r.ctx.Err() != nil {
-		http.Error(w, "websocket runtime is shutting down", http.StatusServiceUnavailable)
-		return
-	}
-	if !isAllowedWebSocketOriginWithTrustedProxies(req, r.options.AllowedOrigins, r.options.TrustedProxies) {
-		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
-		return
-	}
-	conn, err := r.adapter.Upgrade(w, req.WithContext(handshakeCtx))
-	if err != nil {
-		if wsadapter.ValidateConnection(conn) == nil {
-			_ = conn.Close()
-		}
-		log.Printf("[WS] Upgrade failed (%s): %v", reg.Path, err)
-		return
-	}
-	if err := wsadapter.ValidateConnection(conn); err != nil {
-		log.Printf("[WS] Upgrade failed (%s): %v", reg.Path, err)
+	conn := r.upgradeConnection(w, req.WithContext(upgradeCtx), reg)
+	if conn == nil {
 		return
 	}
 
@@ -280,6 +268,7 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 		}
 	}()
 
+	session := session{ctx: connCtx, id: connID}
 	// 연결당 루프
 	for {
 		msgType, payload, err := conn.ReadMessage()
@@ -288,18 +277,8 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 			return
 		}
 
-		ctx := NewWSExecutionContext(
-			connCtx,
-			connID,
-			req.URL.Path,
-			msgType,
-			payload,
-			nil,
-			sendFn,
-			handshakeContext,
-		)
-
-		if err := r.pipeline.ExecuteRegistered(ctx, reg.Meta); err != nil {
+		err = r.executeMessage(session, msgType, payload, sendFn, reg.Meta, reg.Interceptors...)
+		if err != nil {
 			log.Printf("[WS] Handler failed (conn=%p): %v", &connID, err)
 			code, reason := wsadapter.CloseInternalServerErr, "handler error"
 			if _, ok := validation.AsError(err); ok {
@@ -314,37 +293,60 @@ func (r *Runtime) HandleConn(w http.ResponseWriter, req *http.Request, reg Regis
 	}
 }
 
-func (r *Runtime) preHandshake(ctx execution.WebSocketRequestContext, reg Registration) error {
-	executionCtx := NewWSExecutionContext(ctx.Context(), "", ctx.Path(), 0, nil, nil, nil, ctx)
-	defer executionCtx.(interface{ ReleaseStore() }).ReleaseStore()
-	publicCtx := execution.NewContext(executionCtx)
-	for _, interceptor := range r.handshakeInterceptors {
-		if interceptor == nil {
-			continue
+func (r *Runtime) upgradeConnection(w http.ResponseWriter, req *http.Request, reg Registration) wsadapter.Connection {
+	if err := r.beforeUpgrade(req.Context(), newWebSocketRequestSnapshot(req), reg); err != nil {
+		writeHandshakeRejection(w, err)
+		log.Printf("[WS] Handshake rejected (path=%s): %v", reg.Path, err)
+		return nil
+	}
+
+	if req.Context().Err() != nil || r.ctx.Err() != nil {
+		http.Error(w, "websocket runtime is shutting down", http.StatusServiceUnavailable)
+		return nil
+	}
+	if !isAllowedWebSocketOriginWithTrustedProxies(req, r.options.AllowedOrigins, r.options.TrustedProxies) {
+		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		return nil
+	}
+	conn, err := r.adapter.Upgrade(w, req)
+	if err != nil {
+		if wsadapter.ValidateConnection(conn) == nil {
+			_ = conn.Close()
 		}
-		if err := callPreHandshake(interceptor, publicCtx, reg.Meta); err != nil {
+		log.Printf("[WS] Upgrade failed (%s): %v", reg.Path, err)
+		return nil
+	}
+	if err := wsadapter.ValidateConnection(conn); err != nil {
+		log.Printf("[WS] Upgrade failed (%s): %v", reg.Path, err)
+		return nil
+	}
+	return conn
+}
+
+func (r *Runtime) beforeUpgrade(parent context.Context, request publicws.Handshake, reg Registration) error {
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+
+	for _, interceptor := range r.upgradeInterceptors {
+		if err := callBeforeUpgrade(interceptor, ctx, request, reg.Meta); err != nil {
 			return err
 		}
 	}
-	for _, interceptor := range reg.Meta.Interceptors {
-		handshakeInterceptor, ok := interceptor.(core.WebSocketHandshakeInterceptor)
-		if !ok {
-			continue
-		}
-		if err := callPreHandshake(handshakeInterceptor, publicCtx, reg.Meta); err != nil {
+	for _, interceptor := range reg.UpgradeInterceptors {
+		if err := callBeforeUpgrade(interceptor, ctx, request, reg.Meta); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func callPreHandshake(interceptor core.WebSocketHandshakeInterceptor, ctx contextview.Ctx, meta execution.HandlerMeta) (err error) {
+func callBeforeUpgrade(interceptor core.WebSocketUpgradeInterceptor, ctx context.Context, request publicws.Handshake, meta execution.HandlerMeta) (err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			err = fmt.Errorf("websocket handshake interceptor panic: %v", recovered)
+			err = fmt.Errorf("websocket upgrade interceptor panic: %v", recovered)
 		}
 	}()
-	return interceptor.PreHandshake(ctx, meta.View())
+	return interceptor.BeforeUpgrade(ctx, request, meta.View())
 }
 
 func writeHandshakeRejection(w http.ResponseWriter, err error) {
@@ -364,6 +366,7 @@ func (r *Runtime) Stop() {
 		r.lifecycleMu.Lock()
 		r.stopping = true
 		r.cancel()
+		r.sender.Close()
 		r.lifecycleMu.Unlock()
 
 		r.connMu.Lock()
@@ -410,6 +413,7 @@ func (r *Runtime) beginHandleConn() bool {
 	if r.stopping {
 		return false
 	}
+	r.started = true
 	r.handlers.Add(1)
 	return true
 }
@@ -438,6 +442,7 @@ func (r *Runtime) activateReservedConnection(connID string, conn *trackedConn) b
 		return false
 	default:
 		r.conns[connID] = conn
+		r.sender.add(connID, conn)
 		return true
 	}
 }
@@ -455,6 +460,7 @@ func (r *Runtime) untrackConn(connID string) {
 	defer r.connMu.Unlock()
 	if _, ok := r.conns[connID]; ok {
 		delete(r.conns, connID)
+		r.sender.remove(connID)
 		if r.connectionSlots > 0 {
 			r.connectionSlots--
 		}
@@ -539,4 +545,51 @@ func normalizedForwardedScheme(value string) string {
 		return scheme
 	}
 	return ""
+}
+
+func (c *trackedConn) lock(ctx context.Context) error {
+	c.gateOnce.Do(func() { c.gate = make(chan struct{}, 1) })
+	select {
+	case c.gate <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+func (c *trackedConn) unlock() { <-c.gate }
+func (c *trackedConn) writeMessageContext(ctx context.Context, kind int, data []byte, timeout time.Duration) error {
+	if err := c.lock(ctx); err != nil {
+		return err
+	}
+	defer c.unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	deadline := writeDeadline(timeout)
+	if end, ok := ctx.Deadline(); ok && (deadline.IsZero() || end.Before(deadline)) {
+		deadline = end
+	}
+	err := c.conn.WriteMessage(kind, data, deadline)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return err
+}
+
+// UseSender connects the application sender before any connections are accepted.
+func (r *Runtime) UseSender(sender *Sender) {
+	sender.mu.Lock()
+	sender.timeout = r.options.WriteTimeout
+	sender.mu.Unlock()
+	r.sender = sender
+}
+
+// UseValidator configures message binding before any connection handlers start.
+func (r *Runtime) UseValidator(v validation.Validator) {
+	r.lifecycleMu.Lock()
+	defer r.lifecycleMu.Unlock()
+	if r.stopping || r.started {
+		panic("ws: configure validator before accepting connections")
+	}
+	r.argumentResolvers = wsresolver.Resolvers(v)
 }

@@ -20,7 +20,7 @@ func (h *RedirectReturnValueHandler) Supports(returnType reflect.Type) bool {
 	return returnType == reflect.TypeFor[httpx.Redirect]()
 }
 
-func (h *RedirectReturnValueHandler) Handle(value any, ctx execution.Context) error {
+func (h *RedirectReturnValueHandler) Handle(value any, ctx *execution.Context) error {
 	var redirect httpx.Redirect
 	switch v := value.(type) {
 	case httpx.Redirect:

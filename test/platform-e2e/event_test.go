@@ -18,13 +18,14 @@ import (
 	echo "github.com/NARUBROWN/spine-echo-platform"
 	kafkaPlatform "github.com/NARUBROWN/spine-kafka-platform"
 	rabbitPlatform "github.com/NARUBROWN/spine-rabbitmq-platform"
-	event "github.com/NARUBROWN/spine/contract/event"
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/pkg/api"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	"github.com/NARUBROWN/spine/pkg/input"
+	handlerspine "github.com/NARUBROWN/spine/pkg/spine"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/segmentio/kafka-go"
 )
@@ -33,44 +34,40 @@ type validatedInput struct {
 	Email string `json:"email" validate:"required,email"`
 	Age   int    `json:"age" validate:"gte=18"`
 }
-type domainEvent struct {
-	validatedInput
-	topic string
-}
-
-func (e domainEvent) Name() string        { return e.topic }
-func (domainEvent) OccurredAt() time.Time { return time.Now() }
-
 type senderController struct {
-	topic string
-	calls atomic.Int32
+	publisher publish.Publisher
+	topic     string
+	calls     atomic.Int32
 }
 
-func (c *senderController) Emit(ctx context.Context, input *validatedInput) httpx.Response[string] {
+func (c *senderController) Emit(ctx context.Context, input *validatedInput) (httpx.Response[string], error) {
 	c.calls.Add(1)
-	publish.DomainEvents(ctx, domainEvent{validatedInput: *input, topic: c.topic})
-	return httpx.Response[string]{Body: "accepted"}
+	if err := c.publisher.Event(ctx, c.topic, publish.Fields{"email": input.Email, "age": input.Age}); err != nil {
+		return httpx.Response[string]{}, err
+	}
+	return httpx.Response[string]{Body: "accepted"}, nil
 }
 
 type workerController struct {
-	topic string
-	calls atomic.Int32
+	publisher publish.Publisher
+	topic     string
+	calls     atomic.Int32
 }
 
-func (c *workerController) Handle(ctx context.Context, input validatedInput) {
+func (c *workerController) Handle(ctx handlerspine.EventCtx, input validatedInput) error {
 	c.calls.Add(1)
-	publish.DomainEvents(ctx, domainEvent{validatedInput: input, topic: c.topic})
+	return c.publisher.Event(ctx, c.topic, publish.Fields{"email": input.Email, "age": input.Age})
 }
 
 // 실제 브로커와 공개 계약 사이에서 readiness·결과 확인만 관찰합니다.
 type observedFactory struct {
-	event.Factory
+	eventadapter.Factory
 	ready       chan struct{}
 	once        sync.Once
 	acks, nacks chan error
 }
 
-func (f *observedFactory) NewReader(ctx context.Context, s event.Subscription) (event.Reader, error) {
+func (f *observedFactory) NewReader(ctx context.Context, s eventadapter.Subscription) (eventadapter.Reader, error) {
 	r, err := f.Factory.NewReader(ctx, s)
 	if err != nil {
 		return nil, err
@@ -80,11 +77,11 @@ func (f *observedFactory) NewReader(ctx context.Context, s event.Subscription) (
 }
 
 type observedReader struct {
-	event.Reader
+	eventadapter.Reader
 	f *observedFactory
 }
 
-func (r *observedReader) Read(ctx context.Context) (event.Delivery, error) {
+func (r *observedReader) Read(ctx context.Context) (eventadapter.Delivery, error) {
 	d, err := r.Reader.Read(ctx)
 	if err != nil {
 		return nil, err
@@ -93,7 +90,7 @@ func (r *observedReader) Read(ctx context.Context) (event.Delivery, error) {
 }
 
 type observedDelivery struct {
-	event.Delivery
+	eventadapter.Delivery
 	f *observedFactory
 }
 
@@ -141,7 +138,7 @@ func TestFinalE2EHTTPValidatorBrokerConsumer(t *testing.T) {
 			defer cancel()
 			name := fmt.Sprintf("spine-final-%d", time.Now().UnixNano())
 			input, output := name+".input", name+".output"
-			var factory func(bool, bool, string) event.Factory
+			var factory func(bool, bool, string) eventadapter.Factory
 			if kind == "kafka" {
 				conn, err := kafka.DialContext(ctx, "tcp", broker)
 				if err != nil {
@@ -152,7 +149,7 @@ func TestFinalE2EHTTPValidatorBrokerConsumer(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer conn.DeleteTopics(input, output)
-				factory = func(consume, publish bool, group string) event.Factory {
+				factory = func(consume, publish bool, group string) eventadapter.Factory {
 					f, err := kafkaPlatform.NewFactory(kafkaPlatform.Config{Brokers: []string{broker}, Consume: consume, Publish: publish, PublishDestinations: testDestinations{input, output}, GroupID: group, AllowInsecureTransport: true})
 					if err != nil {
 						t.Fatal(err)
@@ -173,7 +170,7 @@ func TestFinalE2EHTTPValidatorBrokerConsumer(t *testing.T) {
 				defer ch.ExchangeDelete(name, false, false)
 				defer ch.QueueDelete(input, false, false, false)
 				defer ch.QueueDelete(output, false, false, false)
-				factory = func(consume, publish bool, _ string) event.Factory {
+				factory = func(consume, publish bool, _ string) eventadapter.Factory {
 					f, err := rabbitPlatform.NewFactory(rabbitPlatform.Config{URL: url, Exchange: name, Consume: consume, Publish: publish, PublishDestinations: testDestinations{input, output}, AllowInsecureTransport: true, FailurePolicy: rabbitPlatform.FailureReject})
 					if err != nil {
 						t.Fatal(err)
@@ -181,7 +178,7 @@ func TestFinalE2EHTTPValidatorBrokerConsumer(t *testing.T) {
 					return f
 				}
 			}
-			observer, err := factory(true, false, name+".observer").NewReader(ctx, event.Subscription{Topic: output})
+			observer, err := factory(true, false, name+".observer").NewReader(ctx, eventadapter.Subscription{Topic: output})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -190,7 +187,10 @@ func TestFinalE2EHTTPValidatorBrokerConsumer(t *testing.T) {
 			validator := observedValidator{Validator: newRealValidator(t), failures: make(chan error, 8)}
 			workerCtrl := &workerController{topic: output}
 			worker := spine.New(spine.WithValidator(validator), spine.WithEventAdapter("events", observed, spine.WithEventConsumerRetry(boot.ConsumerRetryOptions{InitialDelay: 10 * time.Millisecond, MaxDelay: 100 * time.Millisecond, MaxAttempts: 5})))
-			worker.Constructor(func() *workerController { return workerCtrl })
+			worker.Constructor(func(publisher publish.Publisher) *workerController {
+				workerCtrl.publisher = publisher
+				return workerCtrl
+			})
 			if err := worker.Consumers().Register(input, (*workerController).Handle); err != nil {
 				t.Fatal(err)
 			}
@@ -219,7 +219,10 @@ func TestFinalE2EHTTPValidatorBrokerConsumer(t *testing.T) {
 			}
 			senderCtrl := &senderController{topic: input}
 			sender := spine.New(echo.Option(), spine.WithValidator(newRealValidator(t)), spine.WithEventAdapter("events", factory(false, true, "")))
-			sender.Constructor(func() *senderController { return senderCtrl })
+			sender.Constructor(func(publisher publish.Publisher) *senderController {
+				senderCtrl.publisher = publisher
+				return senderCtrl
+			})
 			prepared, err := sender.Prepare(ctx, boot.Options{HTTP: &boot.HTTPOptions{}})
 			if err != nil {
 				t.Fatal(err)
@@ -274,7 +277,7 @@ func TestFinalE2EHTTPValidatorBrokerConsumer(t *testing.T) {
 			}
 			defer publisher.Close(context.Background())
 			// HTTP 검증을 우회한 외부 생산자의 잘못된 메시지도 컨슈머가 거부해야 합니다.
-			if err := publisher.Publish(ctx, event.Message{EventName: input, Payload: []byte(`{"email":"private-invalid","age":0}`), OccurredAt: time.Now()}); err != nil {
+			if err := publisher.Publish(ctx, eventadapter.Message{EventName: input, Payload: []byte(`{"email":"private-invalid","age":0}`), OccurredAt: time.Now()}); err != nil {
 				t.Fatal(err)
 			}
 			select {
@@ -291,7 +294,7 @@ func TestFinalE2EHTTPValidatorBrokerConsumer(t *testing.T) {
 				if kind == "rabbitmq" && err != nil {
 					t.Fatal(err)
 				}
-				if kind == "kafka" && !errors.Is(err, event.ErrReaderInvalidated) {
+				if kind == "kafka" && !errors.Is(err, eventadapter.ErrReaderInvalidated) {
 					t.Fatalf("실패한 Kafka offset은 reader를 무효화해야 합니다: %v", err)
 				}
 			case <-ctx.Done():
@@ -307,7 +310,7 @@ func TestFinalE2EHTTPValidatorBrokerConsumer(t *testing.T) {
 
 // RegisterRoutes는 새 HTTP 콜백에서 기존 이벤트 Pipeline까지 실제 전달을 검증합니다.
 func (c *senderController) RegisterRoutes(r *api.Registry) {
-	r.POST("/events", func(ctx context.Context, a input.Body[validatedInput]) httpx.Response[string] {
+	r.POST("/events", func(ctx context.Context, a input.Body[validatedInput]) (httpx.Response[string], error) {
 		return c.Emit(ctx, (*validatedInput)(a))
 	})
 }

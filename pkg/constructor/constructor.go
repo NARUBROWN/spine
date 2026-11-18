@@ -22,8 +22,8 @@ func Controller(prototype any) Registration {
 	return componentregistration.New("Controller", prototype)
 }
 
-// Interceptor는 공통 생성 계약과 core.Interceptor를 따르는 인터셉터를 등록합니다.
-// 실행 범위와 순서는 InterceptorFor 또는 경로 옵션으로 지정합니다.
+// Interceptor는 공통 생성 계약과 전송별 인터셉터 계약을 따르는 컴포넌트를 등록합니다.
+// 실행 범위와 순서는 앱 또는 경로의 전송별 인터셉터 옵션으로 지정합니다.
 func Interceptor(prototype any) Registration {
 	return componentregistration.New("Interceptor", prototype)
 }

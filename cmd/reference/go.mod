@@ -3,7 +3,7 @@ module github.com/NARUBROWN/spine/cmd/reference
 go 1.25.5
 
 require (
-	github.com/NARUBROWN/spine v0.7.6-preview.1
+	github.com/NARUBROWN/spine v0.7.6-preview.2
 	github.com/NARUBROWN/spine-echo-platform v0.2.1-preview.1
 	github.com/NARUBROWN/spine-kafka-platform v0.3.0-preview.1
 	github.com/NARUBROWN/spine-rabbitmq-platform v0.3.0-preview.1
@@ -11,7 +11,7 @@ require (
 
 require (
 	github.com/NARUBROWN/spine-gorilla-platform v0.2.0-preview.2
-	github.com/gorilla/websocket v1.5.3 // indirect
+	github.com/gorilla/websocket v1.5.3
 	github.com/klauspost/compress v1.15.9 // indirect
 	github.com/labstack/echo/v5 v5.4.4 // indirect
 	github.com/pierrec/lz4/v4 v4.1.15 // indirect

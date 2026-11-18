@@ -3,24 +3,74 @@ package execution
 import (
 	"context"
 	"mime/multipart"
+	"sync"
 
 	httpcontract "github.com/NARUBROWN/spine/contract/http"
-	"github.com/NARUBROWN/spine/internal/event/emission"
 )
 
-// Context는 전송 상태와 실행 파이프라인의 제어를 함께 제공합니다.
-type Context interface {
-	Context() context.Context
-	EventBus() emission.Bus
+// Context owns the state and HTTP input of one pipeline execution.
+// Internal consumers use its methods; public callers receive a separate view.
+type Context struct {
+	state   State
+	Input   Input
+	inputMu sync.RWMutex
+	closed  bool
+}
+
+// NewContext initializes one execution and owns its state and HTTP input.
+func NewContext(ctx context.Context, input Input) *Context {
+	if ctx == nil {
+		panic("execution context is nil")
+	}
+	return &Context{state: State{ctx: ctx}, Input: input}
+}
+
+// NewHTTPContext initializes an execution from a single HTTP transport scope.
+func NewHTTPContext(request interface {
+	HTTPRequestContext
+	HTTPResponseContext
+	RoutingContext
+}) *Context {
+	return NewContext(request.Context(), Input{
+		Routing: request, HTTPRequest: request, HTTPResponse: request,
+	})
+}
+
+func (c *Context) Context() context.Context   { return c.state.ctx }
+func (c *Context) Get(key string) (any, bool) { return c.state.Get(key) }
+func (c *Context) Set(key string, value any)  { c.state.Set(key, value) }
+
+// Close runs after completion hooks and revokes retained views. It is idempotent.
+// HTTP transport cleanup follows this operation in the transport owner.
+func (c *Context) Close() {
+	c.state.ReleaseStore()
+	c.inputMu.Lock()
+	defer c.inputMu.Unlock()
+	c.closed = true
+	c.Input = Input{}
+}
+
+// readInput keeps borrowed HTTP references alive for one public view operation.
+// Runtime consumers access Input fields directly within the pipeline lifetime.
+func (c *Context) readInput(read func(Input)) {
+	c.inputMu.RLock()
+	defer c.inputMu.RUnlock()
+	if !c.closed {
+		read(c.Input)
+	}
+}
+
+// RoutingContext is the HTTP router's input, not a common execution requirement.
+type RoutingContext interface {
 	Method() string
 	Path() string
-	Params() map[string]string
-	Header(name string) string
-	PathKeys() []string
-	SetRoute(params map[string]string, pathKeys []string)
-	Queries() map[string][]string
-	Set(key string, value any)
-	Get(key string) (any, bool)
+	SetRoute(map[string]string, []string)
+}
+
+// State owns only per-execution values and the caller's cancellation context.
+type State struct {
+	Store
+	ctx context.Context
 }
 
 type HTTPRequestContext interface {
@@ -41,39 +91,4 @@ type HTTPRequestContext interface {
 type HTTPResponseContext interface {
 	ResponseWriter() httpcontract.ResponseWriter
 	SetResponseWriter(httpcontract.ResponseWriter)
-}
-
-type ConsumerRequestContext interface {
-	EventName() string
-	Payload() []byte
-}
-
-type WebSocketContext interface {
-	Context
-	ConnID() string
-	MessageType() int
-	Payload() []byte
-}
-
-func GoContext(ctx Context) context.Context {
-	parent := ctx.Context()
-	if bus := ctx.EventBus(); bus != nil {
-		return emission.WithPublisher(parent, bus)
-	}
-	return parent
-}
-
-// WebSocketRequestContext는 내부 upgrade 요청의 불변 정보 계약입니다.
-type WebSocketRequestContext interface {
-	Context() context.Context
-	Path() string
-	Header(name string) string
-	Headers() map[string][]string
-	Query(name string) string
-	Queries() map[string][]string
-	Cookie(name string) (string, bool)
-	Cookies() map[string]string
-	RemoteAddr() string
-	Host() string
-	RequestURI() string
 }

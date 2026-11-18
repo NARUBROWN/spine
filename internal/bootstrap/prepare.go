@@ -17,13 +17,15 @@ import (
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/endpoint"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
-	"github.com/NARUBROWN/spine/internal/event/hook"
 	eventPublish "github.com/NARUBROWN/spine/internal/event/publish"
+	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
 	spineRouter "github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/transport"
 	"github.com/NARUBROWN/spine/internal/ws"
+	publicPublish "github.com/NARUBROWN/spine/pkg/event/publish"
+	publicWS "github.com/NARUBROWN/spine/pkg/ws"
 )
 
 // Prepare는 실행 작업이나 리스너를 시작하지 않고 앱 자원을 준비합니다.
@@ -68,7 +70,11 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 		}
 	}
 
-	var eventPublishers []eventPublish.EventPublisher
+	application.wsSender = ws.NewSender()
+	if err := container.RegisterConstructor(func() publicWS.Sender { return application.wsSender }); err != nil {
+		return nil, err
+	}
+	var eventPublishers []eventPublish.Binding
 	for _, binding := range config.EventAdapters {
 		if !binding.Factory.Capabilities().Publish {
 			continue
@@ -88,16 +94,17 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 		if isNilHTTPValue(publisher) {
 			return nil, fmt.Errorf("%w: %s returned a nil publisher", eventadapter.ErrInvalidAdapter, binding.Name)
 		}
-		eventPublishers = append(eventPublishers, managed)
+		eventPublishers = append(eventPublishers, eventPublish.Binding{Name: binding.Name, Publisher: managed})
 	}
 
-	dispatchHook := &hook.EventDispatchHook{}
-	if len(eventPublishers) > 0 {
-		dispatcher, err := eventPublish.NewDefaultEventDispatcher(eventPublishers...)
-		if err != nil {
-			return nil, fmt.Errorf("[Bootstrap] failed to initialize event dispatcher: %w", err)
-		}
-		dispatchHook.Dispatcher = dispatcher
+	publisher, err := eventPublish.NewPublisher(eventPublishers...)
+	if err != nil {
+		return nil, err
+	}
+	application.stopPublishing = publisher.StopAccepting
+	application.publishers = append([]publisherCloser{{name: "application event", close: publisher.Close}}, application.publishers...)
+	if err := container.RegisterConstructor(func() publicPublish.Publisher { return publisher }); err != nil {
+		return nil, err
 	}
 
 	if err := ctx.Err(); err != nil {
@@ -129,6 +136,27 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 
 	if err := collectControllers(ctx, &config, container); err != nil {
 		return nil, err
+	}
+
+	if err := configuration.ValidationError(webSocketInterceptorIssues(config)...); err != nil {
+		return nil, err
+	}
+
+	if config.WebSocketRegistry != nil && len(config.WebSocketRegistry.Registrations()) > 0 {
+		if config.HTTP == nil {
+			return nil, fmt.Errorf("WebSocket routes require HTTP")
+		}
+		if err := adapter.ValidateFactory(config.HTTPAdapterFactory, adapter.Requirements{NetHTTPUpgrade: true}); err != nil {
+			return nil, err
+		}
+		if err := wsadapter.ValidateFactory(config.WebSocketAdapterFactory); err != nil {
+			return nil, err
+		}
+		for _, reg := range config.WebSocketRegistry.Registrations() {
+			if err := configuration.ValidationError(messageHandlerIssues(reg.Meta, webSocketArgumentResolvers(config.Validator), "WebSocket "+reg.Path, "WEBSOCKET")...); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if config.HTTP != nil {
 		if err := validateCollectedRoutes(config, resources); err != nil {
@@ -235,15 +263,13 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 		httpInvoker := invoker.NewInvoker(container)
 		httpPipeline := pipeline.NewPipeline(router, httpInvoker)
 
-		httpPipeline.SetEventDispatch(dispatchHook)
-
 		log.Println("[Bootstrap] Registering argument resolvers")
 		httpPipeline.AddArgumentResolver(endpoint.Resolvers(config.Validator)...)
 		httpPipeline.AddReturnValueHandler(endpoint.Returns()...)
 
 		log.Println("[Bootstrap] Registering interceptors")
 
-		resolvedHTTPInterceptors, resolvedWSInterceptors, err := resolveGlobalInterceptors(container, config)
+		resolvedHTTPInterceptors, err := resolveGlobalInterceptors(container, config)
 		if err != nil {
 			return nil, err
 		}
@@ -272,9 +298,6 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 			log.Println("[Bootstrap] Configuring WebSocket runtime")
 			log.Printf("[Bootstrap] Configuring WebSocket routes (%d routes)", len(wsRegistrations))
 
-			// WS 전용 인자 리졸버 등록
-			wsPipeline := buildWSPipeline(container, dispatchHook, resolvedWSInterceptors, config.Validator)
-
 			wsAdapter, err := config.WebSocketAdapterFactory.New(ws.AdapterOptions(config.HTTP.WebSocket))
 			if err != nil {
 				return nil, fmt.Errorf("[Bootstrap] failed to configure WebSocket adapter: %w", err)
@@ -282,14 +305,42 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 			if err := wsadapter.ValidateAdapter(wsAdapter); err != nil {
 				return nil, err
 			}
+			resolvedWSInterceptors, err := resolveInterceptors(container, config.WebSocketInterceptors, true)
+			if err != nil {
+				return nil, fmt.Errorf("WebSocket: %w", err)
+			}
+			if err := rejectLegacyHandshakeHook(resolvedWSInterceptors); err != nil {
+				return nil, err
+			}
+			upgradeInterceptors, err := resolveInterceptors(container, config.WebSocketUpgradeInterceptors, true)
+			if err != nil {
+				return nil, fmt.Errorf("WebSocket upgrade: %w", err)
+			}
 			application.wsRuntime = ws.NewRuntime(
-				wsPipeline,
+				invoker.NewInvoker(container),
 				wsAdapter,
 				config.HTTP.WebSocket,
-				webSocketHandshakeInterceptors(resolvedWSInterceptors)...,
+				resolvedWSInterceptors,
+				upgradeInterceptors...,
 			)
 
+			application.wsRuntime.UseSender(application.wsSender)
+			application.wsRuntime.UseValidator(config.Validator)
+
 			for _, reg := range wsRegistrations {
+				resolved, err := resolveInterceptors(container, reg.Interceptors, false)
+				if err != nil {
+					return nil, fmt.Errorf("WebSocket %s: %w", reg.Path, err)
+				}
+				if err := rejectLegacyHandshakeHook(resolved); err != nil {
+					return nil, fmt.Errorf("WebSocket %s: %w", reg.Path, err)
+				}
+				upgradesForRoute, err := resolveInterceptors(container, reg.UpgradeInterceptors, false)
+				if err != nil {
+					return nil, fmt.Errorf("WebSocket %s upgrade: %w", reg.Path, err)
+				}
+				reg.Interceptors = resolved
+				reg.UpgradeInterceptors = upgradesForRoute
 				log.Printf("[Bootstrap] Registered WebSocket route: %s", reg.Path)
 				upgrades = append(upgrades, adapter.NetHTTPUpgradeRoute{
 					Path: reg.Path,
@@ -323,7 +374,7 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 					}
 					return scope.Writer().WriteJSON(http.StatusOK, append([]byte(nil), openAPIDocument...))
 				}
-				return httpPipeline.Execute(request)
+				return httpPipeline.Execute(execution.NewHTTPContext(request))
 			},
 		}
 		var server adapter.HTTPAdapter
@@ -369,7 +420,7 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 			}
 			runtime := consumer.NewRuntime(config.ConsumerRegistry,
 				consumer.NewPlatformFactory(binding.Factory, binding.Options),
-				buildConsumerPipeline(container, dispatchHook, config.Validator), binding.Options.ConsumerErrorHistory)
+				invoker.NewInvoker(container), config.Validator, binding.Options.ConsumerErrorHistory)
 			application.consumers = append(application.consumers, consumerRuntime{name: binding.Name, runtime: runtime})
 			if err := runtime.PrepareWithRetry(ctx); err != nil {
 				if ctx.Err() != nil && errors.Is(err, ctx.Err()) {

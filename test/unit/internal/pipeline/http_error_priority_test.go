@@ -12,10 +12,10 @@ import (
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
-	"github.com/NARUBROWN/spine/internal/event/hook"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/handler"
 	"github.com/NARUBROWN/spine/internal/invoker"
+	"github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/NARUBROWN/spine/pkg/httperr"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 )
@@ -35,7 +35,7 @@ func TestHTTPErrorClassificationIsIndependentOfOrigin(t *testing.T) {
 		{"wrapped_forbidden", fmt.Errorf("wrapped: %w", &httperr.HTTPError{Status: 403, Message: "explicit"}), 403},
 		{"explicit_over_implicit", &httperr.HTTPError{Status: 422, Message: "explicit", Cause: &http.MaxBytesError{Limit: 42}}, 422},
 		{"size_limit", &http.MaxBytesError{Limit: 42}, 413},
-		{"publisher", hook.ErrPublisherUnavailable, 503},
+		{"publisher", publish.ErrUnavailable, 503},
 		{"validation", validation.NewError(validation.FieldError{Field: "/name", Rule: "required"}), 400},
 		{"generic", errors.New("private failure"), 500},
 		{"invalid_status", &httperr.HTTPError{Status: 600, Message: "private failure"}, 500},
@@ -69,7 +69,7 @@ func TestHTTPErrorClassificationIsIndependentOfOrigin(t *testing.T) {
 					ctx := newTestExecutionContext()
 					writer := &testResponseWriter{}
 					ctx.SetResponseWriter(writer)
-					err := p.Execute(ctx)
+					err := p.Execute(httpTestContext(ctx))
 					if !errors.Is(err, tc.err) || writer.status != tc.status || writer.writes != 1 {
 						t.Fatalf("오류 발생 위치에 따라 응답이 달라졌습니다: status=%d writes=%d err=%v", writer.status, writer.writes, err)
 					}
@@ -117,7 +117,7 @@ func TestBeforeResponseErrorOverridesHandlerAndPendingResponse(t *testing.T) {
 			override := httperr.Unauthorized("interceptor error")
 			var completed error
 			p.AddInterceptor(&testInterceptor{name: "override", events: &events, beforeErr: override, after: func(_ core.HandlerMeta, err error) { completed = err }})
-			err := p.Execute(ctx)
+			err := p.Execute(httpTestContext(ctx))
 			if !errors.Is(err, override) || !errors.Is(completed, override) || writer.status != 401 || writer.writes != 1 ||
 				string(writer.body.(json.RawMessage)) != `{"message":"interceptor error"}` {
 				t.Fatalf("인터셉터 오류를 최종 응답에 우선해야 합니다: status=%d writes=%d body=%s err=%v", writer.status, writer.writes, writer.body, err)
@@ -146,7 +146,7 @@ func TestLastBeforeResponseErrorDeterminesHTTPResponse(t *testing.T) {
 	ctx := newTestExecutionContext()
 	writer := &testResponseWriter{}
 	ctx.SetResponseWriter(writer)
-	err := p.Execute(ctx)
+	err := p.Execute(httpTestContext(ctx))
 	if !errors.Is(err, original) || !errors.Is(err, routeErr) || !errors.Is(err, globalErr) || writer.status != 429 {
 		t.Fatalf("마지막 인터셉터 오류를 응답에 적용하고 모든 원인을 보존해야 합니다: status=%d err=%v", writer.status, err)
 	}
@@ -165,7 +165,7 @@ func TestInvalidInterceptorHTTPErrorDoesNotRestoreHandlerResponse(t *testing.T) 
 			ctx := newTestExecutionContext()
 			writer := &testResponseWriter{}
 			ctx.SetResponseWriter(writer)
-			err := p.Execute(ctx)
+			err := p.Execute(httpTestContext(ctx))
 			if !errors.Is(err, original) || !errors.Is(err, override) || writer.status != 500 || writer.writes != 1 ||
 				!strings.Contains(err.Error(), fmt.Sprintf("invalid HTTP error status %d", status)) ||
 				string(writer.body.(json.RawMessage)) != `{"message":"Internal server error"}` {

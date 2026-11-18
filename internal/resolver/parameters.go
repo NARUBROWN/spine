@@ -44,7 +44,7 @@ func IsLegacyPath(t reflect.Type) bool {
 	return t == reflect.TypeFor[path.Int]() || t == reflect.TypeFor[path.String]() || t == reflect.TypeFor[path.Boolean]()
 }
 
-// IsLegacyValues는 Deprecated 쿼리와 헤더 조회 타입을 식별합니다.
+// IsLegacyValues identifies deprecated query and header lookup types.
 func IsLegacyValues(t reflect.Type) bool {
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
@@ -52,7 +52,7 @@ func IsLegacyValues(t reflect.Type) bool {
 	return t == reflect.TypeFor[query.Values]() || t == reflect.TypeFor[header.Values]()
 }
 
-// IsLegacyPagination은 Deprecated 페이지네이션 입력을 식별합니다.
+// IsLegacyPagination identifies the deprecated pagination input type.
 func IsLegacyPagination(t reflect.Type) bool {
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()

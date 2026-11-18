@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-var childModules = []string{"test", "test/openapi", "test/platform-e2e", "test/nats-e2e", "test/http-platform", "cmd/demo", "cmd/reference", "examples/security-config"}
+var childModules = []string{"test", "test/openapi", "test/platform-e2e", "test/nats-e2e", "test/http-platform", "cmd/demo", "cmd/reference", "examples/security-config", "examples/kafka-publish"}
 
 type moduleFile struct {
 	Module  struct{ Path string }
@@ -177,7 +177,7 @@ func checkPublicationDocs(root string, p policy) error {
 	}
 	names := []string{"README.md"}
 	if p.Kind == "core" {
-		names = append(names, "README.en.md", "README.ja.md", "README.zh-Hans.md", "README.zh-Hant.md")
+		names = append(names, "docs/ko/README.md", "docs/ja/README.md", "docs/zh-Hans/README.md", "docs/zh-Hant/README.md")
 	}
 	for _, name := range names {
 		data, err := os.ReadFile(filepath.Join(root, name))

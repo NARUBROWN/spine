@@ -37,7 +37,7 @@ func (h *StringReturnHandler) Supports(returnType reflect.Type) bool {
 	return field.Type == reflect.TypeFor[string]()
 }
 
-func (h *StringReturnHandler) Handle(value any, ctx execution.Context) error {
+func (h *StringReturnHandler) Handle(value any, ctx *execution.Context) error {
 	var resp httpx.Response[string]
 
 	switch v := value.(type) {

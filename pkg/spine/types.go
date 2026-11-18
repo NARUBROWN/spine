@@ -8,27 +8,27 @@ import (
 )
 
 // ContextCarrier는 현재 실행에 연결된 표준 Go 컨텍스트를 제공합니다.
-type ContextCarrier interface {
-	Context() context.Context
-}
+type ContextCarrier interface{ contextview.ContextCarrier }
 
-// ExecutionContextView는 현재 실행의 표준 컨텍스트와 공유 값 저장소입니다.
-// 저장값은 완료 훅까지 유지하고 실행 종료 시 참조를 해제합니다.
-type ExecutionContextView = interface {
-	ContextCarrier
-	Get(key string) (any, bool)
+// ExecutionContextView exposes the standard context and request-local values.
+type ExecutionContextView = contextview.ExecutionContextView
+
+// Ctx is the public HTTP view. Runtime state and lifecycle controls are excluded.
+type Ctx interface{ contextview.Ctx }
+
+// WebSocketCtx는 프레임의 취소 신호와 실행 중 공유하는 값을 제공합니다.
+// 런타임은 완료 훅이 끝나면 저장값을 비우고 프레임을 취소합니다.
+type WebSocketCtx interface {
+	context.Context
 	Set(key string, value any)
+	Get(key string) (any, bool)
 }
 
-// Ctx는 HTTP, 이벤트와 WebSocket 핸들러 및 인터셉터의 공통 진입점입니다.
-// 전송별 조회는 현재 실행에서 제공하는 뷰와 지원 여부를 반환합니다.
-// Get은 폐기 예정이며 ExecutionContext().Get으로 전환하세요.
-type Ctx interface {
-	ExecutionContext() ExecutionContextView
-	HTTPRequestContext() (HTTPRequestView, bool)
-	HTTPResponseContext() (HTTPResponseView, bool)
-	WebSocket() (WebSocketView, bool)
-	// Deprecated: ExecutionContext().Get을 사용하세요.
+// EventCtx는 이벤트 배달 한 건의 취소와 공유 값을 제공합니다.
+// 소비 런타임은 핸들러 실행이 끝나면 값을 비우고 컨텍스트를 취소합니다.
+type EventCtx interface {
+	context.Context
+	Set(key string, value any)
 	Get(key string) (any, bool)
 }
 
@@ -37,16 +37,9 @@ type Ctx interface {
 type HTTPResponseView = contextview.HTTPResponseView
 
 // HTTPRequestView는 HTTP 요청과 동적 멀티파트 필드를 조회합니다.
+// 표준 Go 컨텍스트는 Ctx.ExecutionContext().Context()로 조회합니다.
 type HTTPRequestView = contextview.HTTPRequestView
 
 // MultipartFields는 현재 요청의 폼 필드와 파일 헤더 사본입니다.
 // 파일은 현재 요청이 완료될 때까지 열 수 있습니다.
 type MultipartFields = contextview.MultipartFields
-
-// WebSocketView는 handshake 요청과 현재 메시지 정보를 조회합니다.
-// upgrade 전에는 ConnID가 빈 문자열이고 MessageType은 0, Payload는 nil입니다.
-// Payload는 독립 사본을 반환합니다.
-type WebSocketView = contextview.WebSocketView
-
-// WebSocketRequestView는 upgrade 요청에서 보존한 불변 요청 정보입니다.
-type WebSocketRequestView = contextview.WebSocketRequestView

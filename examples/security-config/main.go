@@ -57,7 +57,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	app.InterceptorFor(boot.InterceptorAll, &auditInterceptor{})
+	app.InterceptorFor(boot.InterceptorHTTP, &auditInterceptor{})
 
 	corsInterceptor, err := cors.NewValidated(cors.Config{
 		AllowOrigins:     []string{"https://app.example.com"},
@@ -74,7 +74,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// 검증 단계에서는 네트워크에 연결하지 않습니다. 실제로 시작하려면 app.Run(options)을 호출하세요.
+	// Preflight does not connect. Call app.Run(options) to start the application.
 	_ = localInsecureConfigs
 }
 

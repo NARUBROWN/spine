@@ -12,71 +12,145 @@ import (
 	"github.com/NARUBROWN/spine/internal/input"
 )
 
-// NewContext는 내부 실행을 감싼 공통 공개 컨텍스트를 반환합니다.
-func NewContext(ctx Context) contextview.Ctx {
-	return publicContext{source: ctx}
+// PublicView exposes request-local values and HTTP operations without lifecycle controls.
+func (c *Context) PublicView() contextview.Ctx {
+	return publicContext{source: c}
 }
 
-type publicContext struct{ source Context }
+type publicContext struct{ source *Context }
 
 func (v publicContext) Get(key string) (any, bool) { return v.source.Get(key) }
 func (v publicContext) ExecutionContext() contextview.ExecutionContextView {
 	return executionView{source: v.source}
 }
 func (v publicContext) HTTPRequestContext() (contextview.HTTPRequestView, bool) {
-	request, ok := v.source.(HTTPRequestContext)
-	if !ok {
+	available := false
+	if v.source != nil {
+		v.source.readInput(func(input Input) { available = input.HTTPRequest != nil })
+	}
+	if !available {
 		return nil, false
 	}
-	return httpRequestView{source: v.source, request: request}, true
+	return httpRequestView{source: v.source}, true
 }
 func (v publicContext) HTTPResponseContext() (contextview.HTTPResponseView, bool) {
-	response, ok := v.source.(HTTPResponseContext)
-	if !ok || response.ResponseWriter() == nil {
+	available := false
+	if v.source != nil {
+		v.source.readInput(func(s Input) { available = s.HTTPResponse != nil && s.HTTPResponse.ResponseWriter() != nil })
+	}
+	if !available {
 		return nil, false
 	}
-	return httpResponseView{response: response}, true
-}
-func (v publicContext) WebSocket() (contextview.WebSocketView, bool) {
-	message, ok := v.source.(WebSocketContext)
-	if !ok {
-		return nil, false
-	}
-	request, ok := v.source.(WebSocketRequestContext)
-	if !ok {
-		return nil, false
-	}
-	return webSocketView{
-		source:  v.source,
-		request: request,
-		message: message,
-	}, true
+	return httpResponseView{source: v.source}, true
 }
 
-type executionView struct{ source Context }
+// readInput holds the lease while a view reads borrowed transport data.
+func readInput[T any](c *Context, read func(Input) T) (value T) {
+	c.readInput(func(s Input) { value = read(s) })
+	return
+}
 
-func (v executionView) Context() context.Context   { return GoContext(v.source) }
+type executionView struct{ source *Context }
+
+func (v executionView) Context() context.Context   { return v.source.Context() }
 func (v executionView) Get(key string) (any, bool) { return v.source.Get(key) }
 func (v executionView) Set(key string, value any)  { v.source.Set(key, value) }
 
-type httpRequestView struct {
-	source  Context
-	request HTTPRequestContext
+type httpRequestView struct{ source *Context }
+
+func (v httpRequestView) Method() string {
+	return readInput(v.source, func(s Input) string {
+		if s.HTTPRequest == nil {
+			var zero string
+			return zero
+		}
+		return s.HTTPRequest.Method()
+	})
 }
-
-func (v httpRequestView) Context() context.Context     { return GoContext(v.source) }
-func (v httpRequestView) Method() string               { return v.request.Method() }
-func (v httpRequestView) Path() string                 { return v.request.Path() }
-func (v httpRequestView) Params() map[string]string    { return v.request.Params() }
-func (v httpRequestView) PathKeys() []string           { return v.request.PathKeys() }
-func (v httpRequestView) Header(name string) string    { return v.request.Header(name) }
-func (v httpRequestView) Queries() map[string][]string { return v.request.Queries() }
-
-func (v httpRequestView) Param(name string) string     { return v.request.Param(name) }
-func (v httpRequestView) Query(name string) string     { return v.request.Query(name) }
-func (v httpRequestView) Headers() map[string][]string { return v.request.Headers() }
-func (v httpRequestView) MultipartForm() (contextview.MultipartFields, error) {
-	form, err := v.request.MultipartForm()
+func (v httpRequestView) Path() string {
+	return readInput(v.source, func(s Input) string {
+		if s.HTTPRequest == nil {
+			var zero string
+			return zero
+		}
+		return s.HTTPRequest.Path()
+	})
+}
+func (v httpRequestView) Params() map[string]string {
+	return readInput(v.source, func(s Input) map[string]string {
+		if s.HTTPRequest == nil {
+			var zero map[string]string
+			return zero
+		}
+		return s.HTTPRequest.Params()
+	})
+}
+func (v httpRequestView) PathKeys() []string {
+	return readInput(v.source, func(s Input) []string {
+		if s.HTTPRequest == nil {
+			var zero []string
+			return zero
+		}
+		return s.HTTPRequest.PathKeys()
+	})
+}
+func (v httpRequestView) Header(name string) string {
+	return readInput(v.source, func(s Input) string {
+		if s.HTTPRequest == nil {
+			var zero string
+			return zero
+		}
+		return s.HTTPRequest.Header(name)
+	})
+}
+func (v httpRequestView) Queries() map[string][]string {
+	return readInput(v.source, func(s Input) map[string][]string {
+		if s.HTTPRequest == nil {
+			var zero map[string][]string
+			return zero
+		}
+		return s.HTTPRequest.Queries()
+	})
+}
+func (v httpRequestView) Param(name string) string {
+	return readInput(v.source, func(s Input) string {
+		if s.HTTPRequest == nil {
+			var zero string
+			return zero
+		}
+		return s.HTTPRequest.Param(name)
+	})
+}
+func (v httpRequestView) Query(name string) string {
+	return readInput(v.source, func(s Input) string {
+		if s.HTTPRequest == nil {
+			var zero string
+			return zero
+		}
+		return s.HTTPRequest.Query(name)
+	})
+}
+func (v httpRequestView) Headers() map[string][]string {
+	return readInput(v.source, func(s Input) map[string][]string {
+		if s.HTTPRequest == nil {
+			var zero map[string][]string
+			return zero
+		}
+		return s.HTTPRequest.Headers()
+	})
+}
+func (v httpRequestView) MultipartForm() (fields contextview.MultipartFields, err error) {
+	v.source.readInput(func(s Input) {
+		if s.HTTPRequest == nil {
+			err = errResponseUnavailable
+			return
+		}
+		fields, err = cloneMultipartFields(s.HTTPRequest)
+	})
+	return
+}
+func cloneMultipartFields(request HTTPRequestContext) (contextview.MultipartFields, error) {
+	form, err := request.MultipartForm()
 	if err != nil || form == nil {
 		return contextview.MultipartFields{}, err
 	}
@@ -99,22 +173,28 @@ func (v httpRequestView) MultipartForm() (contextview.MultipartFields, error) {
 }
 
 // httpResponseView는 staging 변경 뒤에도 현재 writer에 위임합니다.
-type httpResponseView struct{ response HTTPResponseContext }
+type httpResponseView struct{ source *Context }
 
 var errResponseUnavailable = errors.New("HTTP response is no longer available")
 
-func (v httpResponseView) useWriter(use func(httpcontract.ResponseWriter)) bool {
-	if request, ok := v.response.(interface {
-		UseResponseWriter(func(httpcontract.ResponseWriter)) bool
-	}); ok {
-		return request.UseResponseWriter(use)
-	}
-	writer := v.response.ResponseWriter()
-	if writer == nil {
-		return false
-	}
-	use(writer)
-	return true
+func (v httpResponseView) useWriter(use func(httpcontract.ResponseWriter)) (available bool) {
+	v.source.readInput(func(s Input) {
+		if s.HTTPResponse == nil {
+			return
+		}
+		if request, ok := s.HTTPResponse.(interface {
+			UseResponseWriter(func(httpcontract.ResponseWriter)) bool
+		}); ok {
+			available = request.UseResponseWriter(use)
+			return
+		}
+		writer := s.HTTPResponse.ResponseWriter()
+		if writer != nil {
+			use(writer)
+			available = true
+		}
+	})
+	return
 }
 
 func (v httpResponseView) write(write func(httpcontract.ResponseWriter) error) (err error) {
@@ -146,24 +226,3 @@ func (v httpResponseView) WriteString(status int, body string) error {
 func (v httpResponseView) WriteBytes(status int, body []byte) error {
 	return v.write(func(writer httpcontract.ResponseWriter) error { return writer.WriteBytes(status, body) })
 }
-
-type webSocketView struct {
-	source  Context
-	request WebSocketRequestContext
-	message WebSocketContext
-}
-
-func (v webSocketView) Context() context.Context          { return GoContext(v.source) }
-func (v webSocketView) ConnID() string                    { return v.message.ConnID() }
-func (v webSocketView) MessageType() int                  { return v.message.MessageType() }
-func (v webSocketView) Payload() []byte                   { return slices.Clone(v.message.Payload()) }
-func (v webSocketView) Path() string                      { return v.request.Path() }
-func (v webSocketView) Header(name string) string         { return v.request.Header(name) }
-func (v webSocketView) Queries() map[string][]string      { return v.request.Queries() }
-func (v webSocketView) Headers() map[string][]string      { return v.request.Headers() }
-func (v webSocketView) Query(name string) string          { return v.request.Query(name) }
-func (v webSocketView) Cookie(name string) (string, bool) { return v.request.Cookie(name) }
-func (v webSocketView) Cookies() map[string]string        { return v.request.Cookies() }
-func (v webSocketView) RemoteAddr() string                { return v.request.RemoteAddr() }
-func (v webSocketView) Host() string                      { return v.request.Host() }
-func (v webSocketView) RequestURI() string                { return v.request.RequestURI() }

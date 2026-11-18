@@ -28,7 +28,6 @@ permissions:
   actions: read
 
 env:
-  PYTHONUTF8: '1'
   GOWORK: "off"
 
 concurrency:
@@ -92,6 +91,8 @@ jobs:
 
       - name: Verify embedded documentation assets and notices
         run: |
+          go run ./scripts/verifytools
+          go run ./scripts/verifydocs
           go run ./scripts/openapi-ui --check
           go test ./scripts/openapi-ui
           node --test scripts/openapi-ui/test_bundle.cjs
@@ -99,7 +100,7 @@ jobs:
 
       - name: Run go vet
         run: |
-          for module in . test test/platform-e2e test/openapi cmd/demo cmd/reference examples/security-config; do
+          for module in . test test/platform-e2e test/openapi cmd/demo cmd/reference examples/security-config examples/kafka-publish; do
             go run ./scripts/test -module "$module" vet ./...
           done
           go -C ../spine-echo-platform vet ./...
@@ -145,11 +146,13 @@ jobs:
       - name: Run unit tests
         shell: bash
         run: |
-          for module in . cmd/reference examples/security-config; do
+          for module in . cmd/reference examples/security-config examples/kafka-publish; do
             go run ./scripts/test -module "$module" test ./... -count=1 -shuffle=on -timeout=8m
           done
           go -C ../spine-echo-platform test ./... -count=1 -shuffle=on -timeout=8m
           go run ./scripts/test -module cmd/demo test ./... -run '^TestBuildApplication$' -count=1 -shuffle=on -timeout=8m
+          go test ./.github/actions/discord-tag -count=1 -shuffle=on -timeout=8m
+          GOWORK=off go -C test/http-contract test ./cmd/strictstream -count=1 -shuffle=on -timeout=8m
 
   integration:
     needs: branch-direction
@@ -261,10 +264,29 @@ jobs:
 
       - name: Run race detector
         run: |
-          for module in . test cmd/demo cmd/reference examples/security-config; do
-            go run ./scripts/test -module "$module" test -race ./... -count=1 -shuffle=on -timeout=12m
+          for module in . test cmd/demo cmd/reference examples/security-config examples/kafka-publish; do
+            if [ "$module" = . ]; then
+              mkdir -p coverage
+              core_packages=$(go list ./... | awk '$0 !~ /^github[.]com\/NARUBROWN\/spine\/scripts\//' | paste -sd, -)
+              go run ./scripts/test test -race -covermode=atomic -coverpkg="$core_packages" -coverprofile=coverage/core.out ./... -count=1 -shuffle=on -timeout=12m
+              go run ./scripts/verifytools --coverage coverage/core.out --minimum 80
+              go tool cover -html=coverage/core.out -o coverage/core.html
+            else
+              go run ./scripts/test -module "$module" test -race ./... -count=1 -shuffle=on -timeout=12m
+            fi
           done
+          go test -race ./.github/actions/discord-tag -count=1 -shuffle=on -timeout=8m
+          GOWORK=off go -C test/http-contract test -race ./cmd/strictstream -count=1 -shuffle=on -timeout=8m
           go -C ../spine-echo-platform test -race ./... -count=1 -shuffle=on -timeout=12m
+
+      - name: Upload core coverage evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-coverage
+          path: spine/coverage/
+          if-no-files-found: warn
+          retention-days: 30
 
   event-platform-e2e:
     needs: branch-direction
@@ -375,7 +397,7 @@ jobs:
           go-version: '1.26.0'
       - run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
         working-directory: .
-      - run: actionlint -shellcheck= -pyflakes=
+      - run: actionlint -shellcheck=
         working-directory: .
       - run: go run ./scripts/release/workspace validate-policy
         working-directory: .

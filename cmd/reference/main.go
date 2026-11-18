@@ -68,10 +68,6 @@ func main() {
 		panic(err)
 	}
 
-	if err := app.WebSocket().Register("/ws/chat", (*ChatController).OnMessage); err != nil {
-		panic(err)
-	}
-
 	if err := app.Validate(config.Options); err != nil {
 		log.Fatalf("[Demo] preflight validation failed: %v", err)
 	}
@@ -99,7 +95,8 @@ func newReferenceApp(eventAdapters ...referenceEventAdapter) spine.App {
 		constructor.Controller(&UserController{}),
 		constructor.Controller(&CommonController{}),
 		constructor.Custom(NewOrderConsumer),
-		constructor.Custom(NewChatController),
+		constructor.Controller(&ChatController{}),
+		constructor.Interceptor(&LoggingInterceptor{}),
 	)
 	return app
 }
@@ -126,20 +123,20 @@ func buildDemoConfig() (demoConfig, error) {
 				AllowedOrigins:    []string{allowedOrigin},
 				TrustedProxyCIDRs: splitListEnv("SPINE_DEMO_TRUSTED_PROXY_CIDRS"),
 
-				// 선택 사항: 아래 설정을 생략하면 Spine이 제한된 범위의 기본값을 사용합니다.
-				// 최대 연결 수 설정 예시: MaxConnections: 4096,
-				// 최대 메시지 크기 설정 예시: MaxMessageBytes: 2 << 20,
-				// 추가 조정 항목: CapacityRetryAfter, HandshakeTimeout, ReadTimeout,
-				// WriteTimeout, PingInterval도 필요에 맞게 조정할 수 있습니다.
+				// Omitted WebSocket options use bounded defaults.
+				// Example capacity override: MaxConnections: 4096,
+				// Example size override: MaxMessageBytes: 2 << 20,
+				// Other options include CapacityRetryAfter, HandshakeTimeout, ReadTimeout,
+				// WriteTimeout and PingInterval.
 			},
 
-			// 선택 사항: 아래 설정을 생략하면 Spine이 제한된 범위의 HTTP 기본값을 사용합니다.
-			// 읽기 제한 시간 설정 예시: ReadTimeout: 45 * time.Second,
-			// 최대 본문 크기 설정 예시: MaxBodyBytes: 64 << 20,
+			// Omitted HTTP options use bounded defaults.
+			// Example read timeout: ReadTimeout: 45 * time.Second,
+			// Example body limit: MaxBodyBytes: 64 << 20,
 		},
 
-		// 선택 사항: ShutdownTimeout을 지정하지 않으면 Spine의 기본 정상 종료 제한 시간을 사용합니다.
-		// 정상 종료 제한 시간 설정 예시: ShutdownTimeout: 20 * time.Second,
+		// Omit ShutdownTimeout to use the default graceful shutdown wait.
+		// Example shutdown wait: ShutdownTimeout: 20 * time.Second,
 	}
 
 	kafka := demoKafkaOptions(allowInsecure)

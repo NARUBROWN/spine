@@ -2,13 +2,10 @@ package resolver
 
 import (
 	"context"
-	"reflect"
-	"testing"
-
-	"github.com/NARUBROWN/spine/internal/event/emission"
-	internalpublish "github.com/NARUBROWN/spine/internal/event/publish"
 	internalresolver "github.com/NARUBROWN/spine/internal/resolver"
 	pkgws "github.com/NARUBROWN/spine/pkg/ws"
+	"reflect"
+	"testing"
 )
 
 type testWSContext struct {
@@ -28,7 +25,6 @@ func newTestWSContext(payload []byte) *testWSContext {
 }
 
 func (c *testWSContext) Context() context.Context     { return context.Background() }
-func (c *testWSContext) EventBus() emission.Bus       { return internalpublish.NewEventBus() }
 func (c *testWSContext) Method() string               { return "WS" }
 func (c *testWSContext) Path() string                 { return c.connID }
 func (c *testWSContext) Params() map[string]string    { return map[string]string{} }
@@ -44,7 +40,6 @@ func (c *testWSContext) Payload() []byte              { return c.payload }
 type nonWSContext struct{}
 
 func (c *nonWSContext) Context() context.Context     { return context.Background() }
-func (c *nonWSContext) EventBus() emission.Bus       { return internalpublish.NewEventBus() }
 func (c *nonWSContext) Method() string               { return "GET" }
 func (c *nonWSContext) Path() string                 { return "/" }
 func (c *nonWSContext) Params() map[string]string    { return map[string]string{} }
@@ -62,7 +57,7 @@ func TestConnectionIDResolver(t *testing.T) {
 		t.Fatal("ConnectionIDResolver가 ConnectionID를 지원해야 합니다")
 	}
 
-	val, err := r.Resolve(newTestWSContext(nil), pm)
+	val, err := r.Resolve(newTestWSContext(nil).Context(), pm, testInput(newTestWSContext(nil)))
 	if err != nil {
 		t.Fatalf("ConnectionIDResolver 실패: %v", err)
 	}
@@ -70,7 +65,7 @@ func TestConnectionIDResolver(t *testing.T) {
 		t.Fatalf("ConnectionID 값이 잘못되었습니다: %v", val)
 	}
 
-	_, err = r.Resolve(&nonWSContext{}, pm)
+	_, err = r.Resolve((&nonWSContext{}).Context(), pm, testInput(&nonWSContext{}))
 	if err == nil {
 		t.Fatal("WebSocketContext가 아니면 에러여야 합니다")
 	}
@@ -84,7 +79,7 @@ func TestPayloadResolver(t *testing.T) {
 		t.Fatal("PayloadResolver가 []byte를 지원해야 합니다")
 	}
 
-	val, err := r.Resolve(newTestWSContext([]byte("hello")), pm)
+	val, err := r.Resolve(newTestWSContext([]byte("hello")).Context(), pm, testInput(newTestWSContext([]byte("hello"))))
 	if err != nil {
 		t.Fatalf("PayloadResolver 실패: %v", err)
 	}
@@ -106,7 +101,7 @@ func TestDTOResolver(t *testing.T) {
 		t.Fatal("DTOResolver가 struct DTO를 지원해야 합니다")
 	}
 
-	val, err := r.Resolve(newTestWSContext([]byte(`{"name":"kim","age":20}`)), pm)
+	val, err := r.Resolve(newTestWSContext([]byte(`{"name":"kim","age":20}`)).Context(), pm, testInput(newTestWSContext([]byte(`{"name":"kim","age":20}`))))
 	if err != nil {
 		t.Fatalf("DTOResolver 실패: %v", err)
 	}
@@ -115,12 +110,12 @@ func TestDTOResolver(t *testing.T) {
 		t.Fatalf("DTO 변환 결과가 잘못되었습니다: %+v", dto)
 	}
 
-	_, err = r.Resolve(newTestWSContext(nil), pm)
+	_, err = r.Resolve(newTestWSContext(nil).Context(), pm, testInput(newTestWSContext(nil)))
 	if err == nil {
 		t.Fatal("payload가 nil이면 에러여야 합니다")
 	}
 
-	_, err = r.Resolve(newTestWSContext([]byte(`{"name"`)), pm)
+	_, err = r.Resolve(newTestWSContext([]byte(`{"name"`)).Context(), pm, testInput(newTestWSContext([]byte(`{"name"`))))
 	if err == nil {
 		t.Fatal("잘못된 JSON이면 에러여야 합니다")
 	}
@@ -129,3 +124,10 @@ func TestDTOResolver(t *testing.T) {
 func (c *testWSContext) SetRoute(params map[string]string, pathKeys []string) {}
 
 func (c *nonWSContext) SetRoute(params map[string]string, pathKeys []string) {}
+
+func testInput(ctx interface{ Context() context.Context }) *Input {
+	if c, ok := ctx.(*testWSContext); ok {
+		return &Input{ConnectionID: c.connID, Kind: c.messageType, Payload: c.payload}
+	}
+	return nil
+}

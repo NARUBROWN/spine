@@ -1,5 +1,6 @@
-// Package eventadapter는 이전 이벤트 계약 경로의 호환 별칭입니다.
-// Deprecated: 새 구현은 github.com/NARUBROWN/spine/contract/event를 사용하세요.
+// Package eventadapter provides compatibility aliases for the legacy event contract path.
+//
+// Deprecated: Use github.com/NARUBROWN/spine/contract/event for new implementations.
 package eventadapter
 
 import eventcontract "github.com/NARUBROWN/spine/contract/event"

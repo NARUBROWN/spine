@@ -30,18 +30,20 @@ var (
 )
 
 type RouteSpec struct {
-	Method         string
-	Path           string
-	Handler        any
-	ControllerType reflect.Type
-	Interceptors   []core.Interceptor
-	Tags           []string
-	Summary        string
-	Description    string
+	Method                       string
+	Path                         string
+	Handler                      any
+	ControllerType               reflect.Type
+	Interceptors                 []core.Interceptor
+	WebSocketInterceptors        []core.WebSocketInterceptor
+	WebSocketUpgradeInterceptors []core.WebSocketUpgradeInterceptor
+	Tags                         []string
+	Summary                      string
+	Description                  string
 }
 
 type Router interface {
-	Route(ctx execution.Context) (execution.HandlerMeta, error)
+	Route(ctx execution.RoutingContext) (execution.HandlerMeta, error)
 }
 
 type routeNode struct {
@@ -105,7 +107,7 @@ func (r *DefaultRouter) Register(method string, path string, meta execution.Hand
 	}
 }
 
-func (r *DefaultRouter) Route(ctx execution.Context) (execution.HandlerMeta, error) {
+func (r *DefaultRouter) Route(ctx execution.RoutingContext) (execution.HandlerMeta, error) {
 	root := r.trees[ctx.Method()]
 	if root == nil {
 		return execution.HandlerMeta{}, ErrRouteNotFound

@@ -11,7 +11,10 @@ import (
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/endpoint"
 	"github.com/NARUBROWN/spine/internal/router"
+	"github.com/NARUBROWN/spine/internal/ws"
 	"github.com/NARUBROWN/spine/pkg/api"
+	"github.com/NARUBROWN/spine/pkg/event/publish"
+	publicWS "github.com/NARUBROWN/spine/pkg/ws"
 )
 
 var ErrRoutesNotCollected = errors.New("controller routes require a prepared application; use DescribePreparedHTTP or static CLI export without executing constructors")
@@ -55,7 +58,27 @@ func collectControllers(ctx context.Context, config *Config, container *containe
 		if err := errors.Join(registerErr, freezeErr); err != nil {
 			return fmt.Errorf("controller %s RegisterRoutes: %w", owner, err)
 		}
-		config.Routes = append(config.Routes, routes...)
+
+		for _, route := range routes {
+			if route.Method != "WS" {
+				config.Routes = append(config.Routes, route)
+				continue
+			}
+			meta, err := router.Meta(route)
+			if err != nil {
+				return fmt.Errorf("WebSocket %s: %w", route.Path, err)
+			}
+			if config.WebSocketRegistry == nil {
+				config.WebSocketRegistry = ws.NewRegistry()
+			}
+			path, err := joinPath(config.HTTP.GlobalPrefix, route.Path)
+			if err != nil {
+				return err
+			}
+			if err := config.WebSocketRegistry.RegisterMeta(path, meta, route.WebSocketInterceptors, route.WebSocketUpgradeInterceptors); err != nil {
+				return err
+			}
+		}
 	}
 	config.RoutesCollected = true
 	return ctx.Err()
@@ -137,8 +160,21 @@ func (config Config) controllerCandidates() []any {
 // componentValidationIssues는 명세 조회에서도 실행 없이 공통 생성 계약을 검사합니다.
 func componentValidationIssues(config Config) []configuration.ConfigIssue {
 	issues := append([]configuration.ConfigIssue{}, config.ComponentIssues...)
+	for index, constructor := range config.Constructors {
+		signature := reflect.TypeOf(constructor)
+		if signature != nil && signature.Kind() == reflect.Func && container.ValidConstructorResults(signature) && (signature.Out(0) == reflect.TypeFor[publish.Publisher]() || signature.Out(0) == reflect.TypeFor[publicWS.Sender]()) {
+
+			code, message, hint := "EVENT_PUBLISHER_RESERVED", "publish.Publisher is provided by the application.", "Remove the publisher constructor and register platforms with WithEventAdapter."
+			if signature.Out(0) == reflect.TypeFor[publicWS.Sender]() {
+				code, message, hint = "WEBSOCKET_SENDER_RESERVED", "ws.Sender is provided by the application.", "Remove the sender constructor and configure a WebSocket platform."
+			}
+			issues = append(issues, configuration.ConfigIssue{Path: fmt.Sprintf("Constructors[%d]", index), Code: code, Message: message, Hint: hint})
+		}
+	}
 	if config.TypedComponents {
-		if err := container.ValidateConstructors(config.Constructors); err != nil {
+		constructors := append([]any(nil), config.Constructors...)
+		constructors = append(constructors, func() publish.Publisher { return nil }, func() publicWS.Sender { return nil })
+		if err := container.ValidateConstructors(constructors); err != nil {
 			issues = append(issues, configuration.ConfigIssue{Path: "Constructors", Code: "COMPONENT_DEPENDENCIES_INVALID", Message: err.Error(), Hint: "Register one provider per type and resolve missing or circular dependencies before initialization."})
 		}
 	}

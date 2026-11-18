@@ -38,10 +38,12 @@ type Application struct {
 	server          adapter.HTTPAdapter
 	listener        *managedHTTPListener
 	wsRuntime       *ws.Runtime
+	wsSender        *ws.Sender
 	consumers       []consumerRuntime
 	transports      []core.CustomTransport
 	publishers      []publisherCloser
 	shutdownHooks   []func(context.Context) error
+	stopPublishing  func()
 	closeOnce       sync.Once
 	closeDone       chan struct{}
 	closeErr        error
@@ -95,6 +97,9 @@ func (a *Application) closeResources(deadline time.Time) {
 			log.Printf("[Bootstrap] %v", err)
 		}
 	}
+	if a.wsSender != nil {
+		a.wsSender.Close()
+	}
 	if a.wsRuntime != nil {
 		step("WebSocket runtime", func() error { a.wsRuntime.Stop(); return nil })
 	}
@@ -120,6 +125,9 @@ func (a *Application) closeResources(deadline time.Time) {
 		for index, hook := range a.shutdownHooks {
 			step(fmt.Sprintf("shutdown hook[%d]", index), func() error { return hook(hookCtx) })
 		}
+	}
+	if a.stopPublishing != nil {
+		a.stopPublishing()
 	}
 	for i := len(a.publishers) - 1; i >= 0; i-- {
 		publisher := a.publishers[i]

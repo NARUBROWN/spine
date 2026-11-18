@@ -23,19 +23,26 @@ import (
 )
 
 type App interface {
-	// Constructor는 constructor.Custom, Repository, Service, Controller, Interceptor의 역할 표식을 등록합니다.
-	// 역할 표식 없이 객체를 전달하는 호출 형태는 deprecated입니다. constructor.Custom(&T{})로 감싸세요.
-	// 기존 생성자 함수 등록은 호환을 위해 계속 지원합니다.
+	// Constructor registers components with constructor.Custom, Repository, Service,
+	// Controller and Interceptor role markers. Passing objects without role markers
+	// is deprecated; wrap them with constructor.Custom(&T{}).
+	// Existing constructor functions remain supported for compatibility.
 	Constructor(constructors ...any)
-	// Route는 메서드 표현식으로 HTTP 경로를 등록합니다.
+	// Route registers an HTTP route using a method expression.
 	//
-	// Deprecated: 새 HTTP 경로는 api.Controller의 RegisterRoutes 메서드에 등록하세요.
-	// 기존 등록은 전환 기간에 계속 사용할 수 있습니다.
+	// Deprecated: Register new HTTP routes in an api.Controller's RegisterRoutes method.
+	// Existing registrations remain supported during migration.
 	Route(method string, path string, handler any, opts ...api.Option)
-	// 인터셉터 선언
+	// Interceptor는 HTTP 전역 인터셉터를 등록합니다. WebSocket 경로도 있으면
+	// InterceptorFor(boot.InterceptorHTTP, ...)로 범위를 명시하세요.
 	Interceptor(interceptors ...core.Interceptor)
-	// InterceptorFor는 선택한 기본 전송 방식에 전역 인터셉터를 등록합니다.
+	// InterceptorFor는 HTTP 전역 인터셉터의 범위를 명시합니다.
+	// WebSocket 전역 등록에는 WebSocketInterceptor를 사용하세요.
 	InterceptorFor(scope boot.InterceptorScope, interceptors ...core.Interceptor)
+	// WebSocketInterceptor는 WebSocket 전역 프레임 인터셉터를 등록합니다.
+	WebSocketInterceptor(interceptors ...core.WebSocketInterceptor)
+	// WebSocketUpgradeInterceptor는 WebSocket 전역 연결 검사 훅을 등록합니다.
+	WebSocketUpgradeInterceptor(interceptors ...core.WebSocketUpgradeInterceptor)
 	// 독립 실행되는 사용자 정의 전송 방식 등록
 	RegisterTransport(t core.CustomTransport)
 	// Validate는 네트워크 연결을 열지 않고 애플리케이션 설정을 검사합니다.
@@ -64,22 +71,24 @@ func (r registrar) Register(name string, handler any) error {
 }
 
 type app struct {
-	constructors            []any
-	controllerConstructors  []any
-	componentIssues         []boot.ConfigIssue
-	componentCounts         map[string]int
-	typedComponents         bool
-	routes                  []router.RouteSpec
-	interceptors            []bootstrap.InterceptorBinding
-	customTransports        []core.CustomTransport
-	consumerRegistry        *consumer.Registry
-	websocketRegistry       *ws.Registry
-	httpAdapterFactory      adapter.Factory
-	websocketAdapterFactory wsadapter.Factory
-	eventAdapters           []bootstrap.EventAdapterBinding
-	validator               validation.Validator
-	validatorConfigured     bool
-	shutdownHooks           []any
+	constructors                 []any
+	controllerConstructors       []any
+	componentIssues              []boot.ConfigIssue
+	componentCounts              map[string]int
+	typedComponents              bool
+	routes                       []router.RouteSpec
+	interceptors                 []bootstrap.InterceptorBinding
+	websocketInterceptors        []core.WebSocketInterceptor
+	websocketUpgradeInterceptors []core.WebSocketUpgradeInterceptor
+	customTransports             []core.CustomTransport
+	consumerRegistry             *consumer.Registry
+	websocketRegistry            *ws.Registry
+	httpAdapterFactory           adapter.Factory
+	websocketAdapterFactory      wsadapter.Factory
+	eventAdapters                []bootstrap.EventAdapterBinding
+	validator                    validation.Validator
+	validatorConfigured          bool
+	shutdownHooks                []any
 }
 
 // Option은 애플리케이션의 통합 구현을 명시적으로 선택하는 생성 옵션입니다.
@@ -217,31 +226,41 @@ func (a *app) InterceptorFor(scope boot.InterceptorScope, interceptors ...core.I
 	}
 }
 
+func (a *app) WebSocketInterceptor(interceptors ...core.WebSocketInterceptor) {
+	a.websocketInterceptors = append(a.websocketInterceptors, interceptors...)
+}
+
+func (a *app) WebSocketUpgradeInterceptor(interceptors ...core.WebSocketUpgradeInterceptor) {
+	a.websocketUpgradeInterceptors = append(a.websocketUpgradeInterceptors, interceptors...)
+}
+
 func (a *app) RegisterTransport(t core.CustomTransport) {
 	a.customTransports = append(a.customTransports, t)
 }
 
 func (a *app) bootstrapConfig(opts boot.Options) bootstrap.Config {
 	return bootstrap.Config{
-		Address:                 opts.Address,
-		Constructors:            a.constructors,
-		ControllerConstructors:  a.controllerConstructors,
-		ComponentIssues:         a.componentIssues,
-		TypedComponents:         a.typedComponents,
-		Routes:                  a.routes,
-		ScopedInterceptors:      a.interceptors,
-		CustomTransports:        a.customTransports,
-		ShutdownHooks:           a.shutdownHooks,
-		EnableGracefulShutdown:  opts.EnableGracefulShutdown,
-		ShutdownTimeout:         opts.ShutdownTimeout,
-		EventAdapters:           a.eventAdapters,
-		ConsumerRegistry:        a.consumerRegistry,
-		WebSocketRegistry:       a.websocketRegistry,
-		HTTP:                    opts.HTTP,
-		HTTPAdapterFactory:      a.httpAdapterFactory,
-		WebSocketAdapterFactory: a.websocketAdapterFactory,
-		Validator:               a.validator,
-		ValidatorConfigured:     a.validatorConfigured,
+		Address:                      opts.Address,
+		Constructors:                 a.constructors,
+		ControllerConstructors:       a.controllerConstructors,
+		ComponentIssues:              a.componentIssues,
+		TypedComponents:              a.typedComponents,
+		Routes:                       a.routes,
+		ScopedInterceptors:           a.interceptors,
+		WebSocketInterceptors:        a.websocketInterceptors,
+		WebSocketUpgradeInterceptors: a.websocketUpgradeInterceptors,
+		CustomTransports:             a.customTransports,
+		ShutdownHooks:                a.shutdownHooks,
+		EnableGracefulShutdown:       opts.EnableGracefulShutdown,
+		ShutdownTimeout:              opts.ShutdownTimeout,
+		EventAdapters:                a.eventAdapters,
+		ConsumerRegistry:             a.consumerRegistry,
+		WebSocketRegistry:            a.websocketRegistry,
+		HTTP:                         opts.HTTP,
+		HTTPAdapterFactory:           a.httpAdapterFactory,
+		WebSocketAdapterFactory:      a.websocketAdapterFactory,
+		Validator:                    a.validator,
+		ValidatorConfigured:          a.validatorConfigured,
 	}
 }
 

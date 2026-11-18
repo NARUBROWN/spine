@@ -3,9 +3,9 @@ module github.com/NARUBROWN/spine/examples/kafka-publish
 go 1.25.5
 
 require (
-	github.com/NARUBROWN/spine v0.7.5
-	github.com/NARUBROWN/spine-echo-platform v0.2.1
-	github.com/NARUBROWN/spine-kafka-platform v0.2.0
+	github.com/NARUBROWN/spine v0.7.6-preview.2
+	github.com/NARUBROWN/spine-echo-platform v0.2.1-preview.1
+	github.com/NARUBROWN/spine-kafka-platform v0.3.0-preview.1
 )
 
 require (
@@ -16,5 +16,3 @@ require (
 )
 
 replace github.com/NARUBROWN/spine => ../..
-
-replace github.com/NARUBROWN/spine-kafka-platform => ../../../spine-kafka-publish-destinations

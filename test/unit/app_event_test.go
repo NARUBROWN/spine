@@ -3,6 +3,7 @@ package spine_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -78,12 +79,8 @@ type publicEventController struct {
 	handle func(context.Context, publicInput) error
 }
 
-func (c *publicEventController) Handle(ctx context.Context, input publicInput) error {
+func (c *publicEventController) Handle(ctx handlerspine.EventCtx, input publicInput) error {
 	return c.handle(ctx, input)
-}
-
-func (c *publicEventController) HandleWithSpineCtx(ctx handlerspine.Ctx, input publicInput) error {
-	return c.handle(ctx.ExecutionContext().Context(), input)
 }
 
 type serializedEvent struct {
@@ -119,7 +116,7 @@ func TestAppEventExecutesTrustedSubscriptionAndSerializesOnceBeforeAck(t *testin
 	}, nack: func(context.Context) error { nacks.Add(1); cancel(); return nil }}
 	makePublisher := func() *publicPublisher {
 		return &publicPublisher{send: func(_ context.Context, m eventadapter.Message) error {
-			if m.EventName != "result.created" || string(m.Payload) != `{"processed":true}` || !m.OccurredAt.Equal(at) {
+			if m.EventName != "result.created" || string(m.Payload) != `{"event":{"processed":true}}` || !m.OccurredAt.Equal(at) {
 				t.Error("직렬화된 메시지가 다릅니다")
 			}
 			sends.Add(1)
@@ -136,7 +133,7 @@ func TestAppEventExecutesTrustedSubscriptionAndSerializesOnceBeforeAck(t *testin
 			return reader, nil
 		}, publisher: func(context.Context) (eventadapter.Publisher, error) { return first, nil }}),
 		spine.WithEventAdapter("fanout", publicEventFactory{publish: true, publisher: func(context.Context) (eventadapter.Publisher, error) { return second, nil }}))
-	app.Constructor(func() *publicEventController {
+	app.Constructor(func(publisher publish.Publisher) *publicEventController {
 		return &publicEventController{handle: func(ctx context.Context, input publicInput) error {
 			if got, ok := ctx.Deadline(); !ok || !got.Equal(deadline) {
 				t.Errorf("핸들러 컨텍스트가 부모 제한 시간을 잃었습니다: %v", got)
@@ -145,11 +142,10 @@ func TestAppEventExecutesTrustedSubscriptionAndSerializesOnceBeforeAck(t *testin
 				t.Error("메시지 DTO가 다릅니다")
 			}
 			handlers.Add(1)
-			publish.DomainEvents(ctx, &serializedEvent{calls: &encoded, at: at})
-			return nil
+			return publisher.Event(ctx, "result.created", publish.Fields{"event": &serializedEvent{calls: &encoded, at: at}}, publish.WithOccurredAt(at))
 		}}
 	})
-	if err := app.Consumers().Register("trusted-route", (*publicEventController).HandleWithSpineCtx); err != nil {
+	if err := app.Consumers().Register("trusted-route", (*publicEventController).Handle); err != nil {
 		t.Fatal(err)
 	}
 	if err := app.RunContext(ctx, boot.Options{}); err != nil {
@@ -171,14 +167,13 @@ func TestAppEventNacksAfterPublisherOrSerializationFailure(t *testing.T) {
 			reader.deliveries <- &publicDelivery{ack: func(context.Context) error { acks.Add(1); cancel(); return nil }, nack: func(context.Context) error { nacks.Add(1); cancel(); return nil }}
 			publisher := &publicPublisher{send: func(context.Context, eventadapter.Message) error { sends.Add(1); return cause }}
 			app := spine.New(spine.WithEventAdapter("events", publicEventFactory{consume: true, publish: true, reader: func(context.Context, eventadapter.Subscription) (eventadapter.Reader, error) { return reader, nil }, publisher: func(context.Context) (eventadapter.Publisher, error) { return publisher, nil }}))
-			app.Constructor(func() *publicEventController {
+			app.Constructor(func(publisher publish.Publisher) *publicEventController {
 				return &publicEventController{handle: func(ctx context.Context, _ publicInput) error {
 					event := &serializedEvent{calls: &encoded}
 					if failure == "serialization" {
 						event.err = cause
 					}
-					publish.DomainEvents(ctx, event)
-					return nil
+					return publisher.Event(ctx, "result.created", publish.Fields{"event": event})
 				}}
 			})
 			if err := app.Consumers().Register("trusted-route", (*publicEventController).Handle); err != nil {
@@ -293,5 +288,29 @@ func TestAppEventPreservesSubscriptionKeysAndAdapterPayload(t *testing.T) {
 	}
 	if settled.Load() != 2 || !handlers["first team/orders"] || !handlers["second team/orders/"] {
 		t.Fatalf("구독과 실행 핸들러가 다릅니다: %v ACK=%d", handlers, settled.Load())
+	}
+}
+
+type oldConsumerContextController struct{}
+
+func (*oldConsumerContextController) Standard(context.Context) {}
+func (*oldConsumerContextController) HTTP(handlerspine.Ctx)    {}
+
+func TestEventConsumerRejectsOldContextParameters(t *testing.T) {
+	for name, handler := range map[string]any{
+		"standard": (*oldConsumerContextController).Standard,
+		"http":     (*oldConsumerContextController).HTTP,
+	} {
+		t.Run(name, func(t *testing.T) {
+			app := spine.New()
+			if err := app.Consumers().Register("orders", handler); err != nil {
+				t.Fatal(err)
+			}
+			err := app.Validate(boot.Options{})
+			if err == nil || !strings.Contains(err.Error(), "EVENT_PARAMETER_UNSUPPORTED") ||
+				!strings.Contains(err.Error(), "spine.EventCtx") {
+				t.Fatalf("이벤트 컨텍스트 이전 안내가 필요합니다: %v", err)
+			}
+		})
 	}
 }

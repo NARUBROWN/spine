@@ -7,13 +7,16 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/router"
 )
 
 type Registration struct {
-	Path string
-	Meta execution.HandlerMeta
+	Path                string
+	Meta                execution.HandlerMeta
+	Interceptors        []core.WebSocketInterceptor
+	UpgradeInterceptors []core.WebSocketUpgradeInterceptor
 }
 
 type Registry struct {
@@ -40,7 +43,15 @@ func (r *Registry) Register(path string, handler any) error {
 	if err != nil {
 		return err
 	}
+	return r.RegisterMeta(path, meta, nil, nil)
+}
 
+// RegisterMeta registers an already resolved callback or method expression.
+func (r *Registry) RegisterMeta(path string, meta execution.HandlerMeta, interceptors []core.WebSocketInterceptor, upgradeInterceptors []core.WebSocketUpgradeInterceptor) error {
+	parsed, err := url.ParseRequestURI(path)
+	if err != nil || !strings.HasPrefix(path, "/") || parsed.Path != path || parsed.RawQuery != "" || strings.ContainsAny(path, ":*{}") || strings.Contains(path, "//") {
+		return fmt.Errorf("ws: path must be an absolute static path: %q", path)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, registration := range r.registrations {
@@ -49,8 +60,10 @@ func (r *Registry) Register(path string, handler any) error {
 		}
 	}
 	r.registrations = append(r.registrations, Registration{
-		Path: path,
-		Meta: meta,
+		Path:                path,
+		Meta:                meta,
+		Interceptors:        slices.Clone(interceptors),
+		UpgradeInterceptors: slices.Clone(upgradeInterceptors),
 	})
 	return nil
 }
@@ -71,7 +84,8 @@ func (r *Registry) Snapshot() *Registry {
 	for i := range snapshot.registrations {
 		meta := &snapshot.registrations[i].Meta
 		meta.PathKeys = slices.Clone(meta.PathKeys)
-		meta.Interceptors = slices.Clone(meta.Interceptors)
+		snapshot.registrations[i].Interceptors = slices.Clone(snapshot.registrations[i].Interceptors)
+		snapshot.registrations[i].UpgradeInterceptors = slices.Clone(snapshot.registrations[i].UpgradeInterceptors)
 	}
 	return snapshot
 }

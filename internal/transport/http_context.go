@@ -10,19 +10,14 @@ import (
 	"sync"
 
 	adapter "github.com/NARUBROWN/spine/contract/http"
-	"github.com/NARUBROWN/spine/internal/event/emission"
-	"github.com/NARUBROWN/spine/internal/event/publish"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/httpfailure"
 	"github.com/NARUBROWN/spine/internal/input"
 )
 
-// HTTPContext는 독립 HTTP scope에 Spine 요청 store와 이벤트 버스를 결합합니다.
+// HTTPContext owns HTTP transport input and staged output, separately from execution.State.
 type HTTPContext struct {
-	execution.Store
 	scope                adapter.HTTPContext
-	bus                  emission.Bus
-	busOnce              sync.Once
 	writerMu             sync.Mutex
 	writer               adapter.ResponseWriter
 	params               map[string]string
@@ -34,7 +29,6 @@ type HTTPContext struct {
 	closed               bool
 }
 
-var _ execution.Context = (*HTTPContext)(nil)
 var _ execution.HTTPRequestContext = (*HTTPContext)(nil)
 
 func NewHTTPContext(scope adapter.HTTPContext, multipartMemoryBytes int64) *HTTPContext {
@@ -149,15 +143,6 @@ func (c *HTTPContext) Params() map[string]string {
 
 func (c *HTTPContext) PathKeys() []string {
 	return slices.Clone(c.pathKeys)
-}
-
-func (c *HTTPContext) EventBus() emission.Bus {
-	c.busOnce.Do(func() {
-		if c.bus == nil {
-			c.bus = publish.NewEventBus()
-		}
-	})
-	return c.bus
 }
 
 func normalizeInputError(err error) error {

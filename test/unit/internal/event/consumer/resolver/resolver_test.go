@@ -2,15 +2,13 @@ package resolver
 
 import (
 	"context"
+	internalresolver "github.com/NARUBROWN/spine/internal/resolver"
 	"reflect"
 	"testing"
-
-	"github.com/NARUBROWN/spine/internal/event/emission"
-	internalpublish "github.com/NARUBROWN/spine/internal/event/publish"
-	internalresolver "github.com/NARUBROWN/spine/internal/resolver"
 )
 
 type testConsumerContext struct {
+	context.Context
 	eventName string
 	payload   []byte
 	store     map[string]any
@@ -18,14 +16,13 @@ type testConsumerContext struct {
 
 func newTestConsumerContext(eventName string, payload []byte) *testConsumerContext {
 	return &testConsumerContext{
+		Context:   context.Background(),
 		eventName: eventName,
 		payload:   payload,
 		store:     map[string]any{},
 	}
 }
 
-func (c *testConsumerContext) Context() context.Context     { return context.Background() }
-func (c *testConsumerContext) EventBus() emission.Bus       { return internalpublish.NewEventBus() }
 func (c *testConsumerContext) Method() string               { return "EVENT" }
 func (c *testConsumerContext) Path() string                 { return c.eventName }
 func (c *testConsumerContext) Params() map[string]string    { return map[string]string{} }
@@ -37,10 +34,8 @@ func (c *testConsumerContext) Get(key string) (any, bool)   { v, ok := c.store[k
 func (c *testConsumerContext) EventName() string            { return c.eventName }
 func (c *testConsumerContext) Payload() []byte              { return c.payload }
 
-type nonConsumerContext struct{}
+type nonConsumerContext struct{ context.Context }
 
-func (c *nonConsumerContext) Context() context.Context     { return context.Background() }
-func (c *nonConsumerContext) EventBus() emission.Bus       { return internalpublish.NewEventBus() }
 func (c *nonConsumerContext) Method() string               { return "GET" }
 func (c *nonConsumerContext) Path() string                 { return "/" }
 func (c *nonConsumerContext) Params() map[string]string    { return map[string]string{} }
@@ -58,7 +53,7 @@ func TestEventNameResolver(t *testing.T) {
 		t.Fatal("string은 EventNameResolver가 지원해야 합니다")
 	}
 
-	val, err := r.Resolve(newTestConsumerContext("order.created", nil), pm)
+	val, err := r.Resolve(newTestConsumerContext("order.created", nil), pm, testInput(newTestConsumerContext("order.created", nil)))
 	if err != nil {
 		t.Fatalf("Resolve 실패: %v", err)
 	}
@@ -66,10 +61,10 @@ func TestEventNameResolver(t *testing.T) {
 		t.Fatalf("event name이 잘못되었습니다: %v", val)
 	}
 
-	if _, err := r.Resolve(newTestConsumerContext("", nil), pm); err == nil {
+	if _, err := r.Resolve(newTestConsumerContext("", nil), pm, testInput(newTestConsumerContext("", nil))); err == nil {
 		t.Fatal("빈 event name은 에러여야 합니다")
 	}
-	if _, err := r.Resolve(&nonConsumerContext{}, pm); err == nil {
+	if _, err := r.Resolve(&nonConsumerContext{}, pm, testInput(&nonConsumerContext{})); err == nil {
 		t.Fatal("ConsumerRequestContext가 아니면 에러여야 합니다")
 	}
 }
@@ -79,7 +74,7 @@ func TestEventNameResolver_ConvertsNamedString(t *testing.T) {
 	r := &EventNameResolver{}
 	pm := internalresolver.ParameterMeta{Type: reflect.TypeFor[eventName]()}
 
-	val, err := r.Resolve(newTestConsumerContext("order.created", nil), pm)
+	val, err := r.Resolve(newTestConsumerContext("order.created", nil), pm, testInput(newTestConsumerContext("order.created", nil)))
 	if err != nil {
 		t.Fatalf("named string Resolve 실패: %v", err)
 	}
@@ -96,7 +91,7 @@ func TestPayloadResolver(t *testing.T) {
 		t.Fatal("[]byte는 PayloadResolver가 지원해야 합니다")
 	}
 
-	val, err := r.Resolve(newTestConsumerContext("order.created", []byte("hello")), pm)
+	val, err := r.Resolve(newTestConsumerContext("order.created", []byte("hello")), pm, testInput(newTestConsumerContext("order.created", []byte("hello"))))
 	if err != nil {
 		t.Fatalf("Resolve 실패: %v", err)
 	}
@@ -105,12 +100,12 @@ func TestPayloadResolver(t *testing.T) {
 	}
 
 	for _, payload := range [][]byte{nil, {}} {
-		value, err := r.Resolve(newTestConsumerContext("order.created", payload), pm)
+		value, err := r.Resolve(newTestConsumerContext("order.created", payload), pm, testInput(newTestConsumerContext("order.created", payload)))
 		if err != nil || !reflect.DeepEqual(value, payload) {
 			t.Fatalf("raw payload must preserve nil versus empty: %v %v", value, err)
 		}
 	}
-	if _, err := r.Resolve(&nonConsumerContext{}, pm); err == nil {
+	if _, err := r.Resolve(&nonConsumerContext{}, pm, testInput(&nonConsumerContext{})); err == nil {
 		t.Fatal("ConsumerRequestContext가 아니면 에러여야 합니다")
 	}
 }
@@ -120,14 +115,14 @@ func TestPayloadResolver_ConvertsNamedByteSlice(t *testing.T) {
 	r := &PayloadResolver{}
 	pm := internalresolver.ParameterMeta{Type: reflect.TypeFor[payload]()}
 
-	val, err := r.Resolve(newTestConsumerContext("order.created", []byte("hello")), pm)
+	val, err := r.Resolve(newTestConsumerContext("order.created", []byte("hello")), pm, testInput(newTestConsumerContext("order.created", []byte("hello"))))
 	if err != nil {
 		t.Fatalf("named []byte Resolve 실패: %v", err)
 	}
 	if got, ok := val.(payload); !ok || string(got) != "hello" {
 		t.Fatalf("요청한 named []byte 타입으로 반환되어야 합니다: %T %v", val, val)
 	}
-	val, err = r.Resolve(newTestConsumerContext("order.created", nil), pm)
+	val, err = r.Resolve(newTestConsumerContext("order.created", nil), pm, testInput(newTestConsumerContext("order.created", nil)))
 	if got, ok := val.(payload); err != nil || !ok || got != nil {
 		t.Fatalf("named tombstone must retain its type and nil value: %T %v %v", val, val, err)
 	}
@@ -146,7 +141,7 @@ func TestDTOResolver(t *testing.T) {
 		t.Fatal("struct는 DTOResolver가 지원해야 합니다")
 	}
 
-	val, err := r.Resolve(newTestConsumerContext("order.created", []byte(`{"name":"kim","age":20}`)), pm)
+	val, err := r.Resolve(newTestConsumerContext("order.created", []byte(`{"name":"kim","age":20}`)), pm, testInput(newTestConsumerContext("order.created", []byte(`{"name":"kim","age":20}`))))
 	if err != nil {
 		t.Fatalf("Resolve 실패: %v", err)
 	}
@@ -155,13 +150,13 @@ func TestDTOResolver(t *testing.T) {
 		t.Fatalf("DTO 값이 잘못되었습니다: %+v", dto)
 	}
 
-	if _, err := r.Resolve(newTestConsumerContext("order.created", nil), pm); err == nil {
+	if _, err := r.Resolve(newTestConsumerContext("order.created", nil), pm, testInput(newTestConsumerContext("order.created", nil))); err == nil {
 		t.Fatal("nil payload는 에러여야 합니다")
 	}
-	if _, err := r.Resolve(newTestConsumerContext("order.created", []byte(`{"name"`)), pm); err == nil {
+	if _, err := r.Resolve(newTestConsumerContext("order.created", []byte(`{"name"`)), pm, testInput(newTestConsumerContext("order.created", []byte(`{"name"`)))); err == nil {
 		t.Fatal("잘못된 JSON은 에러여야 합니다")
 	}
-	if _, err := r.Resolve(&nonConsumerContext{}, pm); err == nil {
+	if _, err := r.Resolve(&nonConsumerContext{}, pm, testInput(&nonConsumerContext{})); err == nil {
 		t.Fatal("ConsumerRequestContext가 아니면 에러여야 합니다")
 	}
 }
@@ -169,3 +164,10 @@ func TestDTOResolver(t *testing.T) {
 func (c *testConsumerContext) SetRoute(params map[string]string, pathKeys []string) {}
 
 func (c *nonConsumerContext) SetRoute(params map[string]string, pathKeys []string) {}
+
+func testInput(ctx any) *Input {
+	if c, ok := ctx.(*testConsumerContext); ok {
+		return &Input{Name: c.eventName, Payload: c.payload}
+	}
+	return nil
+}

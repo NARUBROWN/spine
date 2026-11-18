@@ -11,20 +11,10 @@ import (
 	"time"
 
 	"github.com/NARUBROWN/spine/internal/container"
-	eventresolver "github.com/NARUBROWN/spine/internal/event/consumer/resolver"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/invoker"
-	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/pkg/boot"
 )
-
-type runtimeTestRouter struct {
-	meta execution.HandlerMeta
-}
-
-func (r *runtimeTestRouter) Route(ctx execution.Context) (execution.HandlerMeta, error) {
-	return r.meta, nil
-}
 
 type runtimeTestReader struct {
 	msg  *Message
@@ -204,23 +194,6 @@ func (f *runtimeTestFactory) Build(reg Registration) (Reader, error) {
 	return f.reader, nil
 }
 
-type runtimeTestPostHook struct {
-	err error
-}
-
-func (h *runtimeTestPostHook) AfterExecution(ctx execution.Context) error {
-	return h.err
-}
-
-type failOnceRuntimeTestPostHook struct{ calls atomic.Int32 }
-
-func (h *failOnceRuntimeTestPostHook) AfterExecution(execution.Context) error {
-	if h.calls.Add(1) == 1 {
-		return errors.New("first delivery fails")
-	}
-	return nil
-}
-
 type blockingRuntimeTestController struct {
 	started chan struct{}
 	release chan struct{}
@@ -270,58 +243,26 @@ func (c *runtimeTestController) Panic(payload []byte) {
 	panic("boom")
 }
 
-func newRuntimePipeline(t *testing.T, methodName string, hookErr error) *pipeline.Pipeline {
+func newRuntimeInvoker(t *testing.T) *invoker.Invoker {
 	t.Helper()
-
 	ctr := container.New()
-	if err := ctr.RegisterConstructor(func() *runtimeTestController {
-		return &runtimeTestController{}
-	}); err != nil {
-		t.Fatalf("생성자 등록 실패: %v", err)
+	if err := ctr.RegisterConstructor(func() *runtimeTestController { return &runtimeTestController{} }); err != nil {
+		t.Fatal(err)
 	}
-
-	controllerType := reflect.TypeOf(&runtimeTestController{})
-	method, ok := controllerType.MethodByName(methodName)
-	if !ok {
-		t.Fatalf("메서드를 찾을 수 없습니다: %s", methodName)
-	}
-
-	p := pipeline.NewPipeline(
-		&runtimeTestRouter{
-			meta: execution.HandlerMeta{
-				ControllerType: controllerType,
-				Method:         method,
-			},
-		},
-		invoker.NewInvoker(ctr),
-	)
-
-	p.AddArgumentResolver(&eventresolver.PayloadResolver{})
-	if hookErr != nil {
-		p.AddPostExecutionHook(&runtimeTestPostHook{err: hookErr})
-	}
-
-	return p
+	return invoker.NewInvoker(ctr)
 }
 
-func newBlockingRuntimePipeline(t *testing.T, controller *blockingRuntimeTestController) *pipeline.Pipeline {
+func newBlockingRuntimeInvoker(t *testing.T, controller *blockingRuntimeTestController) *invoker.Invoker {
 	t.Helper()
-
 	ctr := container.New()
 	if err := ctr.RegisterConstructor(func() *blockingRuntimeTestController { return controller }); err != nil {
-		t.Fatalf("register blocking controller: %v", err)
+		t.Fatal(err)
 	}
-	controllerType := reflect.TypeOf(controller)
-	method, ok := controllerType.MethodByName("Handle")
-	if !ok {
-		t.Fatal("blocking handler method not found")
-	}
-	p := pipeline.NewPipeline(
-		&runtimeTestRouter{meta: execution.HandlerMeta{ControllerType: controllerType, Method: method}},
-		invoker.NewInvoker(ctr),
-	)
-	p.AddArgumentResolver(&eventresolver.PayloadResolver{})
-	return p
+	return invoker.NewInvoker(ctr)
+}
+
+func setRuntimeTestHandler(registry *Registry, handler func() error) {
+	registry.registrations[0].Meta = execution.HandlerMeta{Callback: reflect.ValueOf(handler)}
 }
 
 func waitSignal(t *testing.T, ch <-chan string) string {
@@ -336,11 +277,13 @@ func waitSignal(t *testing.T, ch <-chan string) string {
 	}
 }
 
-func TestRuntime_NackOnPostHookFailure(t *testing.T) {
+func TestRuntime_NackOnHandlerFailure(t *testing.T) {
 	registry := NewRegistry()
 	if err := registry.Register("topic", (*runtimeTestController).Handle); err != nil {
 		t.Fatalf("등록 실패: %v", err)
 	}
+
+	setRuntimeTestHandler(registry, func() error { return context.DeadlineExceeded })
 
 	signals := make(chan string, 2)
 	msg := &Message{
@@ -359,7 +302,7 @@ func TestRuntime_NackOnPostHookFailure(t *testing.T) {
 	runtime := NewRuntime(
 		registry,
 		&runtimeTestFactory{reader: &runtimeTestReader{msg: msg}},
-		newRuntimePipeline(t, "Handle", context.DeadlineExceeded),
+		newRuntimeInvoker(t), nil,
 	)
 
 	runtime.Start(context.Background())
@@ -393,7 +336,7 @@ func TestRuntime_NackOnRecoveredPanic(t *testing.T) {
 	runtime := NewRuntime(
 		registry,
 		&runtimeTestFactory{reader: &runtimeTestReader{msg: msg}},
-		newRuntimePipeline(t, "Panic", nil),
+		newRuntimeInvoker(t), nil,
 	)
 
 	runtime.Start(context.Background())
@@ -415,7 +358,7 @@ func TestRuntime_WaitsBeforeRebuildingAfterReaderError(t *testing.T) {
 		second: &runtimeTestReader{},
 		policy: TransportRetryPolicy{InitialDelay: 100 * time.Millisecond, MaxDelay: time.Second, Multiplier: 2},
 	}
-	runtime := NewRuntime(registry, factory, newRuntimePipeline(t, "Handle", nil))
+	runtime := NewRuntime(registry, factory, newRuntimeInvoker(t), nil)
 	waitEntered := make(chan time.Duration, 1)
 	runtime.waitRetry = func(ctx context.Context, delay time.Duration) bool {
 		waitEntered <- delay
@@ -454,7 +397,7 @@ func TestRuntime_RetriesInitialBuildWithConfiguredPolicy(t *testing.T) {
 			MaxAttempts:  2,
 		},
 	}
-	runtime := NewRuntime(registry, factory, newRuntimePipeline(t, "Handle", nil))
+	runtime := NewRuntime(registry, factory, newRuntimeInvoker(t), nil)
 	delays := make(chan time.Duration, 2)
 	runtime.waitRetry = func(ctx context.Context, delay time.Duration) bool {
 		delays <- delay
@@ -490,7 +433,7 @@ func TestRuntime_StopsAfterInitialBuildRetriesAreExhausted(t *testing.T) {
 			MaxAttempts:  2,
 		},
 	}
-	runtime := NewRuntime(registry, factory, newRuntimePipeline(t, "Handle", nil))
+	runtime := NewRuntime(registry, factory, newRuntimeInvoker(t), nil)
 	runtime.waitRetry = func(ctx context.Context, _ time.Duration) bool { return ctx.Err() == nil }
 	runtime.Start(context.Background())
 	t.Cleanup(func() { _ = runtime.Stop() })
@@ -529,9 +472,16 @@ func TestRuntime_KafkaStyleNackInvalidatesReaderBeforeHigherOffset(t *testing.T)
 	first := &sequenceRuntimeTestReader{messages: []*Message{failed, higher}, closed: make(chan struct{})}
 	second := &sequenceRuntimeTestReader{messages: []*Message{retry}, closed: make(chan struct{})}
 	factory := &sequenceRuntimeTestFactory{readers: []Reader{first, second}, policy: TransportRetryPolicy{InitialDelay: time.Millisecond, MaxDelay: time.Millisecond, Multiplier: 1}}
-	p := newRuntimePipeline(t, "Handle", nil)
-	p.AddPostExecutionHook(&failOnceRuntimeTestPostHook{})
-	runtime := NewRuntime(registry, factory, p)
+	p := newRuntimeInvoker(t)
+	var attempts int
+	setRuntimeTestHandler(registry, func() error {
+		attempts++
+		if attempts == 1 {
+			return errors.New("first delivery fails")
+		}
+		return nil
+	})
+	runtime := NewRuntime(registry, factory, p, nil)
 	runtime.Start(context.Background())
 	t.Cleanup(func() { _ = runtime.Stop() })
 
@@ -573,9 +523,9 @@ func TestRuntime_KafkaStyleNackWaitsBeforeRebuildingReader(t *testing.T) {
 			Multiplier:   1,
 		},
 	}
-	p := newRuntimePipeline(t, "Handle", nil)
-	p.AddPostExecutionHook(&runtimeTestPostHook{err: errors.New("permanent handler failure")})
-	runtime := NewRuntime(registry, factory, p)
+	p := newRuntimeInvoker(t)
+	setRuntimeTestHandler(registry, func() error { return errors.New("permanent handler failure") })
+	runtime := NewRuntime(registry, factory, p, nil)
 	waitStarted := make(chan time.Duration, 1)
 	releaseWait := make(chan struct{})
 	runtime.waitRetry = func(ctx context.Context, delay time.Duration) bool {
@@ -631,7 +581,7 @@ func TestRuntime_AckFailureInvalidatesReaderBeforeHigherOffset(t *testing.T) {
 	first := &sequenceRuntimeTestReader{messages: []*Message{failedCommit, higher}, closed: make(chan struct{})}
 	second := &sequenceRuntimeTestReader{messages: []*Message{retry}, closed: make(chan struct{})}
 	factory := &sequenceRuntimeTestFactory{readers: []Reader{first, second}, policy: TransportRetryPolicy{InitialDelay: time.Millisecond, MaxDelay: time.Millisecond, Multiplier: 1}}
-	runtime := NewRuntime(registry, factory, newRuntimePipeline(t, "Handle", nil))
+	runtime := NewRuntime(registry, factory, newRuntimeInvoker(t), nil)
 	runtime.Start(context.Background())
 	t.Cleanup(func() { _ = runtime.Stop() })
 
@@ -664,7 +614,7 @@ func TestRuntime_RebuildsReaderAfterTransportError(t *testing.T) {
 		second: &runtimeTestReader{msg: msg},
 		policy: NewTransportRetryPolicy(5*time.Millisecond, 10*time.Millisecond, 2, 0.01, 3),
 	}
-	runtime := NewRuntime(registry, factory, newRuntimePipeline(t, "Handle", nil))
+	runtime := NewRuntime(registry, factory, newRuntimeInvoker(t), nil)
 	runtime.Start(context.Background())
 	t.Cleanup(func() { _ = runtime.Stop() })
 
@@ -681,7 +631,7 @@ func TestRuntime_ValidateRejectsNilReader(t *testing.T) {
 	if err := registry.Register("topic", (*runtimeTestController).Handle); err != nil {
 		t.Fatalf("등록 실패: %v", err)
 	}
-	runtime := NewRuntime(registry, &nilRuntimeTestFactory{}, newRuntimePipeline(t, "Handle", nil))
+	runtime := NewRuntime(registry, &nilRuntimeTestFactory{}, newRuntimeInvoker(t), nil)
 	err := runtime.Validate()
 	if err == nil || !strings.Contains(err.Error(), "consumer factory returned a nil reader") {
 		t.Fatalf("nil reader must return a validation error, got %v", err)
@@ -703,7 +653,7 @@ func TestRuntime_ValidateWithRetryUsesConfiguredInitialConnectionPolicy(t *testi
 			MaxAttempts:  2,
 		},
 	}
-	runtime := NewRuntime(registry, factory, newRuntimePipeline(t, "Handle", nil))
+	runtime := NewRuntime(registry, factory, newRuntimeInvoker(t), nil)
 	var delays []time.Duration
 	runtime.waitRetry = func(ctx context.Context, delay time.Duration) bool {
 		delays = append(delays, delay)
@@ -736,7 +686,7 @@ func TestRuntime_ValidateWithRetryRetriesFactoryStartupHandshakeBeforeBuild(t *t
 			MaxAttempts:  2,
 		},
 	}
-	runtime := NewRuntime(registry, factory, newRuntimePipeline(t, "Handle", nil))
+	runtime := NewRuntime(registry, factory, newRuntimeInvoker(t), nil)
 	runtime.waitRetry = func(ctx context.Context, _ time.Duration) bool { return ctx.Err() == nil }
 
 	if err := runtime.ValidateWithRetry(context.Background()); err != nil {
@@ -759,7 +709,7 @@ func TestRuntime_ValidateWithRetryCanBeCanceledWhenRetriesAreUnlimited(t *testin
 		failures: 100,
 		policy:   TransportRetryPolicy{InitialDelay: time.Millisecond, MaxDelay: time.Millisecond, Multiplier: 1},
 	}
-	runtime := NewRuntime(registry, factory, newRuntimePipeline(t, "Handle", nil))
+	runtime := NewRuntime(registry, factory, newRuntimeInvoker(t), nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	runtime.waitRetry = func(context.Context, time.Duration) bool {
 		cancel()
@@ -782,7 +732,7 @@ func TestRuntime_StartAfterStopDoesNotStartConsumers(t *testing.T) {
 	}
 	reader := &lifecycleRuntimeTestReader{started: make(chan struct{}), stopped: make(chan struct{})}
 	factory := &lifecycleRuntimeTestFactory{reader: reader}
-	runtime := NewRuntime(registry, factory, newRuntimePipeline(t, "Handle", nil))
+	runtime := NewRuntime(registry, factory, newRuntimeInvoker(t), nil)
 
 	runtime.Stop()
 	runtime.Start(context.Background())
@@ -806,7 +756,7 @@ func TestRuntime_StopCancelsPublishedStartContext(t *testing.T) {
 	runtime := NewRuntime(
 		registry,
 		&lifecycleRuntimeTestFactory{reader: reader},
-		newRuntimePipeline(t, "Handle", nil),
+		newRuntimeInvoker(t), nil,
 	)
 
 	runtime.Start(context.Background())
@@ -847,7 +797,7 @@ func TestRuntime_StopAndDoneWaitForHandlerAckAndReaderClose(t *testing.T) {
 	runtime := NewRuntime(
 		registry,
 		&runtimeTestFactory{reader: reader},
-		newBlockingRuntimePipeline(t, &blockingRuntimeTestController{started: handlerStarted, release: handlerRelease}),
+		newBlockingRuntimeInvoker(t, &blockingRuntimeTestController{started: handlerStarted, release: handlerRelease}), nil,
 	)
 	runtime.Start(context.Background())
 	select {
@@ -916,12 +866,12 @@ func TestRuntime_ConcurrentStartStopIsRaceFreeAndStartsAtMostOnce(t *testing.T) 
 	if err := registry.Register("topic", (*runtimeTestController).Handle); err != nil {
 		t.Fatalf("register consumer: %v", err)
 	}
-	p := newRuntimePipeline(t, "Handle", nil)
+	p := newRuntimeInvoker(t)
 
 	for range 200 {
 		reader := &lifecycleRuntimeTestReader{started: make(chan struct{}), stopped: make(chan struct{})}
 		factory := &lifecycleRuntimeTestFactory{reader: reader}
-		runtime := NewRuntime(registry, factory, p)
+		runtime := NewRuntime(registry, factory, p, nil)
 		start := make(chan struct{})
 		var wg sync.WaitGroup
 		wg.Add(2)
@@ -952,7 +902,7 @@ func TestRuntime_StopsAfterTransportReconnectAttemptsAreExhausted(t *testing.T) 
 		t.Fatalf("등록 실패: %v", err)
 	}
 	factory := &exhaustingRuntimeTestFactory{reader: &failingRuntimeTestReader{}}
-	runtime := NewRuntime(registry, factory, newRuntimePipeline(t, "Handle", nil))
+	runtime := NewRuntime(registry, factory, newRuntimeInvoker(t), nil)
 	runtime.waitRetry = func(ctx context.Context, _ time.Duration) bool { return ctx.Err() == nil }
 	runtime.Start(context.Background())
 	t.Cleanup(func() { _ = runtime.Stop() })
@@ -991,7 +941,7 @@ func TestRuntimeAcknowledgesRawTombstoneWithoutReconnecting(t *testing.T) {
 	message.SetAckHandler(func() error { acks.Add(1); cancel(); return nil })
 	message.SetNackHandler(func() error { nacks.Add(1); cancel(); return ErrReaderInvalidated })
 	factory := &lifecycleRuntimeTestFactory{reader: &runtimeTestReader{msg: message}}
-	runtime := NewRuntime(registry, factory, newRuntimePipeline(t, "Tombstone", nil))
+	runtime := NewRuntime(registry, factory, newRuntimeInvoker(t), nil)
 	runtime.Start(ctx)
 	select {
 	case <-runtime.Done():
@@ -1013,7 +963,7 @@ func (r failingCleanupReader) Close() error                           { return r
 
 func TestRuntimeCleanupHistoryUsesConfiguredBoundsAndFreezesStopResult(t *testing.T) {
 	registry := NewRegistry()
-	r := NewRuntime(registry, &runtimeTestFactory{}, newRuntimePipeline(t, "Handle", nil), boot.CleanupErrorHistoryOptions{MaxEntries: 1})
+	r := NewRuntime(registry, &runtimeTestFactory{}, newRuntimeInvoker(t), nil, boot.CleanupErrorHistoryOptions{MaxEntries: 1})
 	first, last := errors.New("first cleanup"), errors.New("last cleanup")
 	_ = r.closeReader(failingCleanupReader{first})
 	_ = r.closeReader(failingCleanupReader{last})

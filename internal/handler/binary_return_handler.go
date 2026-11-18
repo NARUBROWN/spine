@@ -19,7 +19,7 @@ func (h *BinaryReturnHandler) Supports(returnType reflect.Type) bool {
 	return returnType == reflect.TypeFor[httpx.Binary]()
 }
 
-func (h *BinaryReturnHandler) Handle(value any, ctx execution.Context) error {
+func (h *BinaryReturnHandler) Handle(value any, ctx *execution.Context) error {
 	var binary httpx.Binary
 	switch v := value.(type) {
 	case httpx.Binary:

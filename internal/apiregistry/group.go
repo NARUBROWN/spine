@@ -39,6 +39,22 @@ func Interceptors(values ...core.Interceptor) Option {
 	return router.NewOption(func(s *router.RouteSpec) { s.Interceptors = append(s.Interceptors, copied...) })
 }
 
+// WebSocketInterceptors는 WebSocket 라우트의 메시지 인터셉터를 지정합니다.
+func WebSocketInterceptors(values ...core.WebSocketInterceptor) Option {
+	copied := append([]core.WebSocketInterceptor(nil), values...)
+	return router.NewOption(func(s *router.RouteSpec) {
+		s.WebSocketInterceptors = append(s.WebSocketInterceptors, copied...)
+	})
+}
+
+// WebSocketUpgradeInterceptors는 WebSocket 라우트의 업그레이드 검사 훅을 지정합니다.
+func WebSocketUpgradeInterceptors(values ...core.WebSocketUpgradeInterceptor) Option {
+	copied := append([]core.WebSocketUpgradeInterceptor(nil), values...)
+	return router.NewOption(func(s *router.RouteSpec) {
+		s.WebSocketUpgradeInterceptors = append(s.WebSocketUpgradeInterceptors, copied...)
+	})
+}
+
 type Group struct {
 	registry *Registry
 	prefix   string
@@ -86,3 +102,6 @@ func (g *Group) HEAD(p string, h any, options ...Option) { g.add(http.MethodHead
 func (g *Group) OPTIONS(p string, h any, options ...Option) {
 	g.add(http.MethodOptions, p, h, options)
 }
+
+// WS registers a WebSocket callback under this group's prefix and interceptors.
+func (g *Group) WS(path string, handler any, options ...Option) { g.add("WS", path, handler, options) }

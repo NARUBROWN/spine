@@ -2,9 +2,9 @@ package multipart
 
 import "io"
 
-// UploadedFile은 기존 전체 업로드 조회 API의 파일 정보입니다.
+// UploadedFile describes a file in the legacy upload lookup API.
 //
-// Deprecated: input.Body[T]의 form 필드에 mime/multipart.FileHeader를 사용하세요.
+// Deprecated: Use mime/multipart.FileHeader in a form field of input.Body[T].
 type UploadedFile struct {
 	FieldName   string
 	Filename    string
@@ -13,10 +13,11 @@ type UploadedFile struct {
 	Open        func() (io.ReadCloser, error)
 }
 
-// UploadedFiles는 요청의 모든 업로드 파일을 제공합니다.
+// UploadedFiles provides all uploaded files in a request.
 //
-// Deprecated: input.Body[T]의 form 필드에 *mime/multipart.FileHeader 또는
-// []*mime/multipart.FileHeader를 선언하세요. 동적인 필드 전체 조회는 spine.Ctx.HTTPRequestContext().MultipartForm을 사용하세요.
+// Deprecated: Declare *mime/multipart.FileHeader or []*mime/multipart.FileHeader
+// in a form field of input.Body[T]. For dynamic field names, obtain the request
+// view with spine.Ctx.HTTPRequestContext and call its MultipartForm method.
 type UploadedFiles struct {
 	Files []UploadedFile
 }

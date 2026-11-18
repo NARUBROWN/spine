@@ -10,9 +10,11 @@ import (
 	"time"
 
 	eventadapter "github.com/NARUBROWN/spine/contract/event"
+	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/internal/configuration"
 	"github.com/NARUBROWN/spine/internal/event/cleanup"
-	"github.com/NARUBROWN/spine/internal/pipeline"
+	eventresolver "github.com/NARUBROWN/spine/internal/event/consumer/resolver"
+	"github.com/NARUBROWN/spine/internal/invoker"
 )
 
 type runnerFactory interface {
@@ -24,25 +26,26 @@ type contextRunnerFactory interface {
 }
 
 type Runtime struct {
-	registry       *Registry
-	factory        runnerFactory
-	pipeline       *pipeline.Pipeline
-	lifecycleMu    sync.Mutex
-	prepared       map[string]Reader
-	cleanupMu      sync.Mutex
-	cleanupOnce    sync.Once
-	cleanupErr     error
-	cleanupHistory cleanup.History
-	workers        sync.WaitGroup
-	started        bool
-	stopped        bool
-	stopOnce       sync.Once
-	doneOnce       sync.Once
-	cancel         context.CancelFunc
-	errChan        chan error
-	done           chan struct{}
-	waitRetry      func(context.Context, time.Duration) bool
-	jitterDelay    func(time.Duration, float64) time.Duration
+	registry          *Registry
+	factory           runnerFactory
+	invoker           *invoker.Invoker
+	argumentResolvers []eventresolver.ArgumentResolver
+	lifecycleMu       sync.Mutex
+	prepared          map[string]Reader
+	cleanupMu         sync.Mutex
+	cleanupOnce       sync.Once
+	cleanupErr        error
+	cleanupHistory    cleanup.History
+	workers           sync.WaitGroup
+	started           bool
+	stopped           bool
+	stopOnce          sync.Once
+	doneOnce          sync.Once
+	cancel            context.CancelFunc
+	errChan           chan error
+	done              chan struct{}
+	waitRetry         func(context.Context, time.Duration) bool
+	jitterDelay       func(time.Duration, float64) time.Duration
 }
 
 const (
@@ -91,26 +94,27 @@ func NewTransportRetryPolicy(initialDelay, maxDelay time.Duration, multiplier, j
 	return policy
 }
 
-func NewRuntime(registry *Registry, factory runnerFactory, pipeline *pipeline.Pipeline, history ...configuration.CleanupErrorHistoryOptions) *Runtime {
+func NewRuntime(registry *Registry, factory runnerFactory, handlerInvoker *invoker.Invoker, validator validation.Validator, history ...configuration.CleanupErrorHistoryOptions) *Runtime {
 	if registry == nil {
 		panic("consumer: registry cannot be nil")
 	}
 	if factory == nil {
 		panic("consumer: factory cannot be nil")
 	}
-	if pipeline == nil {
-		panic("consumer: pipeline cannot be nil")
+	if handlerInvoker == nil {
+		panic("consumer: invoker cannot be nil")
 	}
 
 	return &Runtime{
-		registry:       registry,
-		factory:        factory,
-		pipeline:       pipeline,
-		errChan:        make(chan error, max(1, len(registry.Registrations()))),
-		done:           make(chan struct{}),
-		waitRetry:      waitForRetry,
-		jitterDelay:    jitteredDelay,
-		cleanupHistory: cleanup.NewHistory(history...),
+		registry:          registry,
+		factory:           factory,
+		invoker:           handlerInvoker,
+		argumentResolvers: ArgumentResolvers(validator),
+		errChan:           make(chan error, max(1, len(registry.Registrations()))),
+		done:              make(chan struct{}),
+		waitRetry:         waitForRetry,
+		jitterDelay:       jitteredDelay,
+		cleanupHistory:    cleanup.NewHistory(history...),
 	}
 }
 
@@ -191,11 +195,8 @@ func (r *Runtime) Start(ctx context.Context) {
 						continue
 					}
 
-					// 컨슈머 실행 컨텍스트 생성
-					reqCtx := NewRequestContext(ctx, msg, nil)
-
-					// 핸들러 실행
-					if err := r.pipeline.ExecuteRegistered(reqCtx, reg.Meta); err != nil {
+					executionErr := r.executeMessage(ctx, reg, msg)
+					if err := executionErr; err != nil {
 						log.Printf(
 							"[Event Consumer] Handler execution failed (%s): %v",
 							reg.Topic,

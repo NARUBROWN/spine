@@ -14,12 +14,9 @@ import (
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/invoker"
-	"github.com/NARUBROWN/spine/internal/pipeline"
-	"github.com/NARUBROWN/spine/internal/resolver"
-	spinerouter "github.com/NARUBROWN/spine/internal/router"
 	wsruntime "github.com/NARUBROWN/spine/internal/ws"
 	"github.com/NARUBROWN/spine/pkg/boot"
-	contextapi "github.com/NARUBROWN/spine/pkg/spine"
+	"github.com/NARUBROWN/spine/pkg/spine"
 	pkgws "github.com/NARUBROWN/spine/pkg/ws"
 	"github.com/gorilla/websocket"
 )
@@ -28,36 +25,31 @@ type requestAwareInterceptor struct {
 	handshakeSeen chan struct{}
 	messageSeen   chan struct{}
 	handshakeAuth string
-	messageAuth   string
 	messageQuery  string
 	messageCookie string
 	messageRemote string
 }
 
-func (i *requestAwareInterceptor) PreHandshake(ctx contextapi.Ctx, _ core.HandlerMeta) error {
-	request, _ := ctx.WebSocket()
+func (i *requestAwareInterceptor) BeforeUpgrade(ctx context.Context, request pkgws.Handshake, _ core.HandlerMeta) error {
 	i.handshakeAuth = request.Header("Authorization")
+	i.messageQuery = request.Query("token")
+	i.messageCookie, _ = request.Cookie("session")
+	i.messageRemote = request.RemoteAddr()
 	close(i.handshakeSeen)
 	return nil
 }
-
-func (i *requestAwareInterceptor) PreHandle(ctx contextapi.Ctx, _ core.HandlerMeta) error {
-	request, _ := ctx.WebSocket()
-	i.messageAuth = request.Header("Authorization")
-	i.messageQuery = request.Queries()["token"][0]
-	if requestCtx, ok := ctx.WebSocket(); ok {
-		i.messageCookie, _ = requestCtx.Cookie("session")
-		i.messageRemote = requestCtx.RemoteAddr()
-	}
+func (i *requestAwareInterceptor) PreMessage(ctx spine.WebSocketCtx, _ core.HandlerMeta) error {
+	ctx.Set("message-interceptor", true)
 	close(i.messageSeen)
 	return nil
 }
 
-func (*requestAwareInterceptor) PostHandle(contextapi.Ctx, core.HandlerMeta) {}
-func (*requestAwareInterceptor) BeforeResponse(contextapi.Ctx, core.HandlerMeta, error) error {
+func (*requestAwareInterceptor) PostMessage(spine.WebSocketCtx, core.HandlerMeta) {}
+func (*requestAwareInterceptor) BeforeMessageCompletion(spine.WebSocketCtx, core.HandlerMeta, error) error {
 	return nil
 }
-func (*requestAwareInterceptor) AfterCompletion(contextapi.Ctx, core.HandlerMeta, error) {}
+func (*requestAwareInterceptor) AfterMessageCompletion(spine.WebSocketCtx, core.HandlerMeta, error) {
+}
 
 type cancellationController struct {
 	started  chan struct{}
@@ -125,7 +117,7 @@ func TestRuntime_StopCancelsActiveHandlerAndRejectsNewConnections(t *testing.T) 
 		ReadTimeout:  time.Second,
 		WriteTimeout: time.Second,
 		PingInterval: time.Second,
-	})
+	}, nil)
 	defer close(controller.release)
 
 	server := newRuntimeTestServer(runtime, registration)
@@ -171,7 +163,7 @@ func TestRuntime_StopWaitsForActiveHandlerToReturn(t *testing.T) {
 		ReadTimeout:  time.Second,
 		WriteTimeout: time.Second,
 		PingInterval: time.Second,
-	})
+	}, nil)
 
 	server := newRuntimeTestServer(runtime, registration)
 	defer server.Close()
@@ -221,7 +213,7 @@ func TestRuntime_ConcurrentSendsRemainSafeWhilePingRuns(t *testing.T) {
 		ReadTimeout:  time.Second,
 		WriteTimeout: time.Second,
 		PingInterval: time.Millisecond,
-	})
+	}, nil)
 	defer runtime.Stop()
 
 	server := newRuntimeTestServer(runtime, registration)
@@ -271,7 +263,7 @@ func TestRuntime_RejectsCapacityBeforeWebSocketUpgrade(t *testing.T) {
 	runtime, registration := newTestRuntime(t, controller, (*cancellationController).Wait, boot.WebSocketOptions{
 		MaxConnections:     1,
 		CapacityRetryAfter: 3 * time.Second,
-	})
+	}, nil)
 	defer runtime.Stop()
 	defer close(controller.release)
 
@@ -294,7 +286,7 @@ func TestRuntime_RejectsCapacityBeforeWebSocketUpgrade(t *testing.T) {
 	}
 }
 
-func TestRuntime_CommonInterceptorReadsHandshakeCredentialsFromMessageContext(t *testing.T) {
+func TestRuntime_ExplicitHandshakeMetadataAndCommonMessageInterceptors(t *testing.T) {
 	controller := &cancellationController{
 		started:  make(chan struct{}),
 		canceled: make(chan struct{}),
@@ -304,7 +296,7 @@ func TestRuntime_CommonInterceptorReadsHandshakeCredentialsFromMessageContext(t 
 		handshakeSeen: make(chan struct{}),
 		messageSeen:   make(chan struct{}),
 	}
-	runtime, registration := newTestRuntime(t, controller, (*cancellationController).Wait, boot.WebSocketOptions{}, interceptor)
+	runtime, registration := newTestRuntime(t, controller, (*cancellationController).Wait, boot.WebSocketOptions{}, []core.WebSocketInterceptor{interceptor}, interceptor)
 	defer runtime.Stop()
 
 	server := newRuntimeTestServer(runtime, registration)
@@ -332,12 +324,12 @@ func TestRuntime_CommonInterceptorReadsHandshakeCredentialsFromMessageContext(t 
 	case <-time.After(time.Second):
 		t.Fatal("common message interceptor did not run")
 	}
-	if interceptor.handshakeAuth != "Bearer shared-token" || interceptor.messageAuth != "Bearer shared-token" || interceptor.messageQuery != "query-token" || interceptor.messageCookie != "cookie-token" || interceptor.messageRemote == "" {
-		t.Fatalf("credentials were not preserved across handshake/message contexts: %+v", interceptor)
+	if interceptor.handshakeAuth != "Bearer shared-token" || interceptor.messageQuery != "query-token" || interceptor.messageCookie != "cookie-token" || interceptor.messageRemote == "" {
+		t.Fatalf("explicit handshake snapshot is incomplete: %+v", interceptor)
 	}
 }
 
-func newTestRuntime(t *testing.T, controller any, handler any, options boot.WebSocketOptions, handshake ...core.WebSocketHandshakeInterceptor) (*wsruntime.Runtime, wsruntime.Registration) {
+func newTestRuntime(t *testing.T, controller any, handler any, options boot.WebSocketOptions, messageInterceptors []core.WebSocketInterceptor, upgrades ...core.WebSocketUpgradeInterceptor) (*wsruntime.Runtime, wsruntime.Registration) {
 	t.Helper()
 
 	registry := wsruntime.NewRegistry()
@@ -358,21 +350,11 @@ func newTestRuntime(t *testing.T, controller any, handler any, options boot.WebS
 		t.Fatalf("지원하지 않는 테스트 컨트롤러: %T", controller)
 	}
 
-	router := spinerouter.NewRouter()
-	router.Register("WS", registration.Path, registration.Meta)
-	p := pipeline.NewPipeline(router, invoker.NewInvoker(c))
-	p.AddArgumentResolver(&resolver.StdContextResolver{})
-
-	for _, interceptor := range handshake {
-		if common, ok := interceptor.(core.Interceptor); ok {
-			p.AddInterceptor(common)
-		}
-	}
 	adapter, err := gorillaplatform.NewFactory().New(wsruntime.AdapterOptions(options))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return wsruntime.NewRuntime(p, adapter, options, handshake...), registration
+	return wsruntime.NewRuntime(invoker.NewInvoker(c), adapter, options, messageInterceptors, upgrades...), registration
 }
 
 func newRuntimeTestServer(runtime *wsruntime.Runtime, registration wsruntime.Registration) *httptest.Server {

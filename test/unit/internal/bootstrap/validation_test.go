@@ -10,6 +10,7 @@ import (
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
+	"github.com/NARUBROWN/spine/internal/invoker"
 )
 
 type consumerValidationDTO struct {
@@ -67,13 +68,12 @@ func TestConsumerValidationBlocksHandlerAndNacksDelivery(t *testing.T) {
 			}
 			return nil
 		})
-		p := buildConsumerPipeline(ctr, nil, validator)
 		ctx, cancel := context.WithCancel(context.Background())
 		message := &consumer.Message{EventName: "users", Payload: []byte(`{"name":"decoded"}`)}
 		signals := make(chan string, 1)
 		message.SetAckHandler(func() error { signals <- "ack"; return nil })
 		message.SetNackHandler(func() error { signals <- "nack"; return nil })
-		runtime := consumer.NewRuntime(registry, validationReaderFactory{reader: &validationReader{message: message}}, p)
+		runtime := consumer.NewRuntime(registry, validationReaderFactory{reader: &validationReader{message: message}}, invoker.NewInvoker(ctr), validator)
 		runtime.Start(ctx)
 		select {
 		case got := <-signals:

@@ -9,13 +9,12 @@ import (
 	httpcontract "github.com/NARUBROWN/spine/contract/http"
 	"github.com/NARUBROWN/spine/core"
 	"github.com/NARUBROWN/spine/internal/container"
-	"github.com/NARUBROWN/spine/internal/event/consumer"
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
+	"github.com/NARUBROWN/spine/internal/resolver"
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/transport"
-	"github.com/NARUBROWN/spine/internal/ws"
 	"github.com/NARUBROWN/spine/pkg/spine"
 )
 
@@ -53,28 +52,21 @@ func (o *storeObserver) AfterCompletion(ctx spine.Ctx, _ core.HandlerMeta, _ err
 }
 
 func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
-	contexts := map[string]func() execution.Context{
-		"http": func() execution.Context {
-			return transport.NewHTTPContext(storeScope{}, 0)
-		},
-		"event": func() execution.Context {
-			return consumer.NewRequestContext(context.Background(), &consumer.Message{EventName: "probe"}, nil)
-		},
-		"websocket": func() execution.Context {
-			return ws.NewWSExecutionContext(context.Background(), "conn", "/probe", 1, nil, nil, func(int, []byte) error { return nil })
+	contexts := map[string]func() *execution.Context{
+		"http": func() *execution.Context {
+			request := transport.NewHTTPContext(storeScope{}, 0)
+			return execution.NewHTTPContext(request)
 		},
 	}
+
 	for name, create := range contexts {
 		t.Run(name, func(t *testing.T) {
 			for _, outcome := range []string{"success", "error", "panic"} {
 				t.Run(outcome, func(t *testing.T) {
 					ctx := create()
-					public := execution.NewContext(ctx)
+					public := ctx.PublicView()
 					if _, ok := public.HTTPRequestContext(); ok != (name == "http") {
 						t.Fatal("전송 종류와 HTTP 뷰 지원 여부가 다릅니다")
-					}
-					if _, ok := public.WebSocket(); ok != (name == "websocket") {
-						t.Fatal("전송 종류와 WebSocket 뷰 지원 여부가 다릅니다")
 					}
 					views := []any{public, public.ExecutionContext()}
 					if request, ok := public.HTTPRequestContext(); ok {
@@ -83,19 +75,26 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 					if response, ok := public.HTTPResponseContext(); ok {
 						views = append(views, response)
 					}
-					if socket, ok := public.WebSocket(); ok {
-						views = append(views, socket)
-					}
 					for _, view := range views {
-						for _, method := range []string{"ReleaseStore", "SetRoute", "EventBus", "SetResponseWriter", "Bind"} {
+						for _, method := range []string{"Close", "PublicView", "State", "Input", "Unwrap", "Routing", "HTTPRequest", "HTTPResponse", "ReleaseStore", "SetRoute", "EventBus", "SetResponseWriter", "Bind"} {
 							if _, exposed := reflect.TypeOf(view).MethodByName(method); exposed {
 								t.Fatalf("공개 뷰 %T에 내부 제어 메서드가 노출됐습니다: %s", view, method)
 							}
 						}
 					}
-					var retainedHandler spine.Ctx = execution.NewContext(ctx)
+					var retainedHandler spine.Ctx = ctx.PublicView()
 					observer := &storeObserver{t: t}
-					callback := func() error {
+					callback := func(injected spine.Ctx) error {
+						if _, ok := injected.ExecutionContext().Get("payload"); !ok {
+							t.Error("handler and interceptor do not share the execution")
+						}
+						injected.ExecutionContext().Set("handler", true)
+						if got, _ := ctx.Get("handler"); got != true {
+							t.Error("handler Set does not reach the owner")
+						}
+						if _, exposed := any(injected).(interface{ Close() }); exposed {
+							t.Error("injected view exposes lifecycle control")
+						}
 						switch outcome {
 						case "error":
 							return errors.New("handler failed")
@@ -105,12 +104,17 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 						return nil
 					}
 					routes := router.NewRouter()
-					routes.Register(ctx.Method(), ctx.Path(), execution.HandlerMeta{Callback: reflect.ValueOf(callback)})
+					meta := execution.HandlerMeta{Callback: reflect.ValueOf(callback)}
 					run := pipeline.NewPipeline(routes, invoker.NewInvoker(container.New()))
 					run.AddInterceptor(observer)
+					run.AddArgumentResolver(&resolver.ControllerContextResolver{})
+					routes.Register("GET", "/probe", meta)
 					err := run.Execute(ctx)
 					if (err != nil) != (outcome != "success") || !observer.completed {
 						t.Fatalf("err=%v completed=%v", err, observer.completed)
+					}
+					if _, ok := public.HTTPRequestContext(); ok {
+						t.Fatal("HTTP input retained")
 					}
 					observer.retained.ExecutionContext().Set("late", make([]byte, 1024))
 					for _, key := range []string{"payload", "completion", "late"} {

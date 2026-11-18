@@ -3,8 +3,6 @@ package execution
 import (
 	"context"
 	"testing"
-
-	"github.com/NARUBROWN/spine/internal/event/emission"
 )
 
 type testExecutionContext struct {
@@ -12,7 +10,6 @@ type testExecutionContext struct {
 }
 
 func (c *testExecutionContext) Context() context.Context     { return context.Background() }
-func (c *testExecutionContext) EventBus() emission.Bus       { return nil }
 func (c *testExecutionContext) Method() string               { return "GET" }
 func (c *testExecutionContext) Path() string                 { return "/" }
 func (c *testExecutionContext) Params() map[string]string    { return map[string]string{} }
@@ -23,8 +20,10 @@ func (c *testExecutionContext) Set(key string, value any)    { c.store[key] = va
 func (c *testExecutionContext) Get(key string) (any, bool)   { v, ok := c.store[key]; return v, ok }
 
 func TestNewContext_ReadsFromExecutionContext(t *testing.T) {
-	ec := &testExecutionContext{store: map[string]any{"userID": 7}}
-	ctx := NewContext(ec)
+	ec := &testExecutionContext{}
+	internal := httpTestContext(ec)
+	internal.Set("userID", 7)
+	ctx := internal.PublicView()
 
 	got, ok := ctx.Get("userID")
 	if !ok || got.(int) != 7 {

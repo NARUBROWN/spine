@@ -48,19 +48,19 @@ func (*OrderController) Constructor(service *OrderService) *OrderController {
 	return &OrderController{service: service}
 }
 
-func (c *OrderController) RegisterRoutes(routes *api.Registry) {
-	routes.POST("/orders/:id", c.Create)
-}
-
 type OrderPath struct {
 	ID int64 `path:"id"`
 }
 
-func (c *OrderController) Create(ctx ctxspine.Ctx, order input.Path[OrderPath]) (httpx.Response[string], error) {
-	if err := c.service.Create(ctx.ExecutionContext().Context(), order.ID); err != nil {
-		return httpx.Response[string]{}, err
-	}
-	return httpx.Response[string]{Body: "accepted", Options: httpx.ResponseOptions{Status: http.StatusAccepted}}, nil
+func (c *OrderController) RegisterRoutes(routes *api.Registry) {
+
+	routes.POST("/orders/:id", func(ctx ctxspine.Ctx, order input.Path[OrderPath]) (httpx.Response[string], error) {
+		if err := c.service.Create(ctx.ExecutionContext().Context(), order.ID); err != nil {
+			return httpx.Response[string]{}, err
+		}
+		return httpx.Response[string]{Body: "accepted", Options: httpx.ResponseOptions{Status: http.StatusAccepted}}, nil
+	})
+
 }
 
 func main() {

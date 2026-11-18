@@ -16,12 +16,12 @@ func TestDTOResolverRejectsScalarNullAndPreservesPointerNull(t *testing.T) {
 	}
 	r := &DTOResolver{}
 	meta := internalresolver.ParameterMeta{Type: reflect.TypeFor[payload]()}
-	_, err := r.Resolve(newTestWSContext([]byte(`{"count":null}`)), meta)
+	_, err := r.Resolve(newTestWSContext([]byte(`{"count":null}`)).Context(), meta, testInput(newTestWSContext([]byte(`{"count":null}`))))
 	var null *jsonx.NullError
 	if !errors.As(err, &null) {
 		t.Fatalf("WS에서도 일반 값의 null을 거부해야 합니다: %v", err)
 	}
-	value, err := r.Resolve(newTestWSContext([]byte(`{"count":0,"maybe":null}`)), meta)
+	value, err := r.Resolve(newTestWSContext([]byte(`{"count":0,"maybe":null}`)).Context(), meta, testInput(newTestWSContext([]byte(`{"count":0,"maybe":null}`))))
 	if err != nil || value.(payload).Count != 0 || value.(payload).Maybe != nil {
 		t.Fatalf("실제 0과 포인터의 null을 보존해야 합니다: %+v %v", value, err)
 	}

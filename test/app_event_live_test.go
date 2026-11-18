@@ -23,6 +23,7 @@ import (
 	"github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	"github.com/NARUBROWN/spine/pkg/input"
+	handlerspine "github.com/NARUBROWN/spine/pkg/spine"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/segmentio/kafka-go"
 )
@@ -30,25 +31,29 @@ import (
 type liveEventInput struct {
 	ID string `json:"id"`
 }
-type liveEventHTTPController struct{ topic string }
+type liveEventHTTPController struct {
+	topic     string
+	publisher publish.Publisher
+}
 
 func (c *liveEventHTTPController) Emit(ctx context.Context, body input.Body[liveEventInput]) (httpx.Response[string], error) {
-	if err := publish.Event(ctx, c.topic, publish.Fields{"id": body.ID}); err != nil {
+	if err := c.publisher.Event(ctx, c.topic, publish.Fields{"id": body.ID}); err != nil {
 		return httpx.Response[string]{}, err
 	}
 	return httpx.Response[string]{Body: "accepted"}, nil
 }
 
 type liveEventWorker struct {
-	topic    string
-	attempts *atomic.Int32
+	publisher publish.Publisher
+	topic     string
+	attempts  *atomic.Int32
 }
 
-func (c *liveEventWorker) Handle(ctx context.Context, input liveEventInput) error {
+func (c *liveEventWorker) Handle(ctx handlerspine.EventCtx, input liveEventInput) error {
 	if c.attempts.Add(1) == 1 {
 		return errors.New("fail the first delivery")
 	}
-	return publish.Event(ctx, c.topic, publish.Fields{"id": input.ID})
+	return c.publisher.Event(ctx, c.topic, publish.Fields{"id": input.ID})
 }
 
 // readyEventFactory는 공개 계약만으로 초기 구독 준비 완료를 관찰합니다.
@@ -124,7 +129,9 @@ func TestAppEventLive_HTTPToBrokerWorkerAndResult(t *testing.T) {
 			var attempts atomic.Int32
 			workerFactory := &readyEventFactory{Factory: factory(true, true, name+".worker"), ready: make(chan struct{})}
 			worker := spine.New(spine.WithEventAdapter("events", workerFactory, spine.WithEventConsumerRetry(boot.ConsumerRetryOptions{InitialDelay: 10 * time.Millisecond, MaxDelay: 100 * time.Millisecond, MaxAttempts: 3})))
-			worker.Constructor(func() *liveEventWorker { return &liveEventWorker{topic: outputTopic, attempts: &attempts} })
+			worker.Constructor(func(publisher publish.Publisher) *liveEventWorker {
+				return &liveEventWorker{topic: outputTopic, attempts: &attempts, publisher: publisher}
+			})
 			if err := worker.Consumers().Register(inputTopic, (*liveEventWorker).Handle); err != nil {
 				t.Fatal(err)
 			}
@@ -148,7 +155,9 @@ func TestAppEventLive_HTTPToBrokerWorkerAndResult(t *testing.T) {
 			}()
 
 			sender := spine.New(echoplatform.Option(), spine.WithEventAdapter("events", factory(false, true, "")))
-			sender.Constructor(func() *liveEventHTTPController { return &liveEventHTTPController{topic: inputTopic} })
+			sender.Constructor(func(publisher publish.Publisher) *liveEventHTTPController {
+				return &liveEventHTTPController{topic: inputTopic, publisher: publisher}
+			})
 			sender.Route(http.MethodPost, "/events", (*liveEventHTTPController).Emit)
 			prepared, err := sender.Prepare(ctx, boot.Options{HTTP: &boot.HTTPOptions{}})
 			if err != nil {
