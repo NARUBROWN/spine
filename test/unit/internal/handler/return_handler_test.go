@@ -105,7 +105,7 @@ func TestJSONReturnHandler_Handle(t *testing.T) {
 		},
 	}
 
-	if err := h.Handle(resp, ctx, httpTestInput(ctx)); err != nil {
+	if err := h.Handle(resp, httpTestContext(ctx)); err != nil {
 		t.Fatalf("JSONReturnHandler Handle 실패: %v", err)
 	}
 	if writer.status != 201 || string(writer.jsonBody) != "7" {
@@ -136,7 +136,7 @@ func TestStringReturnHandler_SupportsAndHandle(t *testing.T) {
 		Body:    "ok",
 		Options: httpx.ResponseOptions{Cookies: []httpx.Cookie{{Name: "theme", Value: "dark"}}},
 	}
-	if err := h.Handle(resp, ctx, httpTestInput(ctx)); err != nil {
+	if err := h.Handle(resp, httpTestContext(ctx)); err != nil {
 		t.Fatalf("StringReturnHandler Handle 실패: %v", err)
 	}
 	if writer.stringBody != "ok" {
@@ -147,7 +147,7 @@ func TestStringReturnHandler_SupportsAndHandle(t *testing.T) {
 	}
 
 	ptrResp := &httpx.Response[string]{Body: "ptr"}
-	if err := h.Handle(ptrResp, ctx, httpTestInput(ctx)); err != nil {
+	if err := h.Handle(ptrResp, httpTestContext(ctx)); err != nil {
 		t.Fatalf("포인터 응답 처리 실패: %v", err)
 	}
 	if writer.stringBody != "ptr" {
@@ -161,10 +161,10 @@ func TestStringReturnHandler_InvalidValues(t *testing.T) {
 	writer := newFakeWriter()
 	ctx.SetResponseWriter(writer)
 
-	if err := h.Handle((*httpx.Response[string])(nil), ctx, httpTestInput(ctx)); err == nil {
+	if err := h.Handle((*httpx.Response[string])(nil), httpTestContext(ctx)); err == nil {
 		t.Fatal("nil 포인터는 에러여야 합니다")
 	}
-	if err := h.Handle(httpx.Response[int]{Body: 1}, ctx, httpTestInput(ctx)); err == nil {
+	if err := h.Handle(httpx.Response[int]{Body: 1}, httpTestContext(ctx)); err == nil {
 		t.Fatal("잘못된 타입은 에러여야 합니다")
 	}
 }
@@ -188,7 +188,7 @@ func TestBinaryReturnHandler_Handle(t *testing.T) {
 		t.Fatal("BinaryReturnHandler가 httpx.Binary를 지원해야 합니다")
 	}
 
-	if err := h.Handle(bin, ctx, httpTestInput(ctx)); err != nil {
+	if err := h.Handle(bin, httpTestContext(ctx)); err != nil {
 		t.Fatalf("BinaryReturnHandler Handle 실패: %v", err)
 	}
 	if writer.status != 200 || string(writer.bytesBody) != string([]byte{1, 2, 3}) {
@@ -205,7 +205,7 @@ func TestBinaryReturnHandler_Handle(t *testing.T) {
 		ContentType: "application/octet-stream",
 		Data:        []byte{4, 5, 6},
 	}
-	if err := h.Handle(ptrBin, ctx, httpTestInput(ctx)); err != nil {
+	if err := h.Handle(ptrBin, httpTestContext(ctx)); err != nil {
 		t.Fatalf("포인터 binary 처리 실패: %v", err)
 	}
 	if string(writer.bytesBody) != string([]byte{4, 5, 6}) {
@@ -228,7 +228,7 @@ func TestRedirectReturnHandler_RejectsInjectedCookieWithoutPartialResponse(t *te
 				{Name: "session", Value: "attacker; Domain=example.com"},
 			},
 		},
-	}, ctx, httpTestInput(ctx))
+	}, httpTestContext(ctx))
 	if err == nil {
 		t.Fatal("injected cookie attributes must return an explicit error")
 	}
@@ -248,24 +248,24 @@ func TestResponseHandlers_RejectInvalidCookieWithoutPartialResponse(t *testing.T
 
 	tests := []struct {
 		name   string
-		handle func(execution.Context) error
+		handle func(*execution.Context) error
 	}{
 		{
 			name: "json",
-			handle: func(ctx execution.Context) error {
-				return (&JSONReturnHandler{}).Handle(httpx.Response[int]{Body: 1, Options: invalidOptions}, ctx, httpTestInput(ctx))
+			handle: func(ctx *execution.Context) error {
+				return (&JSONReturnHandler{}).Handle(httpx.Response[int]{Body: 1, Options: invalidOptions}, httpTestContext(ctx))
 			},
 		},
 		{
 			name: "string",
-			handle: func(ctx execution.Context) error {
-				return (&StringReturnHandler{}).Handle(httpx.Response[string]{Body: "ok", Options: invalidOptions}, ctx, httpTestInput(ctx))
+			handle: func(ctx *execution.Context) error {
+				return (&StringReturnHandler{}).Handle(httpx.Response[string]{Body: "ok", Options: invalidOptions}, httpTestContext(ctx))
 			},
 		},
 		{
 			name: "binary",
-			handle: func(ctx execution.Context) error {
-				return (&BinaryReturnHandler{}).Handle(httpx.Binary{Data: []byte("ok"), ContentType: "text/plain", Options: invalidOptions}, ctx, httpTestInput(ctx))
+			handle: func(ctx *execution.Context) error {
+				return (&BinaryReturnHandler{}).Handle(httpx.Binary{Data: []byte("ok"), ContentType: "text/plain", Options: invalidOptions}, httpTestContext(ctx))
 			},
 		},
 	}
@@ -276,7 +276,7 @@ func TestResponseHandlers_RejectInvalidCookieWithoutPartialResponse(t *testing.T
 			writer := newFakeWriter()
 			ctx.SetResponseWriter(writer)
 
-			err := tt.handle(ctx)
+			err := tt.handle(httpTestContext(ctx))
 			if err == nil {
 				t.Fatal("invalid cookie must return an explicit error")
 			}
@@ -331,7 +331,7 @@ func TestBinaryReturnHandler_InvalidType(t *testing.T) {
 	writer := newFakeWriter()
 	ctx.SetResponseWriter(writer)
 
-	if err := h.Handle("not-binary", ctx, httpTestInput(ctx)); err == nil {
+	if err := h.Handle("not-binary", httpTestContext(ctx)); err == nil {
 		t.Fatal("잘못된 타입은 에러여야 합니다")
 	}
 }
@@ -368,7 +368,7 @@ func TestRedirectReturnValueHandler_Handle(t *testing.T) {
 		t.Fatal("RedirectReturnValueHandler가 Redirect를 지원해야 합니다")
 	}
 
-	if err := h.Handle(redirect, ctx, httpTestInput(ctx)); err != nil {
+	if err := h.Handle(redirect, httpTestContext(ctx)); err != nil {
 		t.Fatalf("RedirectReturnValueHandler Handle 실패: %v", err)
 	}
 	if writer.status != 307 {
@@ -385,7 +385,7 @@ func TestRedirectReturnValueHandler_Handle(t *testing.T) {
 	}
 
 	ptrRedirect := &httpx.Redirect{Location: "/home"}
-	if err := h.Handle(ptrRedirect, ctx, httpTestInput(ctx)); err != nil {
+	if err := h.Handle(ptrRedirect, httpTestContext(ctx)); err != nil {
 		t.Fatalf("포인터 redirect 처리 실패: %v", err)
 	}
 	if writer.headers["Location"] != "/home" {
@@ -415,7 +415,7 @@ func TestErrorReturnHandler_HTTPError(t *testing.T) {
 	ctx.SetResponseWriter(writer)
 
 	err := httperr.BadRequest("bad")
-	if err := h.Handle(err, ctx, httpTestInput(ctx)); err != nil {
+	if err := h.Handle(err, httpTestContext(ctx)); err != nil {
 		t.Fatalf("ErrorReturnHandler 실패: %v", err)
 	}
 	if writer.status != 400 {
@@ -436,7 +436,7 @@ func TestErrorReturnHandler_GenericError(t *testing.T) {
 	writer := newFakeWriter()
 	ctx.SetResponseWriter(writer)
 
-	if err := h.Handle(customErr{"boom"}, ctx, httpTestInput(ctx)); err != nil {
+	if err := h.Handle(customErr{"boom"}, httpTestContext(ctx)); err != nil {
 		t.Fatalf("ErrorReturnHandler 실패: %v", err)
 	}
 	if writer.status != 500 {

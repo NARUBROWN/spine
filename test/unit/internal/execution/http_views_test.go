@@ -55,7 +55,7 @@ func TestHTTPViewsHaveIndependentCapabilities(t *testing.T) {
 		Value: map[string][]string{"title": {"original"}},
 		File:  map[string][]*multipart.FileHeader{"file": {{Filename: "original.txt", Header: textproto.MIMEHeader{"Content-Type": {"text/plain"}}}}},
 	}}
-	public := NewContext(requestSource, httpTestInput(requestSource))
+	public := httpTestContext(requestSource).PublicView()
 	request, ok := public.HTTPRequestContext()
 	if !ok || request.Method() != "GET" || request.Path() != "/" || request.Param("id") != "42" || request.Query("state") != "active" {
 		t.Fatal("응답 계약 없이 HTTP 요청 뷰를 조회하지 못했습니다")
@@ -76,7 +76,7 @@ func TestHTTPViewsHaveIndependentCapabilities(t *testing.T) {
 	}
 
 	responseSource := &responseOnlyContext{writer: &viewWriter{headers: map[string]string{}}}
-	publicResponse := NewContext(responseSource, httpTestInput(responseSource))
+	publicResponse := httpTestContext(responseSource).PublicView()
 	response, ok := publicResponse.HTTPResponseContext()
 	if !ok {
 		t.Fatal("요청 계약 없이 HTTP 응답 뷰를 조회하지 못했습니다")
@@ -84,8 +84,8 @@ func TestHTTPViewsHaveIndependentCapabilities(t *testing.T) {
 	if request, ok := publicResponse.HTTPRequestContext(); ok || request != nil {
 		t.Fatal("응답 전용 컨텍스트에 요청 뷰가 생겼습니다")
 	}
-	for _, view := range []any{public, request, response} {
-		for _, name := range []string{"HTTP", "Bind", "ResponseWriter", "SetResponseWriter", "ReleaseStore", "EventBus"} {
+	for _, view := range []any{public, public.ExecutionContext(), request, response} {
+		for _, name := range []string{"Close", "PublicView", "State", "Input", "Unwrap", "Routing", "HTTPRequest", "HTTPResponse", "HTTP", "Bind", "ResponseWriter", "SetResponseWriter", "ReleaseStore", "EventBus"} {
 			if _, found := reflect.TypeOf(view).MethodByName(name); found {
 				t.Fatalf("공개 뷰 %T에 내부 메서드가 노출됐습니다: %s", view, name)
 			}
@@ -101,7 +101,7 @@ func TestRetainedHTTPResponseViewFollowsWriterReplacement(t *testing.T) {
 	first := &viewWriter{headers: map[string]string{}}
 	second := &viewWriter{headers: map[string]string{}, committed: true}
 	source := &responseOnlyContext{writer: first}
-	response, ok := NewContext(source, httpTestInput(source)).HTTPResponseContext()
+	response, ok := httpTestContext(source).PublicView().HTTPResponseContext()
 	if !ok {
 		t.Fatal("응답 뷰가 없습니다")
 	}

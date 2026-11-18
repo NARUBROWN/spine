@@ -11,8 +11,8 @@ import (
 )
 
 func TestCommonContextAndInputHaveNoWebSocketAPI(t *testing.T) {
-	state := execution.NewState(context.Background())
-	for _, typ := range []reflect.Type{reflect.TypeOf(state), reflect.TypeFor[execution.Sources](), reflect.TypeOf(execution.NewContext(state, nil))} {
+	state := execution.NewContext(context.Background(), execution.Sources{})
+	for _, typ := range []reflect.Type{reflect.TypeOf(state), reflect.TypeFor[execution.Sources](), reflect.TypeOf(state.PublicView())} {
 		for _, name := range []string{"WebSocket", "WebSocketRequest", "ConnID", "Payload"} {
 			if _, ok := typ.MethodByName(name); ok {
 				t.Fatalf("%s exposes %s", typ, name)

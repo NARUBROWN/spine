@@ -10,8 +10,8 @@ import (
 	"github.com/NARUBROWN/spine/internal/execution"
 )
 
-func responseWriter(ctx execution.Context, source *execution.Input) (httpcontract.ResponseWriter, error) {
-	response := source.HTTPResponse()
+func responseWriter(ctx *execution.Context) (httpcontract.ResponseWriter, error) {
+	response := ctx.HTTPResponse()
 	ok := response != nil
 	if !ok || response.ResponseWriter() == nil {
 		return nil, fmt.Errorf("HTTP response writer is not available")

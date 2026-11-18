@@ -15,8 +15,8 @@ func (*HeaderResolver) Supports(pm ParameterMeta) bool {
 	return pm.Type == reflect.TypeFor[header.Values]()
 }
 
-func (*HeaderResolver) Resolve(ctx execution.Context, _ ParameterMeta, source *execution.Input) (any, error) {
-	httpCtx := source.HTTPRequest()
+func (*HeaderResolver) Resolve(ctx *execution.Context, _ ParameterMeta) (any, error) {
+	httpCtx := ctx.HTTPRequest()
 	ok := httpCtx != nil
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")

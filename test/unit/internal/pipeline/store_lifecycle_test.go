@@ -12,6 +12,7 @@ import (
 	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/invoker"
 	"github.com/NARUBROWN/spine/internal/pipeline"
+	"github.com/NARUBROWN/spine/internal/resolver"
 	"github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/transport"
 	"github.com/NARUBROWN/spine/pkg/spine"
@@ -51,10 +52,10 @@ func (o *storeObserver) AfterCompletion(ctx spine.Ctx, _ core.HandlerMeta, _ err
 }
 
 func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
-	contexts := map[string]func() *execution.Input{
-		"http": func() *execution.Input {
+	contexts := map[string]func() *execution.Context{
+		"http": func() *execution.Context {
 			request := transport.NewHTTPContext(storeScope{}, 0)
-			return execution.NewInput(execution.Sources{HTTPRequest: request, HTTPResponse: request, Routing: request})
+			return execution.NewHTTPContext(request)
 		},
 	}
 
@@ -62,9 +63,8 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			for _, outcome := range []string{"success", "error", "panic"} {
 				t.Run(outcome, func(t *testing.T) {
-					ctx := execution.NewState(context.Background())
-					input := create()
-					public := execution.NewContext(ctx, input)
+					ctx := create()
+					public := ctx.PublicView()
 					if _, ok := public.HTTPRequestContext(); ok != (name == "http") {
 						t.Fatal("전송 종류와 HTTP 뷰 지원 여부가 다릅니다")
 					}
@@ -76,15 +76,25 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 						views = append(views, response)
 					}
 					for _, view := range views {
-						for _, method := range []string{"ReleaseStore", "SetRoute", "EventBus", "SetResponseWriter", "Bind"} {
+						for _, method := range []string{"Close", "PublicView", "State", "Input", "Unwrap", "Routing", "HTTPRequest", "HTTPResponse", "ReleaseStore", "SetRoute", "EventBus", "SetResponseWriter", "Bind"} {
 							if _, exposed := reflect.TypeOf(view).MethodByName(method); exposed {
 								t.Fatalf("공개 뷰 %T에 내부 제어 메서드가 노출됐습니다: %s", view, method)
 							}
 						}
 					}
-					var retainedHandler spine.Ctx = execution.NewContext(ctx, input)
+					var retainedHandler spine.Ctx = ctx.PublicView()
 					observer := &storeObserver{t: t}
-					callback := func() error {
+					callback := func(injected spine.Ctx) error {
+						if _, ok := injected.ExecutionContext().Get("payload"); !ok {
+							t.Error("handler and interceptor do not share the execution")
+						}
+						injected.ExecutionContext().Set("handler", true)
+						if got, _ := ctx.Get("handler"); got != true {
+							t.Error("handler Set does not reach the owner")
+						}
+						if _, exposed := any(injected).(interface{ Close() }); exposed {
+							t.Error("injected view exposes lifecycle control")
+						}
 						switch outcome {
 						case "error":
 							return errors.New("handler failed")
@@ -97,8 +107,9 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 					meta := execution.HandlerMeta{Callback: reflect.ValueOf(callback)}
 					run := pipeline.NewPipeline(routes, invoker.NewInvoker(container.New()))
 					run.AddInterceptor(observer)
+					run.AddArgumentResolver(&resolver.ControllerContextResolver{})
 					routes.Register("GET", "/probe", meta)
-					err := run.Execute(ctx, input)
+					err := run.Execute(ctx)
 					if (err != nil) != (outcome != "success") || !observer.completed {
 						t.Fatalf("err=%v completed=%v", err, observer.completed)
 					}

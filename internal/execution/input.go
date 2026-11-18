@@ -17,7 +17,6 @@ type Input struct {
 	closed  bool
 }
 
-func NewInput(s Sources) *Input { return &Input{sources: s} }
 func (i *Input) Close() {
 	if i == nil {
 		return

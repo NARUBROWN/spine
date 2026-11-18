@@ -55,12 +55,12 @@ func TestExecute_ErrorReturnPreservesSelectedError(t *testing.T) {
 			var handled error
 			p.AddReturnValueHandler(&testReturnHandler{
 				supports: func(rt reflect.Type) bool { return rt == reflect.TypeOf(tt.want) },
-				handle: func(value any, _ execution.Context) error {
+				handle: func(value any, _ *execution.Context) error {
 					handled = value.(error)
 					return nil
 				},
 			})
-			got := p.Execute(newTestExecutionContext(), httpTestInput(newTestExecutionContext()))
+			got := p.Execute(httpTestContext(newTestExecutionContext()))
 			if !errors.Is(got, tt.want) || handled != tt.want {
 				t.Fatalf("첫 유효 오류와 구체 타입을 보존해야 합니다: got=%v handled=%v want=%v", got, handled, tt.want)
 			}

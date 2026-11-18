@@ -11,8 +11,8 @@ import (
 func TestInputCloseDetachesAllSourcesAndRetainedViews(t *testing.T) {
 	request := &requestOnlyContext{}
 	response := &responseOnlyContext{writer: &viewWriter{headers: map[string]string{}}}
-	input := NewInput(Sources{Routing: request, HTTPRequest: request, HTTPResponse: response})
-	public := NewContext(NewState(context.Background()), input)
+	ctx := NewContext(context.Background(), Sources{Routing: request, HTTPRequest: request, HTTPResponse: response})
+	public := ctx.PublicView()
 	httpView, _ := public.HTTPRequestContext()
 	responseView, _ := public.HTTPResponseContext()
 	var wg sync.WaitGroup
@@ -26,10 +26,10 @@ func TestInputCloseDetachesAllSourcesAndRetainedViews(t *testing.T) {
 			}
 		}()
 	}
-	input.Close()
-	input.Close()
+	ctx.Close()
+	ctx.Close()
 	wg.Wait()
-	if !reflect.DeepEqual(input.sources, Sources{}) {
+	if !reflect.DeepEqual(ctx.input.sources, Sources{}) {
 		t.Fatal("transport references remain")
 	}
 	if httpView.Path() != "" {
@@ -52,10 +52,8 @@ var retainedInputViews []contextview.Ctx
 func BenchmarkCompletedInputLeaseChurn(b *testing.B) {
 	retainedInputViews = make([]contextview.Ctx, 256)
 	for n := 0; n < b.N; n++ {
-		state := NewState(context.Background())
-		input := NewInput(Sources{HTTPRequest: &requestOnlyContext{}})
-		retainedInputViews[n%len(retainedInputViews)] = NewContext(state, input)
-		input.Close()
-		state.ReleaseStore()
+		ctx := NewContext(context.Background(), Sources{HTTPRequest: &requestOnlyContext{}})
+		retainedInputViews[n%len(retainedInputViews)] = ctx.PublicView()
+		ctx.Close()
 	}
 }

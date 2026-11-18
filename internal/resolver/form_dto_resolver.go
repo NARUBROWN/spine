@@ -23,9 +23,9 @@ func (r *FormDTOResolver) Supports(pm ParameterMeta) bool {
 	return input.HasForm(pm.Type.Elem())
 }
 
-func (r *FormDTOResolver) Resolve(ctx execution.Context, parameterMeta ParameterMeta, source *execution.Input) (any, error) {
+func (r *FormDTOResolver) Resolve(ctx *execution.Context, parameterMeta ParameterMeta) (any, error) {
 	if !r.Supports(parameterMeta) {
 		return nil, fmt.Errorf("HTTP DTO inputs require an explicit input wrapper")
 	}
-	return resolveBodyDTO(ctx, parameterMeta, r.Validator, &r.media, source)
+	return resolveBodyDTO(ctx, parameterMeta, r.Validator, &r.media)
 }

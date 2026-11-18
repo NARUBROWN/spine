@@ -37,7 +37,7 @@ func (h *StringReturnHandler) Supports(returnType reflect.Type) bool {
 	return field.Type == reflect.TypeFor[string]()
 }
 
-func (h *StringReturnHandler) Handle(value any, ctx execution.Context, source *execution.Input) error {
+func (h *StringReturnHandler) Handle(value any, ctx *execution.Context) error {
 	var resp httpx.Response[string]
 
 	switch v := value.(type) {
@@ -52,7 +52,7 @@ func (h *StringReturnHandler) Handle(value any, ctx execution.Context, source *e
 		return fmt.Errorf("StringReturnHandler: value is not httpx.Response[string] or *httpx.Response[string]: %T", value)
 	}
 
-	rw, writerErr := responseWriter(ctx, source)
+	rw, writerErr := responseWriter(ctx)
 	if writerErr != nil {
 		return writerErr
 	}

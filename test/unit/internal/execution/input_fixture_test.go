@@ -1,9 +1,16 @@
 package execution
 
-func httpTestInput(ctx Context) *Input {
+import (
+	"context"
+)
+
+func httpTestContext(source interface{ Context() context.Context }) *Context {
+	if ctx, ok := source.(*Context); ok {
+		return ctx
+	}
 	s := Sources{}
-	s.HTTPRequest, _ = ctx.(HTTPRequestContext)
-	s.HTTPResponse, _ = ctx.(HTTPResponseContext)
-	s.Routing, _ = ctx.(RoutingContext)
-	return NewInput(s)
+	s.HTTPRequest, _ = source.(HTTPRequestContext)
+	s.HTTPResponse, _ = source.(HTTPResponseContext)
+	s.Routing, _ = source.(RoutingContext)
+	return NewContext(source.Context(), s)
 }

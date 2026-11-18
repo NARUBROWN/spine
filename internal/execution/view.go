@@ -12,51 +12,50 @@ import (
 	"github.com/NARUBROWN/spine/internal/input"
 )
 
-// NewContext는 내부 실행을 감싼 공통 공개 컨텍스트를 반환합니다.
-func NewContext(ctx Context, input *Input) contextview.Ctx {
-	return publicContext{execution: executionView{source: ctx}, input: input}
+// PublicView exposes request-local values and HTTP operations without lifecycle controls.
+func (c *Context) PublicView() contextview.Ctx {
+	return publicContext{source: c}
 }
 
-type publicContext struct {
-	execution contextview.ExecutionContextView
-	input     *Input
-}
+type publicContext struct{ source *Context }
 
-func (v publicContext) Get(key string) (any, bool) { return v.execution.Get(key) }
+func (v publicContext) Get(key string) (any, bool) { return v.source.Get(key) }
 func (v publicContext) ExecutionContext() contextview.ExecutionContextView {
-	return v.execution
+	return executionView{source: v.source}
 }
 func (v publicContext) HTTPRequestContext() (contextview.HTTPRequestView, bool) {
-	if v.input.HTTPRequest() == nil {
+	if v.source == nil || v.source.HTTPRequest() == nil {
 		return nil, false
 	}
-	return httpRequestView{input: v.input}, true
+	return httpRequestView{source: v.source}, true
 }
 func (v publicContext) HTTPResponseContext() (contextview.HTTPResponseView, bool) {
 	available := false
-	v.input.read(func(s Sources) { available = s.HTTPResponse != nil && s.HTTPResponse.ResponseWriter() != nil })
+	if v.source != nil {
+		v.source.readInput(func(s Sources) { available = s.HTTPResponse != nil && s.HTTPResponse.ResponseWriter() != nil })
+	}
 	if !available {
 		return nil, false
 	}
-	return httpResponseView{input: v.input}, true
+	return httpResponseView{source: v.source}, true
 }
 
 // readInput holds the lease while a view reads borrowed transport data.
-func readInput[T any](i *Input, read func(Sources) T) (value T) {
-	i.read(func(s Sources) { value = read(s) })
+func readInput[T any](c *Context, read func(Sources) T) (value T) {
+	c.readInput(func(s Sources) { value = read(s) })
 	return
 }
 
-type executionView struct{ source Context }
+type executionView struct{ source *Context }
 
 func (v executionView) Context() context.Context   { return v.source.Context() }
 func (v executionView) Get(key string) (any, bool) { return v.source.Get(key) }
 func (v executionView) Set(key string, value any)  { v.source.Set(key, value) }
 
-type httpRequestView struct{ input *Input }
+type httpRequestView struct{ source *Context }
 
 func (v httpRequestView) Method() string {
-	return readInput(v.input, func(s Sources) string {
+	return readInput(v.source, func(s Sources) string {
 		if s.HTTPRequest == nil {
 			var zero string
 			return zero
@@ -65,7 +64,7 @@ func (v httpRequestView) Method() string {
 	})
 }
 func (v httpRequestView) Path() string {
-	return readInput(v.input, func(s Sources) string {
+	return readInput(v.source, func(s Sources) string {
 		if s.HTTPRequest == nil {
 			var zero string
 			return zero
@@ -74,7 +73,7 @@ func (v httpRequestView) Path() string {
 	})
 }
 func (v httpRequestView) Params() map[string]string {
-	return readInput(v.input, func(s Sources) map[string]string {
+	return readInput(v.source, func(s Sources) map[string]string {
 		if s.HTTPRequest == nil {
 			var zero map[string]string
 			return zero
@@ -83,7 +82,7 @@ func (v httpRequestView) Params() map[string]string {
 	})
 }
 func (v httpRequestView) PathKeys() []string {
-	return readInput(v.input, func(s Sources) []string {
+	return readInput(v.source, func(s Sources) []string {
 		if s.HTTPRequest == nil {
 			var zero []string
 			return zero
@@ -92,7 +91,7 @@ func (v httpRequestView) PathKeys() []string {
 	})
 }
 func (v httpRequestView) Header(name string) string {
-	return readInput(v.input, func(s Sources) string {
+	return readInput(v.source, func(s Sources) string {
 		if s.HTTPRequest == nil {
 			var zero string
 			return zero
@@ -101,7 +100,7 @@ func (v httpRequestView) Header(name string) string {
 	})
 }
 func (v httpRequestView) Queries() map[string][]string {
-	return readInput(v.input, func(s Sources) map[string][]string {
+	return readInput(v.source, func(s Sources) map[string][]string {
 		if s.HTTPRequest == nil {
 			var zero map[string][]string
 			return zero
@@ -110,7 +109,7 @@ func (v httpRequestView) Queries() map[string][]string {
 	})
 }
 func (v httpRequestView) Param(name string) string {
-	return readInput(v.input, func(s Sources) string {
+	return readInput(v.source, func(s Sources) string {
 		if s.HTTPRequest == nil {
 			var zero string
 			return zero
@@ -119,7 +118,7 @@ func (v httpRequestView) Param(name string) string {
 	})
 }
 func (v httpRequestView) Query(name string) string {
-	return readInput(v.input, func(s Sources) string {
+	return readInput(v.source, func(s Sources) string {
 		if s.HTTPRequest == nil {
 			var zero string
 			return zero
@@ -128,7 +127,7 @@ func (v httpRequestView) Query(name string) string {
 	})
 }
 func (v httpRequestView) Headers() map[string][]string {
-	return readInput(v.input, func(s Sources) map[string][]string {
+	return readInput(v.source, func(s Sources) map[string][]string {
 		if s.HTTPRequest == nil {
 			var zero map[string][]string
 			return zero
@@ -137,7 +136,7 @@ func (v httpRequestView) Headers() map[string][]string {
 	})
 }
 func (v httpRequestView) MultipartForm() (fields contextview.MultipartFields, err error) {
-	v.input.read(func(s Sources) {
+	v.source.readInput(func(s Sources) {
 		if s.HTTPRequest == nil {
 			err = errResponseUnavailable
 			return
@@ -170,12 +169,12 @@ func cloneMultipartFields(request HTTPRequestContext) (contextview.MultipartFiel
 }
 
 // httpResponseView는 staging 변경 뒤에도 현재 writer에 위임합니다.
-type httpResponseView struct{ input *Input }
+type httpResponseView struct{ source *Context }
 
 var errResponseUnavailable = errors.New("HTTP response is no longer available")
 
 func (v httpResponseView) useWriter(use func(httpcontract.ResponseWriter)) (available bool) {
-	v.input.read(func(s Sources) {
+	v.source.readInput(func(s Sources) {
 		if s.HTTPResponse == nil {
 			return
 		}

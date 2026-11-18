@@ -374,7 +374,7 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 					}
 					return scope.Writer().WriteJSON(http.StatusOK, append([]byte(nil), openAPIDocument...))
 				}
-				return httpPipeline.Execute(execution.NewState(request.Context()), execution.NewInput(execution.Sources{Routing: request, HTTPRequest: request, HTTPResponse: request}))
+				return httpPipeline.Execute(execution.NewHTTPContext(request))
 			},
 		}
 		var server adapter.HTTPAdapter

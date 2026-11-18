@@ -8,28 +8,13 @@ import (
 )
 
 // ContextCarrier는 현재 실행에 연결된 표준 Go 컨텍스트를 제공합니다.
-type ContextCarrier interface {
-	Context() context.Context
-}
+type ContextCarrier interface{ contextview.ContextCarrier }
 
-// ExecutionContextView는 현재 실행의 표준 컨텍스트와 공유 값 저장소입니다.
-// 저장값은 완료 훅까지 유지하고 실행 종료 시 참조를 해제합니다.
-type ExecutionContextView = interface {
-	ContextCarrier
-	Get(key string) (any, bool)
-	Set(key string, value any)
-}
+// ExecutionContextView exposes the standard context and request-local values.
+type ExecutionContextView = contextview.ExecutionContextView
 
-// Ctx는 HTTP 핸들러와 인터셉터의 실행 컨텍스트입니다.
-// 전송별 조회는 현재 실행에서 제공하는 뷰와 지원 여부를 반환합니다.
-// Get은 폐기 예정이며 ExecutionContext().Get으로 전환하세요.
-type Ctx interface {
-	ExecutionContext() ExecutionContextView
-	HTTPRequestContext() (HTTPRequestView, bool)
-	HTTPResponseContext() (HTTPResponseView, bool)
-	// Deprecated: ExecutionContext().Get을 사용하세요.
-	Get(key string) (any, bool)
-}
+// Ctx is the public HTTP view. Runtime state and lifecycle controls are excluded.
+type Ctx interface{ contextview.Ctx }
 
 // WebSocketCtx는 프레임의 취소 신호와 실행 중 공유하는 값을 제공합니다.
 // 런타임은 완료 훅이 끝나면 저장값을 비우고 프레임을 취소합니다.

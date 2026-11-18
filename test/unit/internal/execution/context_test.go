@@ -20,8 +20,10 @@ func (c *testExecutionContext) Set(key string, value any)    { c.store[key] = va
 func (c *testExecutionContext) Get(key string) (any, bool)   { v, ok := c.store[key]; return v, ok }
 
 func TestNewContext_ReadsFromExecutionContext(t *testing.T) {
-	ec := &testExecutionContext{store: map[string]any{"userID": 7}}
-	ctx := NewContext(ec, httpTestInput(ec))
+	ec := &testExecutionContext{}
+	internal := httpTestContext(ec)
+	internal.Set("userID", 7)
+	ctx := internal.PublicView()
 
 	got, ok := ctx.Get("userID")
 	if !ok || got.(int) != 7 {

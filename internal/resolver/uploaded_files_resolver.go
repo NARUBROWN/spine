@@ -16,8 +16,8 @@ func (r *UploadedFilesResolver) Supports(parameterMeta ParameterMeta) bool {
 	return parameterMeta.Type == reflect.TypeFor[multipart.UploadedFiles]()
 }
 
-func (r *UploadedFilesResolver) Resolve(ctx execution.Context, parameterMeta ParameterMeta, source *execution.Input) (any, error) {
-	httpCtx := source.HTTPRequest()
+func (r *UploadedFilesResolver) Resolve(ctx *execution.Context, parameterMeta ParameterMeta) (any, error) {
+	httpCtx := ctx.HTTPRequest()
 	ok := httpCtx != nil
 	if !ok {
 		return nil, fmt.Errorf("context is not an HTTP request context")

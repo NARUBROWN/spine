@@ -111,25 +111,25 @@ func (i *testInterceptor) AfterCompletion(ctx contextapi.Ctx, meta core.HandlerM
 
 type testArgumentResolver struct {
 	supports func(pm resolver.ParameterMeta) bool
-	resolve  func(ctx execution.Context, pm resolver.ParameterMeta) (any, error)
+	resolve  func(ctx *execution.Context, pm resolver.ParameterMeta) (any, error)
 }
 
 func (r *testArgumentResolver) Supports(pm resolver.ParameterMeta) bool {
 	return r.supports(pm)
 }
-func (r *testArgumentResolver) Resolve(ctx execution.Context, pm resolver.ParameterMeta, source *execution.Input) (any, error) {
+func (r *testArgumentResolver) Resolve(ctx *execution.Context, pm resolver.ParameterMeta) (any, error) {
 	return r.resolve(ctx, pm)
 }
 
 type testReturnHandler struct {
 	supports func(rt reflect.Type) bool
-	handle   func(v any, ctx execution.Context) error
+	handle   func(v any, ctx *execution.Context) error
 }
 
 func (h *testReturnHandler) Supports(rt reflect.Type) bool {
 	return h.supports(rt)
 }
-func (h *testReturnHandler) Handle(v any, ctx execution.Context, source *execution.Input) error {
+func (h *testReturnHandler) Handle(v any, ctx *execution.Context) error {
 	return h.handle(v, ctx)
 }
 
@@ -138,7 +138,7 @@ type testPostHook struct {
 	returnedErr error
 }
 
-func (h *testPostHook) AfterExecution(ctx execution.Context) error {
+func (h *testPostHook) AfterExecution(ctx *execution.Context) error {
 	h.called = true
 	return h.returnedErr
 }
@@ -148,7 +148,7 @@ func TestExecute_ControllerFailureSkipsPostExecutionHook(t *testing.T) {
 	p, _ := newPipelineWithController(t, "Fail", &called)
 	postHook := &testPostHook{}
 	p.AddPostExecutionHook(postHook)
-	err := p.Execute(newTestExecutionContext(), httpTestInput(newTestExecutionContext()))
+	err := p.Execute(httpTestContext(newTestExecutionContext()))
 	if err == nil || !strings.Contains(err.Error(), "boom") || called != 1 {
 		t.Fatalf("컨트롤러 오류를 보존해야 합니다: called=%d err=%v", called, err)
 	}
@@ -296,13 +296,13 @@ func TestExecute_SuccessFlow(t *testing.T) {
 
 	p.AddArgumentResolver(&testArgumentResolver{
 		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
-		resolve:  func(ctx execution.Context, pm resolver.ParameterMeta) (any, error) { return 7, nil },
+		resolve:  func(ctx *execution.Context, pm resolver.ParameterMeta) (any, error) { return 7, nil },
 	})
 
 	handled := false
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
-		handle: func(v any, ctx execution.Context) error {
+		handle: func(v any, ctx *execution.Context) error {
 			events = append(events, "handle:success")
 			handled = true
 			if v.(string) != "ok" {
@@ -315,7 +315,7 @@ func TestExecute_SuccessFlow(t *testing.T) {
 	postHook := &testPostHook{}
 	p.AddPostExecutionHook(postHook)
 
-	err := p.Execute(newTestExecutionContext(), httpTestInput(newTestExecutionContext()))
+	err := p.Execute(httpTestContext(newTestExecutionContext()))
 	if err != nil {
 		t.Fatalf("실행에 실패했습니다: %v", err)
 	}
@@ -356,15 +356,15 @@ func TestExecute_PostHookFailureDiscardsPreparedSuccessResponse(t *testing.T) {
 
 	p.AddArgumentResolver(&testArgumentResolver{
 		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
-		resolve:  func(ctx execution.Context, pm resolver.ParameterMeta) (any, error) { return 7, nil },
+		resolve:  func(ctx *execution.Context, pm resolver.ParameterMeta) (any, error) { return 7, nil },
 	})
 
 	handled := false
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
-		handle: func(v any, ctx execution.Context) error {
+		handle: func(v any, ctx *execution.Context) error {
 			handled = true
-			rw := ctx.(execution.HTTPResponseContext).ResponseWriter()
+			rw := ctx.HTTPResponse().ResponseWriter()
 			return rw.WriteStatus(204)
 		},
 	})
@@ -376,7 +376,7 @@ func TestExecute_PostHookFailureDiscardsPreparedSuccessResponse(t *testing.T) {
 	writer := &testResponseWriter{}
 	ctx.SetResponseWriter(writer)
 
-	err := p.Execute(ctx, httpTestInput(ctx))
+	err := p.Execute(httpTestContext(ctx))
 	if err == nil {
 		t.Fatal("post hook 실패는 실행 오류로 전파되어야 합니다")
 	}
@@ -399,7 +399,7 @@ func TestExecute_RecoversFromPanic(t *testing.T) {
 	writer := &testResponseWriter{}
 	ctx.SetResponseWriter(writer)
 
-	err := p.Execute(ctx, httpTestInput(ctx))
+	err := p.Execute(httpTestContext(ctx))
 	if err == nil {
 		t.Fatal("panic은 error로 복구되어야 합니다")
 	}
@@ -425,13 +425,13 @@ func TestExecute_AbortByInterceptor(t *testing.T) {
 	resolverCalled := false
 	p.AddArgumentResolver(&testArgumentResolver{
 		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
-		resolve: func(ctx execution.Context, pm resolver.ParameterMeta) (any, error) {
+		resolve: func(ctx *execution.Context, pm resolver.ParameterMeta) (any, error) {
 			resolverCalled = true
 			return 1, nil
 		},
 	})
 
-	err := p.Execute(newTestExecutionContext(), httpTestInput(newTestExecutionContext()))
+	err := p.Execute(httpTestContext(newTestExecutionContext()))
 	if err != nil {
 		t.Fatalf("실행은 에러 없이 중단되어야 합니다. 실제 에러: %v", err)
 	}
@@ -461,7 +461,7 @@ func TestExecute_GlobalInterceptorCanAbortBeforeRouting(t *testing.T) {
 	globalInterceptor := &testInterceptor{name: "global", events: &events, preErr: core.ErrAbortPipeline}
 	p.AddInterceptor(globalInterceptor)
 
-	err := p.Execute(newTestExecutionContext(), httpTestInput(newTestExecutionContext()))
+	err := p.Execute(httpTestContext(newTestExecutionContext()))
 	if err != nil {
 		t.Fatalf("전역 인터셉터 중단은 에러 없이 종료되어야 합니다. 실제 에러: %v", err)
 	}
@@ -496,14 +496,14 @@ func TestExecute_GlobalAfterCompletionReceivesResolvedMeta(t *testing.T) {
 	p.router = &testRouter{meta: meta}
 	p.AddArgumentResolver(&testArgumentResolver{
 		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
-		resolve:  func(ctx execution.Context, pm resolver.ParameterMeta) (any, error) { return 1, nil },
+		resolve:  func(ctx *execution.Context, pm resolver.ParameterMeta) (any, error) { return 1, nil },
 	})
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
-		handle:   func(v any, ctx execution.Context) error { return nil },
+		handle:   func(v any, ctx *execution.Context) error { return nil },
 	})
 
-	if err := p.Execute(newTestExecutionContext(), httpTestInput(newTestExecutionContext())); err != nil {
+	if err := p.Execute(httpTestContext(newTestExecutionContext())); err != nil {
 		t.Fatalf("실행 실패: %v", err)
 	}
 	if got.MethodName != meta.Method.Name || got.ControllerType != meta.ControllerType {
@@ -515,7 +515,7 @@ func TestExecute_MissingArgumentResolverReturnsError(t *testing.T) {
 	controllerCalled := 0
 	p, _ := newPipelineWithController(t, "Handle", &controllerCalled)
 
-	err := p.Execute(newTestExecutionContext(), httpTestInput(newTestExecutionContext()))
+	err := p.Execute(httpTestContext(newTestExecutionContext()))
 	if err == nil {
 		t.Fatal("ArgumentResolver 에러가 발생해야 합니다")
 	}
@@ -530,11 +530,11 @@ func TestExecute_ResponsePreparationFailureSkipsPostHooks(t *testing.T) {
 
 	p.AddArgumentResolver(&testArgumentResolver{
 		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
-		resolve:  func(ctx execution.Context, pm resolver.ParameterMeta) (any, error) { return 7, nil },
+		resolve:  func(ctx *execution.Context, pm resolver.ParameterMeta) (any, error) { return 7, nil },
 	})
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
-		handle: func(v any, ctx execution.Context) error {
+		handle: func(v any, ctx *execution.Context) error {
 			return errors.New("write failed")
 		},
 	})
@@ -546,7 +546,7 @@ func TestExecute_ResponsePreparationFailureSkipsPostHooks(t *testing.T) {
 	writer := &testResponseWriter{}
 	ctx.SetResponseWriter(writer)
 
-	err := p.Execute(ctx, httpTestInput(ctx))
+	err := p.Execute(httpTestContext(ctx))
 	if err == nil {
 		t.Fatal("리턴 핸들러 실패는 에러여야 합니다")
 	}
@@ -585,7 +585,7 @@ func TestExecute_ControllerReturnedErrorReachesBeforeResponseBeforeErrorWrite(t 
 	})
 	p.AddReturnValueHandler(&handler.ErrorReturnHandler{})
 
-	err := p.Execute(ctx, httpTestInput(ctx))
+	err := p.Execute(httpTestContext(ctx))
 	if err == nil || err.Error() != "boom" {
 		t.Fatalf("컨트롤러가 반환한 원래 오류가 전파되어야 합니다: %v", err)
 	}
@@ -602,12 +602,12 @@ func TestExecute_NoContentTransportErrorReachesAfterCompletion(t *testing.T) {
 	p, _ := newPipelineWithController(t, "Handle", &controllerCalled)
 	p.AddArgumentResolver(&testArgumentResolver{
 		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
-		resolve:  func(execution.Context, resolver.ParameterMeta) (any, error) { return 7, nil },
+		resolve:  func(*execution.Context, resolver.ParameterMeta) (any, error) { return 7, nil },
 	})
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
-		handle: func(_ any, ctx execution.Context) error {
-			return ctx.(execution.HTTPResponseContext).ResponseWriter().WriteStatus(http.StatusNoContent)
+		handle: func(_ any, ctx *execution.Context) error {
+			return ctx.HTTPResponse().ResponseWriter().WriteStatus(http.StatusNoContent)
 		},
 	})
 	want := errors.New("transport write failed")
@@ -617,7 +617,7 @@ func TestExecute_NoContentTransportErrorReachesAfterCompletion(t *testing.T) {
 	var completion error
 	events := []string{}
 	p.AddInterceptor(&testInterceptor{name: "probe", events: &events, after: func(_ core.HandlerMeta, err error) { completion = err }})
-	if err := p.Execute(ctx, httpTestInput(ctx)); !errors.Is(err, want) {
+	if err := p.Execute(httpTestContext(ctx)); !errors.Is(err, want) {
 		t.Fatalf("execution error=%v", err)
 	}
 	if !errors.Is(completion, want) || writer.status != http.StatusNoContent {
@@ -647,12 +647,12 @@ func TestExecute_RecoversErrorResponseAndAfterCompletionPanics(t *testing.T) {
 	})
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Implements(reflect.TypeFor[error]()) },
-		handle: func(v any, ctx execution.Context) error {
+		handle: func(v any, ctx *execution.Context) error {
 			panic(errorHandlerPanic)
 		},
 	})
 
-	err := p.Execute(ctx, httpTestInput(ctx))
+	err := p.Execute(httpTestContext(ctx))
 	if !errors.Is(err, errorHandlerPanic) || !errors.Is(err, afterCompletionPanic) {
 		t.Fatalf("error response와 AfterCompletion panic이 최종 오류에 포함되어야 합니다: %v", err)
 	}
@@ -670,7 +670,7 @@ func TestExecute_BeforeResponseErrorsFlowFromRouteToGlobal(t *testing.T) {
 
 	p.AddArgumentResolver(&testArgumentResolver{
 		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
-		resolve:  func(ctx execution.Context, pm resolver.ParameterMeta) (any, error) { return 7, nil },
+		resolve:  func(ctx *execution.Context, pm resolver.ParameterMeta) (any, error) { return 7, nil },
 	})
 
 	events := []string{}
@@ -688,7 +688,7 @@ func TestExecute_BeforeResponseErrorsFlowFromRouteToGlobal(t *testing.T) {
 		},
 	})
 
-	err := p.Execute(newTestExecutionContext(), httpTestInput(newTestExecutionContext()))
+	err := p.Execute(httpTestContext(newTestExecutionContext()))
 	if !errors.Is(err, routeErr) {
 		t.Fatalf("route finalizer 오류가 최종 오류에 포함되어야 합니다: %v", err)
 	}
@@ -703,7 +703,7 @@ func TestExecute_BeforeResponseFailurePreventsSuccessWrite(t *testing.T) {
 
 	p.AddArgumentResolver(&testArgumentResolver{
 		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
-		resolve:  func(ctx execution.Context, pm resolver.ParameterMeta) (any, error) { return 7, nil },
+		resolve:  func(ctx *execution.Context, pm resolver.ParameterMeta) (any, error) { return 7, nil },
 	})
 
 	ctx := newTestExecutionContext()
@@ -729,13 +729,13 @@ func TestExecute_BeforeResponseFailurePreventsSuccessWrite(t *testing.T) {
 	successHandled := false
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
-		handle: func(v any, ctx execution.Context) error {
+		handle: func(v any, ctx *execution.Context) error {
 			successHandled = true
-			return ctx.(execution.HTTPResponseContext).ResponseWriter().WriteString(200, v.(string))
+			return ctx.HTTPResponse().ResponseWriter().WriteString(200, v.(string))
 		},
 	})
 
-	err := p.Execute(ctx, httpTestInput(ctx))
+	err := p.Execute(httpTestContext(ctx))
 	if !errors.Is(err, commitErr) {
 		t.Fatalf("BeforeResponse 오류가 최종 오류로 전파되어야 합니다: %v", err)
 	}
@@ -776,7 +776,7 @@ func TestExecute_ResponsePreparationFailureReachesBeforeResponseBeforeCommit(t *
 	writer := &testResponseWriter{}
 	ctx.SetResponseWriter(writer)
 
-	err := p.Execute(ctx, httpTestInput(ctx))
+	err := p.Execute(httpTestContext(ctx))
 	if err == nil || !strings.Contains(err.Error(), "unsupported type") {
 		t.Fatalf("JSON 직렬화 실패가 최종 오류여야 합니다: %v", err)
 	}
@@ -817,7 +817,7 @@ func TestExecute_CookieValidationFailureReachesBeforeResponseBeforeCommit(t *tes
 	writer := &testResponseWriter{}
 	ctx.SetResponseWriter(writer)
 
-	err := p.Execute(ctx, httpTestInput(ctx))
+	err := p.Execute(httpTestContext(ctx))
 	if err == nil || !strings.Contains(err.Error(), "invalid cookie") {
 		t.Fatalf("쿠키 검증 실패가 최종 오류여야 합니다: %v", err)
 	}
@@ -834,12 +834,12 @@ func TestExecute_StagedTransportWriteFailureIsReturned(t *testing.T) {
 	p, _ := newPipelineWithController(t, "Handle", &controllerCalled)
 	p.AddArgumentResolver(&testArgumentResolver{
 		supports: func(pm resolver.ParameterMeta) bool { return pm.Type.Kind() == reflect.Int },
-		resolve:  func(execution.Context, resolver.ParameterMeta) (any, error) { return 7, nil },
+		resolve:  func(*execution.Context, resolver.ParameterMeta) (any, error) { return 7, nil },
 	})
 	p.AddReturnValueHandler(&testReturnHandler{
 		supports: func(rt reflect.Type) bool { return rt.Kind() == reflect.String },
-		handle: func(value any, ctx execution.Context) error {
-			rw := ctx.(execution.HTTPResponseContext).ResponseWriter()
+		handle: func(value any, ctx *execution.Context) error {
+			rw := ctx.HTTPResponse().ResponseWriter()
 			return rw.WriteString(http.StatusOK, value.(string))
 		},
 	})
@@ -848,7 +848,7 @@ func TestExecute_StagedTransportWriteFailureIsReturned(t *testing.T) {
 	ctx := newTestExecutionContext()
 	ctx.SetResponseWriter(writer)
 
-	err := p.Execute(ctx, httpTestInput(ctx))
+	err := p.Execute(httpTestContext(ctx))
 	if !errors.Is(err, writeErr) {
 		t.Fatalf("실제 transport 쓰기 실패가 최종 오류에 보존되어야 합니다: %v", err)
 	}
@@ -863,7 +863,7 @@ func TestHandleExecutionError_WritesHTTPError(t *testing.T) {
 	writer := &testResponseWriter{}
 	ctx.SetResponseWriter(writer)
 
-	p.handleExecutionError(ctx, httpTestInput(ctx), httperr.BadRequest("bad request"))
+	p.handleExecutionError(httpTestContext(ctx), httperr.BadRequest("bad request"))
 
 	if writer.writes != 1 || writer.status != 400 {
 		t.Fatalf("400 응답은 한 번만 기록되어야 합니다. 실제 writes=%d status=%d", writer.writes, writer.status)
@@ -883,7 +883,7 @@ func TestHandleExecutionError_WritesInternalServerError(t *testing.T) {
 	writer := &testResponseWriter{}
 	ctx.SetResponseWriter(writer)
 
-	p.handleExecutionError(ctx, httpTestInput(ctx), errors.New("boom"))
+	p.handleExecutionError(httpTestContext(ctx), errors.New("boom"))
 
 	if writer.writes != 1 || writer.status != 500 {
 		t.Fatalf("500 응답은 한 번만 기록되어야 합니다. 실제 writes=%d status=%d", writer.writes, writer.status)
@@ -896,7 +896,7 @@ func TestHandleExecutionError_InvalidStatusFallsBackAndReportsConfigurationError
 	writer := &testResponseWriter{}
 	ctx.SetResponseWriter(writer)
 
-	err := p.handleExecutionError(ctx, httpTestInput(ctx), &httperr.HTTPError{Status: 42, Message: "invalid"})
+	err := p.handleExecutionError(httpTestContext(ctx), &httperr.HTTPError{Status: 42, Message: "invalid"})
 	if err == nil || !strings.Contains(err.Error(), "invalid HTTP error status 42") {
 		t.Fatalf("잘못된 status가 명시적 오류여야 합니다: %v", err)
 	}
@@ -912,7 +912,7 @@ func TestHandleExecutionError_PreservesWriteFailure(t *testing.T) {
 	writer := &testResponseWriter{writeErr: writeErr}
 	ctx.SetResponseWriter(writer)
 
-	err := p.handleExecutionError(ctx, httpTestInput(ctx), errors.New("boom"))
+	err := p.handleExecutionError(httpTestContext(ctx), errors.New("boom"))
 	if !errors.Is(err, writeErr) {
 		t.Fatalf("오류 응답 쓰기 실패가 보존되어야 합니다: %v", err)
 	}
@@ -924,7 +924,7 @@ func TestHandleExecutionError_SkipsWhenCommitted(t *testing.T) {
 	writer := &testResponseWriter{committed: true}
 	ctx.SetResponseWriter(writer)
 
-	p.handleExecutionError(ctx, httpTestInput(ctx), errors.New("boom"))
+	p.handleExecutionError(httpTestContext(ctx), errors.New("boom"))
 
 	if writer.writes != 0 {
 		t.Fatalf("응답이 이미 커밋된 경우 기록되면 안 됩니다. 실제 기록 횟수: %d", writer.writes)
