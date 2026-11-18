@@ -8,7 +8,7 @@ import (
 	"github.com/NARUBROWN/spine/pkg/query"
 )
 
-// QueryValuesResolver는 Deprecated 쿼리 API의 기존 값 주입을 유지합니다.
+// QueryValuesResolver preserves value injection for the deprecated query API.
 type QueryValuesResolver struct{}
 
 func (*QueryValuesResolver) Supports(pm ParameterMeta) bool {

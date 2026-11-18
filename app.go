@@ -23,14 +23,15 @@ import (
 )
 
 type App interface {
-	// Constructor는 constructor.Custom, Repository, Service, Controller, Interceptor의 역할 표식을 등록합니다.
-	// 역할 표식 없이 객체를 전달하는 호출 형태는 deprecated입니다. constructor.Custom(&T{})로 감싸세요.
-	// 기존 생성자 함수 등록은 호환을 위해 계속 지원합니다.
+	// Constructor registers components with constructor.Custom, Repository, Service,
+	// Controller and Interceptor role markers. Passing objects without role markers
+	// is deprecated; wrap them with constructor.Custom(&T{}).
+	// Existing constructor functions remain supported for compatibility.
 	Constructor(constructors ...any)
-	// Route는 메서드 표현식으로 HTTP 경로를 등록합니다.
+	// Route registers an HTTP route using a method expression.
 	//
-	// Deprecated: 새 HTTP 경로는 api.Controller의 RegisterRoutes 메서드에 등록하세요.
-	// 기존 등록은 전환 기간에 계속 사용할 수 있습니다.
+	// Deprecated: Register new HTTP routes in an api.Controller's RegisterRoutes method.
+	// Existing registrations remain supported during migration.
 	Route(method string, path string, handler any, opts ...api.Option)
 	// Interceptor는 HTTP 전역 인터셉터를 등록합니다. WebSocket 경로도 있으면
 	// InterceptorFor(boot.InterceptorHTTP, ...)로 범위를 명시하세요.

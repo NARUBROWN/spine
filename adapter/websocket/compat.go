@@ -1,6 +1,6 @@
-// Package wsadapter는 adapter 아래에서 WebSocket 계약의 호환 별칭을 제공합니다.
+// Package wsadapter provides WebSocket contract compatibility aliases under adapter.
 //
-// Deprecated: 새 구현은 github.com/NARUBROWN/spine/contract/websocket을 사용하세요.
+// Deprecated: Use github.com/NARUBROWN/spine/contract/websocket for new implementations.
 package wsadapter
 
 import contract "github.com/NARUBROWN/spine/contract/websocket"

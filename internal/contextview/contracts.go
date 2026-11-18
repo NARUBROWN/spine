@@ -20,7 +20,7 @@ type Ctx interface {
 	ExecutionContext() ExecutionContextView
 	HTTPRequestContext() (HTTPRequestView, bool)
 	HTTPResponseContext() (HTTPResponseView, bool)
-	// Deprecated: ExecutionContext().Get을 사용하세요.
+	// Deprecated: Use ExecutionContext().Get instead.
 	Get(key string) (any, bool)
 }
 

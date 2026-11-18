@@ -8,7 +8,7 @@ import (
 	"github.com/NARUBROWN/spine/pkg/header"
 )
 
-// HeaderResolver는 Deprecated 헤더 API의 기존 값 주입을 유지합니다.
+// HeaderResolver preserves value injection for the deprecated header API.
 type HeaderResolver struct{}
 
 func (*HeaderResolver) Supports(pm ParameterMeta) bool {

@@ -1,10 +1,10 @@
 package query
 
-// Pagination은 전환 기간에 유지하는 기존 page, size 쿼리 입력입니다.
-// 누락되거나 정수 변환에 실패하면 Page는 1, Size는 20을 사용합니다.
+// Pagination is the legacy page and size query input retained during migration.
+// Page defaults to 1 and Size to 20 when values are missing or integer conversion fails.
 //
-// Deprecated: page, size에 query 태그를 지정한 DTO를 input.Query[T]로 받으세요.
-// 누락 시 기본값은 핸들러에서 적용하고 값 제약은 선택한 validator에 선언하세요.
+// Deprecated: Use input.Query[T] with a DTO that declares query tags for page and size.
+// Apply defaults for missing values in the handler and declare constraints in the selected validator.
 type Pagination struct {
 	Page int
 	Size int
