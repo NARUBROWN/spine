@@ -20,14 +20,12 @@ import (
 	"github.com/NARUBROWN/spine/internal/container"
 	"github.com/NARUBROWN/spine/internal/endpoint"
 	"github.com/NARUBROWN/spine/internal/event/consumer"
-	eventResolver "github.com/NARUBROWN/spine/internal/event/consumer/resolver"
 	"github.com/NARUBROWN/spine/internal/execution"
-	"github.com/NARUBROWN/spine/internal/invoker"
-	"github.com/NARUBROWN/spine/internal/pipeline"
 	"github.com/NARUBROWN/spine/internal/resolver"
 	spineRouter "github.com/NARUBROWN/spine/internal/router"
 	"github.com/NARUBROWN/spine/internal/ws"
 	wsResolver "github.com/NARUBROWN/spine/internal/ws/resolver"
+	"github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type Config struct {
@@ -116,7 +114,7 @@ func validate(config Config) ([]configuration.OpenAPIResource, error) {
 	issues = append(issues, componentValidationIssues(config)...)
 	issues = append(issues, shutdownHookIssues(config.ShutdownHooks)...)
 	if config.ConsumerRegistry != nil {
-		resolvers := consumerArgumentResolvers(config.Validator)
+		resolvers := consumer.ArgumentResolvers(config.Validator)
 		for i, registration := range config.ConsumerRegistry.Registrations() {
 			issues = append(issues, messageHandlerIssues(registration.Meta, resolvers, fmt.Sprintf("Consumers[%d]", i), "EVENT")...)
 		}
@@ -475,23 +473,6 @@ func printBanner() {
 	log.Printf("[Bootstrap] Spine version: %s", runtimeSpineVersion())
 }
 
-func buildConsumerPipeline(container *container.Container, validator validation.Validator) *pipeline.Pipeline {
-	consumerPipeline := pipeline.NewPipeline(nil, invoker.NewInvoker(container))
-
-	consumerPipeline.AddArgumentResolver(consumerArgumentResolvers(validator)...)
-	return consumerPipeline
-}
-
-func consumerArgumentResolvers(validator validation.Validator) []resolver.ArgumentResolver {
-	return []resolver.ArgumentResolver{
-		&resolver.StdContextResolver{},
-		&resolver.ControllerContextResolver{RequireExecutionContext: true},
-		&eventResolver.EventNameResolver{},
-		&eventResolver.PayloadResolver{},
-		&eventResolver.DTOResolver{Validator: validator},
-	}
-}
-
 func webSocketArgumentResolvers(v validation.Validator) []wsResolver.ArgumentResolver {
 	return wsResolver.Resolvers(v)
 }
@@ -523,12 +504,12 @@ func messageHandlerIssues[R parameterSupporter](meta execution.HandlerMeta, reso
 	for _, parameter := range resolver.HandlerParameters(meta, nil) {
 		if transport == "WEBSOCKET" && meta.Callback.IsValid() {
 			payload, wrapped := wsResolver.MessagePayload(parameter.Type)
-			valid := parameter.Type == reflect.TypeFor[context.Context]() || parameter.Type == reflect.TypeFor[publicWS.MessageContext]() || parameter.Type == reflect.TypeFor[publicWS.ConnectionID]()
+			valid := parameter.Type == reflect.TypeFor[context.Context]() || parameter.Type == reflect.TypeFor[spine.WebSocketCtx]() || parameter.Type == reflect.TypeFor[publicWS.ConnectionID]()
 			if wrapped {
 				valid = payload.Kind() == reflect.Struct || payload == reflect.TypeFor[[]byte]()
 			}
 			if !valid {
-				issues = append(issues, configuration.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "WEBSOCKET_PARAMETER_UNSUPPORTED", Message: "WebSocket callbacks require context.Context, ws.MessageContext, ws.ConnectionID or input.Message[struct or []byte]."})
+				issues = append(issues, configuration.ConfigIssue{Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: "WEBSOCKET_PARAMETER_UNSUPPORTED", Message: "WebSocket callbacks require context.Context, spine.WebSocketCtx, ws.ConnectionID or input.Message[struct or []byte]."})
 				continue
 			}
 		}
@@ -536,10 +517,14 @@ func messageHandlerIssues[R parameterSupporter](meta execution.HandlerMeta, reso
 		if !slices.ContainsFunc(resolvers, func(candidate R) bool {
 			return candidate.Supports(parameter)
 		}) {
+			hint := "Use a supported context, message identifier, raw bytes, or struct payload."
+			if transport == "EVENT" {
+				hint = "Use spine.EventCtx for context, a string for the event name, raw bytes, or a struct payload."
+			}
 			issues = append(issues, configuration.ConfigIssue{
 				Path: fmt.Sprintf("%s.Parameters[%d]", prefix, parameter.Index), Code: transport + "_PARAMETER_UNSUPPORTED",
 				Message: fmt.Sprintf("No resolver supports %s.", parameter.Type),
-				Hint:    "Use a supported context, message identifier, raw bytes, or struct payload.",
+				Hint:    hint,
 			})
 		}
 	}

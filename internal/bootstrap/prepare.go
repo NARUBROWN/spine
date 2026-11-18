@@ -420,7 +420,7 @@ func prepare(ctx context.Context, config Config, resources []configuration.OpenA
 			}
 			runtime := consumer.NewRuntime(config.ConsumerRegistry,
 				consumer.NewPlatformFactory(binding.Factory, binding.Options),
-				buildConsumerPipeline(container, config.Validator), binding.Options.ConsumerErrorHistory)
+				invoker.NewInvoker(container), config.Validator, binding.Options.ConsumerErrorHistory)
 			application.consumers = append(application.consumers, consumerRuntime{name: binding.Name, runtime: runtime})
 			if err := runtime.PrepareWithRetry(ctx); err != nil {
 				if ctx.Err() != nil && errors.Is(err, ctx.Err()) {

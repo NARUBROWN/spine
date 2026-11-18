@@ -16,6 +16,7 @@ import (
 	"github.com/NARUBROWN/spine/internal/invoker"
 	wsruntime "github.com/NARUBROWN/spine/internal/ws"
 	"github.com/NARUBROWN/spine/pkg/boot"
+	"github.com/NARUBROWN/spine/pkg/spine"
 	pkgws "github.com/NARUBROWN/spine/pkg/ws"
 	"github.com/gorilla/websocket"
 )
@@ -37,17 +38,17 @@ func (i *requestAwareInterceptor) BeforeUpgrade(ctx context.Context, request pkg
 	close(i.handshakeSeen)
 	return nil
 }
-func (i *requestAwareInterceptor) PreMessage(ctx pkgws.MessageContext, _ core.HandlerMeta) error {
+func (i *requestAwareInterceptor) PreMessage(ctx spine.WebSocketCtx, _ core.HandlerMeta) error {
 	ctx.Set("message-interceptor", true)
 	close(i.messageSeen)
 	return nil
 }
 
-func (*requestAwareInterceptor) PostMessage(pkgws.MessageContext, core.HandlerMeta) {}
-func (*requestAwareInterceptor) BeforeMessageCompletion(pkgws.MessageContext, core.HandlerMeta, error) error {
+func (*requestAwareInterceptor) PostMessage(spine.WebSocketCtx, core.HandlerMeta) {}
+func (*requestAwareInterceptor) BeforeMessageCompletion(spine.WebSocketCtx, core.HandlerMeta, error) error {
 	return nil
 }
-func (*requestAwareInterceptor) AfterMessageCompletion(pkgws.MessageContext, core.HandlerMeta, error) {
+func (*requestAwareInterceptor) AfterMessageCompletion(spine.WebSocketCtx, core.HandlerMeta, error) {
 }
 
 type cancellationController struct {

@@ -56,7 +56,7 @@ func (*dxController) Constructor(s *dxService, config *dxConfig) *dxController {
 }
 
 func (c *dxController) RegisterRoutes(r *api.Registry) {
-	r.Group("/chat", api.WebSocketInterceptors((*dxInterceptor)(nil)), api.WebSocketUpgradeInterceptors((*dxUpgradeProbe)(nil))).WS("/ws", func(ctx ws.MessageContext, id ws.ConnectionID, message input.Message[dxMessage]) error {
+	r.Group("/chat", api.WebSocketInterceptors((*dxInterceptor)(nil)), api.WebSocketUpgradeInterceptors((*dxUpgradeProbe)(nil))).WS("/ws", func(ctx sc.WebSocketCtx, id ws.ConnectionID, message input.Message[dxMessage]) error {
 		if value, ok := ctx.Get("ws-audit"); !ok || value != true {
 			return errors.New("WebSocket handler did not see the interceptor value")
 		}
@@ -229,7 +229,7 @@ type dxInterceptor struct{ config *dxConfig }
 func (*dxInterceptor) Constructor(config *dxConfig) *dxInterceptor {
 	return &dxInterceptor{config: config}
 }
-func (i *dxInterceptor) PreMessage(ctx ws.MessageContext, _ core.HandlerMeta) error {
+func (i *dxInterceptor) PreMessage(ctx sc.WebSocketCtx, _ core.HandlerMeta) error {
 	if _, exists := ctx.Get("ws-audit"); exists {
 		return errors.New("WebSocket message context retained a value from a previous frame")
 	}
@@ -237,11 +237,11 @@ func (i *dxInterceptor) PreMessage(ctx ws.MessageContext, _ core.HandlerMeta) er
 	ctx.Set("ws-audit", true)
 	return nil
 }
-func (*dxInterceptor) PostMessage(ws.MessageContext, core.HandlerMeta) {}
-func (*dxInterceptor) BeforeMessageCompletion(ws.MessageContext, core.HandlerMeta, error) error {
+func (*dxInterceptor) PostMessage(sc.WebSocketCtx, core.HandlerMeta) {}
+func (*dxInterceptor) BeforeMessageCompletion(sc.WebSocketCtx, core.HandlerMeta, error) error {
 	return nil
 }
-func (*dxInterceptor) AfterMessageCompletion(ws.MessageContext, core.HandlerMeta, error) {}
+func (*dxInterceptor) AfterMessageCompletion(sc.WebSocketCtx, core.HandlerMeta, error) {}
 
 type dxUpgradeProbe struct{ config *dxConfig }
 

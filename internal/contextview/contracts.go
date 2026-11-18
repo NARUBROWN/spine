@@ -36,7 +36,6 @@ type HTTPResponseView interface {
 }
 
 type HTTPRequestView interface {
-	ContextCarrier
 	Method() string
 	Path() string
 	Param(name string) string

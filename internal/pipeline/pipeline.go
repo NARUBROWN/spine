@@ -51,13 +51,6 @@ func (p *Pipeline) Execute(ctx execution.Context, input *execution.Input) error 
 	return p.execute(ctx, func() (execution.HandlerMeta, error) { return p.router.Route(input.Routing()) }, input)
 }
 
-// ExecuteRegistered는 이미 전송 계층에서 선택한 핸들러를 실행합니다.
-func (p *Pipeline) ExecuteRegistered(ctx execution.Context, meta execution.HandlerMeta, input *execution.Input) error {
-	return p.execute(ctx, func() (execution.HandlerMeta, error) {
-		return meta, nil
-	}, input)
-}
-
 func (p *Pipeline) execute(ctx execution.Context, resolve func() (execution.HandlerMeta, error), input *execution.Input) (finalErr error) {
 	// Detach transport data after completion hooks and before runtime settlement.
 	defer input.Close()

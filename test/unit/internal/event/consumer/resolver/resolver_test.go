@@ -2,13 +2,13 @@ package resolver
 
 import (
 	"context"
-	"github.com/NARUBROWN/spine/internal/execution"
 	internalresolver "github.com/NARUBROWN/spine/internal/resolver"
 	"reflect"
 	"testing"
 )
 
 type testConsumerContext struct {
+	context.Context
 	eventName string
 	payload   []byte
 	store     map[string]any
@@ -16,13 +16,13 @@ type testConsumerContext struct {
 
 func newTestConsumerContext(eventName string, payload []byte) *testConsumerContext {
 	return &testConsumerContext{
+		Context:   context.Background(),
 		eventName: eventName,
 		payload:   payload,
 		store:     map[string]any{},
 	}
 }
 
-func (c *testConsumerContext) Context() context.Context     { return context.Background() }
 func (c *testConsumerContext) Method() string               { return "EVENT" }
 func (c *testConsumerContext) Path() string                 { return c.eventName }
 func (c *testConsumerContext) Params() map[string]string    { return map[string]string{} }
@@ -34,9 +34,8 @@ func (c *testConsumerContext) Get(key string) (any, bool)   { v, ok := c.store[k
 func (c *testConsumerContext) EventName() string            { return c.eventName }
 func (c *testConsumerContext) Payload() []byte              { return c.payload }
 
-type nonConsumerContext struct{}
+type nonConsumerContext struct{ context.Context }
 
-func (c *nonConsumerContext) Context() context.Context     { return context.Background() }
 func (c *nonConsumerContext) Method() string               { return "GET" }
 func (c *nonConsumerContext) Path() string                 { return "/" }
 func (c *nonConsumerContext) Params() map[string]string    { return map[string]string{} }
@@ -166,9 +165,9 @@ func (c *testConsumerContext) SetRoute(params map[string]string, pathKeys []stri
 
 func (c *nonConsumerContext) SetRoute(params map[string]string, pathKeys []string) {}
 
-func testInput(ctx execution.Context) *execution.Input {
+func testInput(ctx any) *Input {
 	if c, ok := ctx.(*testConsumerContext); ok {
-		return execution.NewInput(execution.Sources{Consumer: &execution.ConsumerMessage{Name: c.eventName, Payload: c.payload}})
+		return &Input{Name: c.eventName, Payload: c.payload}
 	}
-	return execution.NewInput(execution.Sources{})
+	return nil
 }

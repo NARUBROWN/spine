@@ -5,7 +5,7 @@ import (
 	"fmt"
 	validation "github.com/NARUBROWN/spine/contract/validator"
 	"github.com/NARUBROWN/spine/internal/resolver"
-	"github.com/NARUBROWN/spine/pkg/ws"
+	"github.com/NARUBROWN/spine/pkg/spine"
 	"reflect"
 )
 
@@ -22,7 +22,7 @@ type ArgumentResolver interface {
 type ContextResolver struct{}
 
 func (*ContextResolver) Supports(p resolver.ParameterMeta) bool {
-	return p.Type == reflect.TypeFor[context.Context]() || p.Type == reflect.TypeFor[ws.MessageContext]()
+	return p.Type == reflect.TypeFor[context.Context]() || p.Type == reflect.TypeFor[spine.WebSocketCtx]()
 }
 func (*ContextResolver) Resolve(ctx context.Context, _ resolver.ParameterMeta, _ *Input) (any, error) {
 	return ctx, nil

@@ -6,9 +6,9 @@ import (
 	"slices"
 
 	validation "github.com/NARUBROWN/spine/contract/validator"
-	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/jsondecode"
 	"github.com/NARUBROWN/spine/internal/resolver"
+	"github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type DTOResolver struct {
@@ -19,9 +19,8 @@ func (r *DTOResolver) Supports(meta resolver.ParameterMeta) bool {
 	return meta.Type.Kind() == reflect.Struct
 }
 
-func (r *DTOResolver) Resolve(ctx execution.Context, meta resolver.ParameterMeta, source *execution.Input) (any, error) {
-	message, ok := source.ConsumerMessage()
-	if !ok {
+func (r *DTOResolver) Resolve(ctx spine.EventCtx, meta resolver.ParameterMeta, message *Input) (any, error) {
+	if message == nil {
 		return nil, fmt.Errorf("consumer message input is not available")
 	}
 
@@ -38,7 +37,7 @@ func (r *DTOResolver) Resolve(ctx execution.Context, meta resolver.ParameterMeta
 	}
 
 	dto := dtoPtr.Elem().Interface()
-	if err := resolver.ValidateDTO(ctx.Context(), r.Validator, dto); err != nil {
+	if err := resolver.ValidateDTO(ctx, r.Validator, dto); err != nil {
 		return nil, err
 	}
 	return dto, nil

@@ -56,9 +56,6 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 			request := transport.NewHTTPContext(storeScope{}, 0)
 			return execution.NewInput(execution.Sources{HTTPRequest: request, HTTPResponse: request, Routing: request})
 		},
-		"event": func() *execution.Input {
-			return execution.NewInput(execution.Sources{Consumer: &execution.ConsumerMessage{Name: "probe", Payload: make([]byte, 1024)}})
-		},
 	}
 
 	for name, create := range contexts {
@@ -100,15 +97,13 @@ func TestExecutionReleasesRetainedViewsAfterCompletion(t *testing.T) {
 					meta := execution.HandlerMeta{Callback: reflect.ValueOf(callback)}
 					run := pipeline.NewPipeline(routes, invoker.NewInvoker(container.New()))
 					run.AddInterceptor(observer)
-					err := run.ExecuteRegistered(ctx, meta, input)
+					routes.Register("GET", "/probe", meta)
+					err := run.Execute(ctx, input)
 					if (err != nil) != (outcome != "success") || !observer.completed {
 						t.Fatalf("err=%v completed=%v", err, observer.completed)
 					}
 					if _, ok := public.HTTPRequestContext(); ok {
 						t.Fatal("HTTP input retained")
-					}
-					if _, ok := input.ConsumerMessage(); ok {
-						t.Fatal("consumer input retained")
 					}
 					observer.retained.ExecutionContext().Set("late", make([]byte, 1024))
 					for _, key := range []string{"payload", "completion", "late"} {

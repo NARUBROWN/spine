@@ -16,11 +16,12 @@ import (
 	"github.com/NARUBROWN/spine"
 	echo "github.com/NARUBROWN/spine-echo-platform"
 	natsplatform "github.com/NARUBROWN/spine-nats-platform"
-	event "github.com/NARUBROWN/spine/contract/event"
+	eventadapter "github.com/NARUBROWN/spine/contract/event"
 	"github.com/NARUBROWN/spine/pkg/boot"
 	"github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	"github.com/NARUBROWN/spine/pkg/input"
+	handlerspine "github.com/NARUBROWN/spine/pkg/spine"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -43,7 +44,7 @@ type workerController struct {
 	publisher publish.Publisher
 }
 
-func (c *workerController) Handle(ctx context.Context, input order) error {
+func (c *workerController) Handle(ctx handlerspine.EventCtx, input order) error {
 	if c.calls.Add(1) == 1 {
 		return errors.New("일시적인 처리 실패")
 	}
@@ -51,13 +52,13 @@ func (c *workerController) Handle(ctx context.Context, input order) error {
 }
 
 type observedFactory struct {
-	event.Factory
+	eventadapter.Factory
 	ready chan struct{}
 	acks  chan error
 	nacks chan error
 }
 
-func (f *observedFactory) NewReader(ctx context.Context, s event.Subscription) (event.Reader, error) {
+func (f *observedFactory) NewReader(ctx context.Context, s eventadapter.Subscription) (eventadapter.Reader, error) {
 	r, err := f.Factory.NewReader(ctx, s)
 	if err != nil {
 		return nil, err
@@ -67,11 +68,11 @@ func (f *observedFactory) NewReader(ctx context.Context, s event.Subscription) (
 }
 
 type observedReader struct {
-	event.Reader
+	eventadapter.Reader
 	factory *observedFactory
 }
 
-func (r *observedReader) Read(ctx context.Context) (event.Delivery, error) {
+func (r *observedReader) Read(ctx context.Context) (eventadapter.Delivery, error) {
 	d, err := r.Reader.Read(ctx)
 	if err != nil {
 		return nil, err
@@ -80,7 +81,7 @@ func (r *observedReader) Read(ctx context.Context) (event.Delivery, error) {
 }
 
 type observedDelivery struct {
-	event.Delivery
+	eventadapter.Delivery
 	factory *observedFactory
 }
 
@@ -117,7 +118,7 @@ func TestHTTPPublishWorkerRedeliveryAndResult(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer js.DeleteStream(context.Background(), stream)
-	factory := func(consume, publish bool, prefix string) event.Factory {
+	factory := func(consume, publish bool, prefix string) eventadapter.Factory {
 		f, err := natsplatform.NewFactory(natsplatform.Config{
 			URLs: []string{address}, Stream: stream, Consume: consume, Publish: publish, PublishDestinations: testDestinations{"order.created", "order.completed"},
 			ConsumerPrefix: prefix, TopicPrefix: stream + ".", AllowInsecureTransport: true,
@@ -128,7 +129,7 @@ func TestHTTPPublishWorkerRedeliveryAndResult(t *testing.T) {
 		}
 		return f
 	}
-	observer, err := factory(true, false, "observer").NewReader(ctx, event.Subscription{Topic: "order.completed"})
+	observer, err := factory(true, false, "observer").NewReader(ctx, eventadapter.Subscription{Topic: "order.completed"})
 	if err != nil {
 		t.Fatal(err)
 	}

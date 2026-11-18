@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"slices"
 
-	"github.com/NARUBROWN/spine/internal/execution"
 	"github.com/NARUBROWN/spine/internal/resolver"
+	"github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type PayloadResolver struct{}
@@ -15,9 +15,8 @@ func (r *PayloadResolver) Supports(meta resolver.ParameterMeta) bool {
 	return reflect.TypeFor[[]byte]().ConvertibleTo(meta.Type) && meta.Type.Kind() == reflect.Slice
 }
 
-func (r *PayloadResolver) Resolve(ctx execution.Context, meta resolver.ParameterMeta, source *execution.Input) (any, error) {
-	message, ok := source.ConsumerMessage()
-	if !ok {
+func (r *PayloadResolver) Resolve(ctx spine.EventCtx, meta resolver.ParameterMeta, message *Input) (any, error) {
+	if message == nil {
 		return nil, fmt.Errorf("consumer message input is not available")
 	}
 

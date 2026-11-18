@@ -11,7 +11,7 @@ import (
 func TestInputCloseDetachesAllSourcesAndRetainedViews(t *testing.T) {
 	request := &requestOnlyContext{}
 	response := &responseOnlyContext{writer: &viewWriter{headers: map[string]string{}}}
-	input := NewInput(Sources{Routing: request, HTTPRequest: request, HTTPResponse: response, Consumer: &ConsumerMessage{Name: "topic", Payload: []byte("event"), Metadata: map[string]string{"key": "value"}}})
+	input := NewInput(Sources{Routing: request, HTTPRequest: request, HTTPResponse: response})
 	public := NewContext(NewState(context.Background()), input)
 	httpView, _ := public.HTTPRequestContext()
 	responseView, _ := public.HTTPResponseContext()
@@ -44,9 +44,6 @@ func TestInputCloseDetachesAllSourcesAndRetainedViews(t *testing.T) {
 	if _, ok := public.HTTPResponseContext(); ok {
 		t.Fatal("response still available")
 	}
-	if _, ok := input.ConsumerMessage(); ok {
-		t.Fatal("event still available")
-	}
 }
 
 var retainedInputViews []contextview.Ctx
@@ -56,7 +53,7 @@ func BenchmarkCompletedInputLeaseChurn(b *testing.B) {
 	retainedInputViews = make([]contextview.Ctx, 256)
 	for n := 0; n < b.N; n++ {
 		state := NewState(context.Background())
-		input := NewInput(Sources{Consumer: &ConsumerMessage{Name: "topic", Payload: make([]byte, 16<<10)}})
+		input := NewInput(Sources{HTTPRequest: &requestOnlyContext{}})
 		retainedInputViews[n%len(retainedInputViews)] = NewContext(state, input)
 		input.Close()
 		state.ReleaseStore()

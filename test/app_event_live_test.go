@@ -23,6 +23,7 @@ import (
 	"github.com/NARUBROWN/spine/pkg/event/publish"
 	"github.com/NARUBROWN/spine/pkg/httpx"
 	"github.com/NARUBROWN/spine/pkg/input"
+	handlerspine "github.com/NARUBROWN/spine/pkg/spine"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/segmentio/kafka-go"
 )
@@ -48,7 +49,7 @@ type liveEventWorker struct {
 	attempts  *atomic.Int32
 }
 
-func (c *liveEventWorker) Handle(ctx context.Context, input liveEventInput) error {
+func (c *liveEventWorker) Handle(ctx handlerspine.EventCtx, input liveEventInput) error {
 	if c.attempts.Add(1) == 1 {
 		return errors.New("fail the first delivery")
 	}

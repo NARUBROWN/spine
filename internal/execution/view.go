@@ -30,7 +30,7 @@ func (v publicContext) HTTPRequestContext() (contextview.HTTPRequestView, bool) 
 	if v.input.HTTPRequest() == nil {
 		return nil, false
 	}
-	return httpRequestView{execution: v.execution, input: v.input}, true
+	return httpRequestView{input: v.input}, true
 }
 func (v publicContext) HTTPResponseContext() (contextview.HTTPResponseView, bool) {
 	available := false
@@ -53,12 +53,8 @@ func (v executionView) Context() context.Context   { return v.source.Context() }
 func (v executionView) Get(key string) (any, bool) { return v.source.Get(key) }
 func (v executionView) Set(key string, value any)  { v.source.Set(key, value) }
 
-type httpRequestView struct {
-	execution contextview.ExecutionContextView
-	input     *Input
-}
+type httpRequestView struct{ input *Input }
 
-func (v httpRequestView) Context() context.Context { return v.execution.Context() }
 func (v httpRequestView) Method() string {
 	return readInput(v.input, func(s Sources) string {
 		if s.HTTPRequest == nil {

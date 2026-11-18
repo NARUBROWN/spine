@@ -15,21 +15,22 @@ import (
 	"github.com/NARUBROWN/spine/internal/pipelinecontrol"
 	wsresolver "github.com/NARUBROWN/spine/internal/ws/resolver"
 	"github.com/NARUBROWN/spine/pkg/input"
+	"github.com/NARUBROWN/spine/pkg/spine"
 	publicws "github.com/NARUBROWN/spine/pkg/ws"
 )
 
-type retainedExecutionObserver struct{ retained publicws.MessageContext }
+type retainedExecutionObserver struct{ retained spine.WebSocketCtx }
 
-func (o *retainedExecutionObserver) PreMessage(ctx publicws.MessageContext, _ core.HandlerMeta) error {
+func (o *retainedExecutionObserver) PreMessage(ctx spine.WebSocketCtx, _ core.HandlerMeta) error {
 	o.retained = ctx
 	ctx.Set("owned", true)
 	return nil
 }
-func (*retainedExecutionObserver) PostMessage(publicws.MessageContext, core.HandlerMeta) {}
-func (*retainedExecutionObserver) BeforeMessageCompletion(publicws.MessageContext, core.HandlerMeta, error) error {
+func (*retainedExecutionObserver) PostMessage(spine.WebSocketCtx, core.HandlerMeta) {}
+func (*retainedExecutionObserver) BeforeMessageCompletion(spine.WebSocketCtx, core.HandlerMeta, error) error {
 	return nil
 }
-func (*retainedExecutionObserver) AfterMessageCompletion(publicws.MessageContext, core.HandlerMeta, error) {
+func (*retainedExecutionObserver) AfterMessageCompletion(spine.WebSocketCtx, core.HandlerMeta, error) {
 }
 
 func TestMessageRuntimeReleasesOwnedScopeForEveryOutcome(t *testing.T) {
@@ -104,22 +105,22 @@ type frameInterceptor struct {
 	receivedErr     error
 }
 
-func (i *frameInterceptor) PreMessage(ctx publicws.MessageContext, _ core.HandlerMeta) error {
+func (i *frameInterceptor) PreMessage(ctx spine.WebSocketCtx, _ core.HandlerMeta) error {
 	*i.log = append(*i.log, i.name+" pre")
 	ctx.Set(i.name, true)
 	return i.preErr
 }
 
-func (i *frameInterceptor) PostMessage(publicws.MessageContext, core.HandlerMeta) {
+func (i *frameInterceptor) PostMessage(spine.WebSocketCtx, core.HandlerMeta) {
 	*i.log = append(*i.log, i.name+" post")
 }
 
-func (i *frameInterceptor) BeforeMessageCompletion(publicws.MessageContext, core.HandlerMeta, error) error {
+func (i *frameInterceptor) BeforeMessageCompletion(spine.WebSocketCtx, core.HandlerMeta, error) error {
 	*i.log = append(*i.log, i.name+" before")
 	return i.beforeErr
 }
 
-func (i *frameInterceptor) AfterMessageCompletion(ctx publicws.MessageContext, _ core.HandlerMeta, err error) {
+func (i *frameInterceptor) AfterMessageCompletion(ctx spine.WebSocketCtx, _ core.HandlerMeta, err error) {
 	*i.log = append(*i.log, i.name+" complete")
 	i.receivedErr = err
 	if ctx.Err() != nil {

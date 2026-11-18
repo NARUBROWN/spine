@@ -12,7 +12,7 @@ import (
 	"github.com/NARUBROWN/spine/internal/resolver"
 	wsresolver "github.com/NARUBROWN/spine/internal/ws/resolver"
 	"github.com/NARUBROWN/spine/internal/ws/sendctx"
-	publicws "github.com/NARUBROWN/spine/pkg/ws"
+	"github.com/NARUBROWN/spine/pkg/spine"
 )
 
 type messageContext struct {
@@ -101,7 +101,7 @@ func (r *Runtime) executeMessage(connection session, kind int, payload []byte, s
 	return nil
 }
 
-func beforeMessageCompletion(ctx publicws.MessageContext, meta core.HandlerMeta, interceptors []core.WebSocketInterceptor, finalErr error) (error, error) {
+func beforeMessageCompletion(ctx spine.WebSocketCtx, meta core.HandlerMeta, interceptors []core.WebSocketInterceptor, finalErr error) (error, error) {
 	var lastErr error
 	for i := len(interceptors) - 1; i >= 0; i-- {
 		if err := callMessageHook(func() error {
@@ -114,7 +114,7 @@ func beforeMessageCompletion(ctx publicws.MessageContext, meta core.HandlerMeta,
 	return finalErr, lastErr
 }
 
-func afterMessageCompletion(ctx publicws.MessageContext, meta core.HandlerMeta, interceptors []core.WebSocketInterceptor, finalErr error) error {
+func afterMessageCompletion(ctx spine.WebSocketCtx, meta core.HandlerMeta, interceptors []core.WebSocketInterceptor, finalErr error) error {
 	for i := len(interceptors) - 1; i >= 0; i-- {
 		if err := callMessageHook(func() error {
 			interceptors[i].AfterMessageCompletion(ctx, meta, finalErr)

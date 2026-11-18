@@ -3,6 +3,7 @@ package spine_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -78,12 +79,8 @@ type publicEventController struct {
 	handle func(context.Context, publicInput) error
 }
 
-func (c *publicEventController) Handle(ctx context.Context, input publicInput) error {
+func (c *publicEventController) Handle(ctx handlerspine.EventCtx, input publicInput) error {
 	return c.handle(ctx, input)
-}
-
-func (c *publicEventController) HandleWithSpineCtx(ctx handlerspine.Ctx, input publicInput) error {
-	return c.handle(ctx.ExecutionContext().Context(), input)
 }
 
 type serializedEvent struct {
@@ -148,7 +145,7 @@ func TestAppEventExecutesTrustedSubscriptionAndSerializesOnceBeforeAck(t *testin
 			return publisher.Event(ctx, "result.created", publish.Fields{"event": &serializedEvent{calls: &encoded, at: at}}, publish.WithOccurredAt(at))
 		}}
 	})
-	if err := app.Consumers().Register("trusted-route", (*publicEventController).HandleWithSpineCtx); err != nil {
+	if err := app.Consumers().Register("trusted-route", (*publicEventController).Handle); err != nil {
 		t.Fatal(err)
 	}
 	if err := app.RunContext(ctx, boot.Options{}); err != nil {
@@ -291,5 +288,29 @@ func TestAppEventPreservesSubscriptionKeysAndAdapterPayload(t *testing.T) {
 	}
 	if settled.Load() != 2 || !handlers["first team/orders"] || !handlers["second team/orders/"] {
 		t.Fatalf("구독과 실행 핸들러가 다릅니다: %v ACK=%d", handlers, settled.Load())
+	}
+}
+
+type oldConsumerContextController struct{}
+
+func (*oldConsumerContextController) Standard(context.Context) {}
+func (*oldConsumerContextController) HTTP(handlerspine.Ctx)    {}
+
+func TestEventConsumerRejectsOldContextParameters(t *testing.T) {
+	for name, handler := range map[string]any{
+		"standard": (*oldConsumerContextController).Standard,
+		"http":     (*oldConsumerContextController).HTTP,
+	} {
+		t.Run(name, func(t *testing.T) {
+			app := spine.New()
+			if err := app.Consumers().Register("orders", handler); err != nil {
+				t.Fatal(err)
+			}
+			err := app.Validate(boot.Options{})
+			if err == nil || !strings.Contains(err.Error(), "EVENT_PARAMETER_UNSUPPORTED") ||
+				!strings.Contains(err.Error(), "spine.EventCtx") {
+				t.Fatalf("이벤트 컨텍스트 이전 안내가 필요합니다: %v", err)
+			}
+		})
 	}
 }

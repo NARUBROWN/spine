@@ -7,7 +7,7 @@ resources cannot overlap a WebSocket endpoint. WebSocket callbacks are excluded
 from the HTTP OpenAPI document.
 
 The callback runs once per incoming message, after upgrade. It accepts
-`context.Context` or `ws.MessageContext`, `ws.ConnectionID` and explicit
+`context.Context` or `spine.WebSocketCtx`, `ws.ConnectionID` and explicit
 `input.Message[T]` parameters, and returns only errors. Use `Message[DTO]` for
 JSON objects and `Message[[]byte]` for raw text or binary bytes. Read the decoded
 value through `.Value`. Plain DTO parameters in new callbacks are rejected.
@@ -66,21 +66,21 @@ with `app.WebSocketInterceptor(auth)`. The hook methods are `PreMessage`,
 `PostMessage`, `BeforeMessageCompletion` and `AfterMessageCompletion`.
 
 ```go
-r.WS("/ws", func(ctx ws.MessageContext, msg input.Message[ChatMessage]) error {
+r.WS("/ws", func(ctx spine.WebSocketCtx, msg input.Message[ChatMessage]) error {
     principal, _ := ctx.Get("principal")
     return c.service.Handle(ctx, principal, msg.Value)
 }, api.WebSocketInterceptors(c.auth))
 ```
 
-The runtime gives the hooks and the handler the same `ws.MessageContext` for
+The runtime gives the hooks and the handler the same `spine.WebSocketCtx` for
 a frame. A hook can call `ctx.Set("principal", principal)` in `PreMessage`.
-The handler can read it with `Get` when it declares `ws.MessageContext`.
+The handler can read it with `Get` when it declares `spine.WebSocketCtx`.
 Handlers that only need cancellation can continue to declare `context.Context`.
 
 The runtime runs global `PreMessage` hooks before route hooks, then decodes and
 validates the arguments. It runs completion hooks before clearing the frame
-store and canceling the frame context. `spine.Ctx` remains available to HTTP
-and event handlers. The WebSocket methods on `spine.Ctx` were removed.
+store and canceling the frame context. HTTP handlers use `spine.Ctx`, and
+event consumers use `spine.EventCtx`.
 
 To migrate a shared global interceptor in an app with WebSocket routes, register
 its HTTP hooks with `app.InterceptorFor(boot.InterceptorHTTP, ...)` and register
