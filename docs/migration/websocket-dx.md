@@ -11,7 +11,7 @@ The callback runs once per incoming message, after upgrade. It accepts
 `input.Message[T]` parameters, and returns only errors. Use `Message[DTO]` for
 JSON objects and `Message[[]byte]` for raw text or binary bytes. Read the decoded
 value through `.Value`. Plain DTO parameters in new callbacks are rejected.
-`PreHandle` runs before decoding and the registered validator receives the DTO,
+`PreMessage` runs before decoding and the registered validator receives the DTO,
 not its wrapper. Existing `app.WebSocket().Register` method expressions remain
 available for migration.
 

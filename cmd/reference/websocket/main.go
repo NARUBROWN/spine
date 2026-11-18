@@ -4,6 +4,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"log"
+
 	"github.com/NARUBROWN/spine"
 	echo "github.com/NARUBROWN/spine-echo-platform"
 	gorilla "github.com/NARUBROWN/spine-gorilla-platform"
@@ -14,7 +16,6 @@ import (
 	"github.com/NARUBROWN/spine/pkg/input"
 	sc "github.com/NARUBROWN/spine/pkg/spine"
 	"github.com/NARUBROWN/spine/pkg/ws"
-	"log"
 )
 
 type ChatMessage struct {

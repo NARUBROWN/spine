@@ -27,19 +27,6 @@ go.work.sum
 .gocache
 .claude/
 
-docs/*
-!docs/migration/
-docs/migration/*
-!docs/migration/v0.5.md
-!docs/migration/v0.5.en.md
-!docs/migration/v0.5.1.md
-!docs/migration/v0.5.1.en.md
-!docs/migration/v0.7.2.md
-!docs/migration/v0.7.5.md
-!docs/migration/http-context.md
-!docs/security-configuration.md
-!docs/security-configuration.en.md
-
 # 로컬 개발 작업 기록과 설계 초안
 /docs/work/
 
@@ -50,19 +37,5 @@ examples/security-config/*
 
 !examples/security-config/go.mod
 !examples/security-config/go.sum
-!docs/migration/http-adapter-modules.md
-!docs/migration/v0.7.0.md
 
 __pycache__/
-
-!docs/migration/http-v3.md
-
-!docs/migration/controller-routes.md
-
-!docs/migration/component-contracts.md
-
-!docs/migration/v0.7.1.md
-
-!docs/migration/app-publisher.md
-
-!docs/migration/websocket-dx.md

@@ -21,10 +21,16 @@ for contract in contract/description contract/http contract/event contract/valid
   fi
 done
 
-# 공개 인터셉터 계약은 spine.Ctx를 사용하며 내부 구현은 내부 뷰 계약을 사용합니다.
-handler_context=$(go list -f '{{join .Imports "\n"}}' ./internal/... | awk '$0 == "github.com/NARUBROWN/spine/pkg/spine" || $0 == "github.com/NARUBROWN/spine/pkg/boot"')
-if [ -n "$handler_context" ]; then
-  printf '내부 패키지는 공개 핸들러 컨텍스트와 boot 패키지에 의존하면 안 됩니다.\n%s\n' "$handler_context" >&2
+# HTTP implementation uses internal view contracts. Bootstrap and the WS/event
+# execution and binding boundaries need public context types for reflection and injection.
+context_imports=$(go list -f '{{ $package := .ImportPath }}{{range .Imports}}{{$package}} {{.}}{{"\n"}}{{end}}' ./internal/...)
+unexpected_context=$(printf '%s\n' "$context_imports" | awk '
+  $2 == "github.com/NARUBROWN/spine/pkg/boot" { print; next }
+  $2 == "github.com/NARUBROWN/spine/pkg/spine" &&
+    $1 !~ /^github[.]com\/NARUBROWN\/spine\/internal\/(bootstrap|ws(\/resolver)?|event\/consumer(\/resolver)?)$/ { print }
+')
+if [ -n "$unexpected_context" ]; then
+  printf 'Unexpected public handler or boot dependency in an internal package:\n%s\n' "$unexpected_context" >&2
   exit 1
 fi
 

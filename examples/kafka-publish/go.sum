@@ -1,5 +1,7 @@
-github.com/NARUBROWN/spine-echo-platform v0.2.1 h1:ft83SGAWzD8gn0uCr5ozu9QnYT9UqBYTbKkEeQqCC2Y=
-github.com/NARUBROWN/spine-echo-platform v0.2.1/go.mod h1:WxkfcPhOF9JxrRMk2zUScVIe7//T5iUyUTZG+kk7oqU=
+github.com/NARUBROWN/spine-echo-platform v0.2.1-preview.1 h1:L1dntj/p/5CeXCjp2Kky4Y8Z7g06HBVWQ2/YAo0OSF4=
+github.com/NARUBROWN/spine-echo-platform v0.2.1-preview.1/go.mod h1:WxkfcPhOF9JxrRMk2zUScVIe7//T5iUyUTZG+kk7oqU=
+github.com/NARUBROWN/spine-kafka-platform v0.3.0-preview.1 h1:gcLkpm1cTc7p834r86ba8Jj7oV6s6BbaGandBXwz+eg=
+github.com/NARUBROWN/spine-kafka-platform v0.3.0-preview.1/go.mod h1:VjP82f3XdQ4M5mZtZj36rIKWEv23mDixImjuxW6CdjQ=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/klauspost/compress v1.15.9 h1:wKRjX6JRtDdrE9qwa4b/Cip7ACOshUI4smpCQanqjSY=

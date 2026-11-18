@@ -92,6 +92,7 @@ jobs:
       - name: Verify embedded documentation assets and notices
         run: |
           go run ./scripts/verifytools
+          go run ./scripts/verifydocs
           go run ./scripts/openapi-ui --check
           go test ./scripts/openapi-ui
           node --test scripts/openapi-ui/test_bundle.cjs
@@ -99,7 +100,7 @@ jobs:
 
       - name: Run go vet
         run: |
-          for module in . test test/platform-e2e test/openapi cmd/demo cmd/reference examples/security-config; do
+          for module in . test test/platform-e2e test/openapi cmd/demo cmd/reference examples/security-config examples/kafka-publish; do
             go run ./scripts/test -module "$module" vet ./...
           done
           go -C ../spine-echo-platform vet ./...
@@ -145,7 +146,7 @@ jobs:
       - name: Run unit tests
         shell: bash
         run: |
-          for module in . cmd/reference examples/security-config; do
+          for module in . cmd/reference examples/security-config examples/kafka-publish; do
             go run ./scripts/test -module "$module" test ./... -count=1 -shuffle=on -timeout=8m
           done
           go -C ../spine-echo-platform test ./... -count=1 -shuffle=on -timeout=8m
@@ -263,7 +264,7 @@ jobs:
 
       - name: Run race detector
         run: |
-          for module in . test cmd/demo cmd/reference examples/security-config; do
+          for module in . test cmd/demo cmd/reference examples/security-config examples/kafka-publish; do
             if [ "$module" = . ]; then
               mkdir -p coverage
               core_packages=$(go list ./... | awk '$0 !~ /^github[.]com\/NARUBROWN\/spine\/scripts\//' | paste -sd, -)

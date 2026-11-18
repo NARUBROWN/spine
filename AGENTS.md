@@ -1,6 +1,6 @@
-# 저장소 작업 지침
+# Repository instructions
 
-작업 전에 [.AGENT.md](.AGENT.md)의 규칙을 읽고 따른다.
+Read and follow [.AGENT.md](.AGENT.md) before working in this repository.
 
-- 산출물에 가운뎃점을 사용하지 않는다.
-- AI 에이전트를 커밋 작성자나 공동 작성자로 등록하지 않는다.
+- Do not use middle dot punctuation in deliverables.
+- Never register AI agents as commit authors or co-authors.

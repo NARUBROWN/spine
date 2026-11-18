@@ -1,4 +1,4 @@
-English | [Korean](README.ko.md) | [Japanese](README.ja.md) | [Simplified Chinese](README.zh-Hans.md) | [Traditional Chinese](README.zh-Hant.md)
+English | [Korean](docs/ko/README.md) | [Japanese](docs/ja/README.md) | [Simplified Chinese](docs/zh-Hans/README.md) | [Traditional Chinese](docs/zh-Hant/README.md)
 
 # 🦴 Spine
 <p align="center">
@@ -10,11 +10,11 @@ It does not hide how a request is resolved and executed.
 
 ## Current channel
 
-**Preview** | Published core tag [`v0.7.2-preview.3`](https://github.com/NARUBROWN/spine/tree/v0.7.2-preview.3)
+**Preview development source**, targeting `v0.7.6`.
 
-The next source candidate is `v0.7.6-preview.1`, targeting `v0.7.6`. See the [migration guide](docs/migration/v0.7.6.md) for breaking changes. This tag has not been published.
+This branch extends `v0.7.6-preview.1` with application DI publishing, separate HTTP context views and transport-specific WS/event contexts. These source APIs are not implied to exist in the previously published tag. Read the [current migration guide](docs/migration/v0.7.6.md) and verify the exact version combination you install.
 
-Other channels | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](https://github.com/NARUBROWN/spine/tree/main)
+Other channels: [RC](https://github.com/NARUBROWN/spine/tree/rc) and [Stable](https://github.com/NARUBROWN/spine/tree/main).
 
 ## Core ideas
 
@@ -26,23 +26,16 @@ Other channels | [RC](https://github.com/NARUBROWN/spine/tree/rc) | [Stable](htt
 
 - Recommended Go version: **1.27.3**
 
-## Get started with Spine CLI
+## Run the source demo
+
+With this core and compatible platform checkouts selected in a development workspace:
 
 ```sh
-go install github.com/NARUBROWN/spine-cli/cmd/spine@v0.4.4-preview.5
-spine version
-spine new todo-api --module github.com/acme/todo-api --channel preview --no-interactive
-cd todo-api
-spine dev
+go -C cmd/demo run .
+curl http://127.0.0.1:8080/health
 ```
 
-```sh
-curl http://localhost:8080/health
-```
-
-Check the generated `go.mod` for the core and platform versions used by the app.
-
-`--channel preview` resolves moving development branches.
+See [demo setup](docs/examples/demo.md), [all documentation](docs/README.md), [context ownership](docs/guides/contexts.md) and [tests](docs/testing/README.md). The independent [Spine CLI](https://github.com/NARUBROWN/spine-cli) generates released application layouts; source candidates require a CLI that understands their contracts.
 
 ## Links
 
@@ -54,7 +47,7 @@ Check the generated `go.mod` for the core and platform versions used by the app.
 
 ---
 
-See the [controller route registration example](docs/migration/controller-routes.md) for Spine `v0.7.2`.
+See the [controller route registration example](docs/migration/controller-routes.md) for the current source API.
 
 ## Free enterprise adoption support
 
@@ -106,7 +99,7 @@ Thank you to FOSS for All and its donors for supporting Spine.
 
 <sub>Logo source: <a href="https://fossforall.org/android-chrome-512x512.png">the official FOSS for All website</a>.
 The FOSS for All logo is copyright © FOSS for All and is not covered by Spine's MIT license.
-<a href="assets/foss-for-all/README.md">Logo source and attribution</a>.</sub>
+<a href="docs/attribution.md">Logo source and attribution</a>.</sub>
 
 ---
 

@@ -1,53 +1,47 @@
 package application
 
-import httpinput "github.com/NARUBROWN/spine/pkg/input"
-
 import (
-	"context"
-
 	"github.com/NARUBROWN/spine/pkg/api"
 	"github.com/NARUBROWN/spine/pkg/httpx"
+	"github.com/NARUBROWN/spine/pkg/input"
+	"github.com/NARUBROWN/spine/pkg/spine"
 	"github.com/NARUBROWN/spine/pkg/ws"
 )
 
-// Controller는 최소 E2E에서 사용할 HTTP와 WS 경로를 제공합니다.
-type Controller struct{}
+// Controller provides HTTP callbacks and a WebSocket echo endpoint.
+type Controller struct{ sender ws.Sender }
 
-func (*Controller) Constructor() *Controller { return &Controller{} }
+func (*Controller) Constructor(sender ws.Sender) *Controller {
+	return &Controller{sender: sender}
+}
 
 func (c *Controller) RegisterRoutes(r *api.Registry) {
-	r.GET("/health", c.Health)
-	r.GET("/users/:id", c.User)
-	r.POST("/echo", c.Echo)
+
+	r.GET("/health", func(ctx spine.Ctx) httpx.Response[map[string]string] {
+		return httpx.Response[map[string]string]{Body: map[string]string{"status": "ok"}}
+	})
+
+	r.GET("/users/:id", func(ctx spine.Ctx, path input.Path[UserPath]) httpx.Response[UserResponse] {
+		return httpx.Response[UserResponse]{Body: UserResponse{ID: path.ID}}
+	})
+
+	r.POST("/echo", func(ctx spine.Ctx, message input.Body[EchoMessage]) httpx.Response[EchoMessage] {
+		return httpx.Response[EchoMessage]{Body: *message}
+	})
+
+	r.WS("/ws/echo", func(ctx spine.WebSocketCtx, id ws.ConnectionID, message input.Message[[]byte]) error {
+		return c.sender.Send(ctx, id.Value, ws.TextMessage, message.Value)
+	})
+
 }
 
-func (*Controller) Health() httpx.Response[map[string]string] {
-	return httpx.Response[map[string]string]{Body: map[string]string{"status": "ok"}}
-}
-
-// UserResponse는 경로 인자가 실제 컨트롤러까지 전달되는지 확인할 응답입니다.
 type UserResponse struct {
 	ID int64 `json:"id"`
 }
-
 type UserPath struct {
 	ID int64 `path:"id"`
 }
-
-func (*Controller) User(p httpinput.Path[UserPath]) httpx.Response[UserResponse] {
-	return httpx.Response[UserResponse]{Body: UserResponse{ID: p.ID}}
-}
-
-// EchoMessage는 JSON 바인딩과 응답 직렬화가 함께 사용하는 DTO입니다.
 type EchoMessage struct {
 	Message string `json:"message"`
 	Count   int    `json:"count"`
-}
-
-func (*Controller) Echo(message httpinput.Body[EchoMessage]) httpx.Response[EchoMessage] {
-	return httpx.Response[EchoMessage]{Body: *message}
-}
-
-func (*Controller) WebSocketEcho(ctx context.Context, payload []byte) error {
-	return ws.Send(ctx, ws.TextMessage, payload)
 }
